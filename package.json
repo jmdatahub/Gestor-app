@@ -1,0 +1,12 @@
+{
+  "name": "gestor-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Mi Panel Financiero - Personal Finance Dashboard",
+  "scripts": {
+    "dev": "cd app-clean && npm run dev",
+    "build": "cd app-clean && npm run build",
+    "preview": "cd app-clean && npm run preview",
+    "install:app": "cd app-clean && npm install"
+  }
+}
