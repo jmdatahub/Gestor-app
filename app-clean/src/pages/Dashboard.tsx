@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { fetchAccountsSummary, type AccountWithBalance, getAccountsWithBalances } from '../services/accountService'
-import { getAccountBalancesSummary } from '../services/summaryService'
-import { fetchMonthlyMovements, calculateMonthlySummary, type Movement } from '../services/movementService'
+import { fetchAccountsSummary, type AccountWithBalance } from '../services/accountService'
+import { getAccountBalancesSummary, getFinancialDistribution, type FinancialDistribution } from '../services/summaryService'
+import { fetchMonthlyMovements, calculateMonthlySummary } from '../services/movementService'
+
 import { warmup as warmupCache } from '../services/catalogCache'
 import { ArrowUpDown, PiggyBank, TrendingUp, Wallet, Plus, ArrowRight, Layers } from 'lucide-react'
 import { useI18n } from '../hooks/useI18n'
 import { useSettings } from '../context/SettingsContext'
 import { SkeletonDashboard } from '../components/Skeleton'
+import { NetWorthInfo, NetWorthChart, useNetWorth } from '../components/ChartSection'
 
 interface AccountSummary {
   totalBalance: number
@@ -21,14 +23,7 @@ interface MonthlySummary {
   balance: number
 }
 
-interface RecentMovement {
-  id: string
-  date: string
-  type: string
-  amount: number
-  description: string
-  category_name?: string
-}
+
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -37,7 +32,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [accountsSummary, setAccountsSummary] = useState<AccountSummary>({ totalBalance: 0, accountCount: 0 })
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary>({ income: 0, expense: 0, balance: 0 })
-  const [recentMovements, setRecentMovements] = useState<RecentMovement[]>([])
+  const [financialOverview, setFinancialOverview] = useState<FinancialDistribution | null>(null)
   const [topAccounts, setTopAccounts] = useState<AccountWithBalance[]>([])
 
   useEffect(() => {
@@ -52,14 +47,19 @@ export default function Dashboard() {
       // Warmup catalog cache for faster subsequent loads
       warmupCache(user.id)
       
-      const [accounts, movements, accountList] = await Promise.all([
+      const [accounts, movements, accountList, financialData] = await Promise.all([
         fetchAccountsSummary(user.id),
         fetchMonthlyMovements(user.id),
-        getAccountBalancesSummary(user.id, { includeChildrenRollup: settings.rollupAccountsByParent })
+        getAccountBalancesSummary(user.id, { includeChildrenRollup: settings.rollupAccountsByParent }),
+        getFinancialDistribution(user.id)
       ])
 
       if (accounts) {
         setAccountsSummary(accounts)
+      }
+
+      if (financialData) {
+        setFinancialOverview(financialData)
       }
 
       if (accountList) {
@@ -71,15 +71,7 @@ export default function Dashboard() {
       const summary = calculateMonthlySummary(movements || [])
       setMonthlySummary(summary)
 
-      // Get recent movements (last 5)
-      setRecentMovements((movements || []).slice(0, 5).map((m: Movement) => ({
-        id: m.id,
-        date: m.date,
-        type: m.type,
-        amount: m.amount,
-        description: m.description || '',
-        category_name: m.category?.name || undefined
-      })))
+
 
     } catch (error) {
       console.error('Error loading dashboard:', error)
@@ -95,12 +87,15 @@ export default function Dashboard() {
     }).format(amount)
   }
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: 'short'
-    })
-  }
+
+
+  // Financial Overview Logic (Lifted State)
+  const { 
+      chartType, setChartType, 
+      drillLevel, setDrillLevel, 
+      currentData, currentTotal, 
+      activeConfig 
+  } = useNetWorth(financialOverview)
 
   if (loading) {
     return <SkeletonDashboard />
@@ -117,7 +112,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Grid */}
-      <div className="kpi-grid">
+      <div className="kpi-grid mb-6">
         <div className="kpi-card">
           <div className="kpi-icon kpi-icon-primary">
             <Wallet size={24} />
@@ -183,7 +178,7 @@ export default function Dashboard() {
         </div>
 
         {/* Top Accounts */}
-        <div className="section-card">
+        <div className="section-card !p-10">
            <div className="flex justify-between items-center" style={{ marginBottom: '1rem' }}>
             <h2 className="section-title" style={{ margin: 0 }}>Top Cuentas</h2>
             <button className="btn btn-ghost" onClick={() => navigate('/app/summary')}>
@@ -201,8 +196,7 @@ export default function Dashboard() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)' }} />
                     <span style={{ color: 'var(--text-primary)' }}>{acc.name}</span>
-                    {/* Indicate if it is rolled up? Maybe unnecessary detail here but consistent */}
-                    {settings.rollupAccountsByParent && acc.child_ids && acc.child_ids.length > 0 && (
+                    {settings.rollupAccountsByParent && (acc as any).child_ids && (acc as any).child_ids.length > 0 && (
                         <Layers size={12} style={{ opacity: 0.5 }} />
                     )}
                   </div>
@@ -215,6 +209,32 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* 
+         Bottom Section: Net Worth Split 
+      */}
+      {financialOverview && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
+            <NetWorthInfo 
+                drillLevel={drillLevel}
+                setDrillLevel={setDrillLevel}
+                currentData={currentData}
+                currentTotal={currentTotal}
+                formatCurrency={formatCurrency}
+            />
+
+            <NetWorthChart 
+                drillLevel={drillLevel}
+                setDrillLevel={setDrillLevel}
+                currentData={currentData}
+                currentTotal={currentTotal}
+                formatCurrency={formatCurrency}
+                chartType={chartType}
+                setChartType={setChartType}
+                activeConfig={activeConfig}
+            />
+        </div>
+      )}
     </div>
   )
 }

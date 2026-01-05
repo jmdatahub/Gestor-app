@@ -4,22 +4,23 @@ import { supabase } from '../../lib/supabaseClient'
 import { 
   getGoalsByUser, 
   createGoal, 
+  deleteGoal,
   addContribution,
   type SavingsGoal 
 } from '../../services/savingsService'
-import { Plus, Target, CheckCircle2, X, PiggyBank } from 'lucide-react'
+import { Plus, Target, CheckCircle2, PiggyBank, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
-import { UiTextarea } from '../../components/ui/UiTextarea'
 import { useI18n } from '../../hooks/useI18n'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { formatISODateString } from '../../utils/date'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { UiField } from '../../components/ui/UiField'
+import { UiTextarea } from '../../components/ui/UiTextarea'
 
 export default function SavingsList() {
   const navigate = useNavigate()
-  const { t, lang } = useI18n()
+  const { t } = useI18n()  // Removed lang - use 'es-ES' directly
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [loading, setLoading] = useState(true)
   const [showGoalModal, setShowGoalModal] = useState(false)
@@ -29,9 +30,10 @@ export default function SavingsList() {
   // Goal form state
   const [goalName, setGoalName] = useState('')
   const [targetAmount, setTargetAmount] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [description, setDescription] = useState('')
+  const [targetDate, setTargetDate] = useState('')
+  const [description, setDescription] = useState('')  // Añadido: descripción
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
   // Contribution form state
   const [contribAmount, setContribAmount] = useState('')
@@ -59,23 +61,31 @@ export default function SavingsList() {
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
+    setFormError(null)
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) {
+      setFormError('No se pudo obtener el usuario')
+      setSubmitting(false)
+      return
+    }
 
     try {
       await createGoal({
         user_id: user.id,
         name: goalName,
         target_amount: parseFloat(targetAmount),
-        due_date: dueDate || null,
-        description: description || null
+        target_date: targetDate || null,
+        description: description || null  // Añadido: descripción
       })
       setShowGoalModal(false)
       resetGoalForm()
       loadGoals()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating goal:', error)
+      // Show detailed error to user
+      const errorMsg = error?.message || error?.details || 'Error desconocido al crear el objetivo'
+      setFormError(errorMsg)
     } finally {
       setSubmitting(false)
     }
@@ -92,7 +102,6 @@ export default function SavingsList() {
     try {
       await addContribution({
         goal_id: selectedGoalId,
-        user_id: user.id,
         amount: parseFloat(contribAmount),
         date: contribDate,
         note: contribNote || null
@@ -115,8 +124,9 @@ export default function SavingsList() {
   const resetGoalForm = () => {
     setGoalName('')
     setTargetAmount('')
-    setDueDate('')
-    setDescription('')
+    setTargetDate('')
+    setDescription('')  // Reset descripción
+    setFormError(null)
   }
 
   const resetContribForm = () => {
@@ -127,14 +137,14 @@ export default function SavingsList() {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat(lang === 'es' ? 'es-ES' : 'en-US', {
+    return new Intl.NumberFormat('es-ES', {
       style: 'currency',
       currency: 'EUR'
     }).format(amount)
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US', {
+    return new Date(date).toLocaleDateString('es-ES', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
@@ -159,16 +169,16 @@ export default function SavingsList() {
     )
   }
 
-  const activeGoals = goals.filter(g => !g.is_completed)
-  const completedGoals = goals.filter(g => g.is_completed)
+  const activeGoals = goals.filter(g => g.status === 'active')
+  const completedGoals = goals.filter(g => g.status === 'completed')
 
   return (
-    <div>
+    <div className="page-container">
       {/* Header */}
-      <div style={styles.header}>
+      <div className="page-header">
         <div>
-          <h1 style={styles.title}>{t('savings.title')}</h1>
-          <p style={styles.subtitle}>{t('savings.subtitle')}</p>
+          <h1 className="page-title">{t('savings.title')}</h1>
+          <p className="page-subtitle">{t('savings.subtitle')}</p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowGoalModal(true)}>
           <Plus size={20} />
@@ -178,66 +188,66 @@ export default function SavingsList() {
 
       {/* Goals List */}
       {goals.length === 0 ? (
-        <div className="card text-center" style={{ padding: '3rem' }}>
-          <PiggyBank size={48} style={{ color: 'var(--gray-300)', marginBottom: '1rem' }} />
-          <p className="text-gray-500">{t('savings.empty')}</p>
-          <button className="btn btn-primary mt-4" onClick={() => setShowGoalModal(true)}>
+        <div className="section-card flex flex-col items-center justify-center p-12 text-center">
+          <PiggyBank size={48} className="text-gray-300 mb-4" />
+          <p className="text-gray-500 mb-4">{t('savings.empty')}</p>
+          <button className="btn btn-primary" onClick={() => setShowGoalModal(true)}>
             {t('savings.createFirst')}
           </button>
         </div>
       ) : (
-        <>
+        <div className="space-y-8">
           {/* Active Goals */}
           {activeGoals.length > 0 && (
-            <div style={styles.goalsGrid}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
               {activeGoals.map((goal) => (
-                <div key={goal.id} className="card" style={styles.goalCard}>
-                  <div style={styles.goalHeader}>
+                <div key={goal.id} className="card p-6 hover:shadow-lg transition-shadow">
+                  <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 style={styles.goalName}>{goal.name}</h3>
-                      {goal.due_date && (
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{goal.name}</h3>
+                      {goal.target_date && (
                         <span className="text-sm text-gray-500">
-                          {t('savings.targetDate', { date: formatDate(goal.due_date) })}
+                          {t('savings.targetDate', { date: formatDate(goal.target_date) })}
                         </span>
                       )}
                     </div>
-                    <Target size={24} style={{ color: 'var(--primary)' }} />
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                        <Target size={24} className="text-primary" />
+                    </div>
                   </div>
 
-                  <div style={styles.amountRow}>
-                    <span style={styles.currentAmount}>
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <span className="text-2xl font-bold text-primary">
                       {formatCurrency(goal.current_amount)}
                     </span>
-                    <span className="text-gray-500">
+                    <span className="text-sm text-gray-500">
                       {t('savings.of')} {formatCurrency(goal.target_amount)}
                     </span>
                   </div>
 
-                  <div style={styles.progressContainer}>
-                    <div style={styles.progressBar}>
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="flex-1 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                       <div 
-                        style={{ 
-                          ...styles.progressFill, 
-                          width: `${getProgress(goal)}%` 
-                        }} 
+                        className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${getProgress(goal)}%` }} 
                       />
                     </div>
-                    <span style={styles.progressText}>
+                    <span className="text-sm font-semibold text-gray-600 dark:text-gray-400 min-w-[3rem] text-right">
                       {getProgress(goal).toFixed(0)}%
                     </span>
                   </div>
 
+                  {/* Mostrar descripción si existe */}
                   {goal.description && (
-                    <p className="text-sm text-gray-500" style={{ marginTop: '0.75rem' }}>
+                    <p className="text-sm text-gray-500 mt-3 line-clamp-2">
                       {goal.description}
                     </p>
                   )}
 
-                  <div style={styles.goalActions}>
+                  <div className="flex gap-2 mt-6">
                     <button 
-                      className="btn btn-primary" 
+                      className="btn btn-primary flex-1 justify-center" 
                       onClick={() => openContribModal(goal.id)}
-                      style={{ flex: 1 }}
                     >
                       {t('savings.contribute')}
                     </button>
@@ -248,6 +258,27 @@ export default function SavingsList() {
                       {t('savings.details')}
                     </button>
                   </div>
+                  <div className="flex gap-1 mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                    <button 
+                      className="btn btn-icon btn-ghost btn-sm hover:text-primary" 
+                      onClick={() => navigate(`/app/savings/${goal.id}`)}
+                      title="Editar"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button 
+                      className="btn btn-icon btn-ghost btn-sm text-danger/70 hover:text-danger" 
+                      onClick={async () => {
+                        if (confirm('¿Eliminar este objetivo de ahorro?')) {
+                          await deleteGoal(goal.id)
+                          loadGoals()
+                        }
+                      }}
+                      title="Eliminar"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -255,50 +286,99 @@ export default function SavingsList() {
 
           {/* Completed Goals */}
           {completedGoals.length > 0 && (
-            <>
-              <h2 style={{ ...styles.sectionTitle, marginTop: '2rem' }}>
-                <CheckCircle2 size={20} style={{ color: 'var(--success)' }} />
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                <CheckCircle2 size={20} className="text-success" />
                 {t('savings.completedTitle')}
               </h2>
-              <div style={styles.goalsGrid}>
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                 {completedGoals.map((goal) => (
-                  <div key={goal.id} className="card" style={{ ...styles.goalCard, opacity: 0.8 }}>
-                    <div style={styles.goalHeader}>
+                  <div key={goal.id} className="card p-6 bg-gray-50/50 dark:bg-slate-800/50 border border-success/20">
+                    <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h3 style={styles.goalName}>{goal.name}</h3>
-                        <span className="badge badge-success">{t('savings.status.completed')}</span>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{goal.name}</h3>
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-success/10 text-success">
+                            {t('savings.status.completed')}
+                        </span>
                       </div>
-                      <CheckCircle2 size={24} style={{ color: 'var(--success)' }} />
+                      <div className="p-2 bg-success/10 rounded-lg">
+                        <CheckCircle2 size={24} className="text-success" />
+                      </div>
                     </div>
-                    <div style={styles.amountRow}>
-                      <span style={{ ...styles.currentAmount, color: 'var(--success)' }}>
+                    
+                    {/* Amount section - show achieved amount */}
+                    <div className="flex items-baseline gap-2 mb-3">
+                      <span className="text-2xl font-bold text-success">
                         {formatCurrency(goal.current_amount)}
                       </span>
+                      <span className="text-sm text-gray-500">
+                        ¡Objetivo alcanzado!
+                      </span>
                     </div>
-                    <button 
-                      className="btn btn-secondary w-full mt-4" 
-                      onClick={() => navigate(`/app/savings/${goal.id}`)}
-                    >
-                      {t('savings.details')}
-                    </button>
+
+                    {goal.description && (
+                      <p className="text-sm text-gray-500 mt-2 line-clamp-2">
+                        {goal.description}
+                      </p>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 mt-4">
+                      <button 
+                        className="btn btn-secondary flex-1" 
+                        onClick={() => navigate(`/app/savings/${goal.id}`)}
+                      >
+                        {t('savings.details')}
+                      </button>
+                      <div className="flex gap-1">
+                          <button 
+                            className="btn btn-icon btn-ghost btn-sm" 
+                            onClick={() => navigate(`/app/savings/${goal.id}`)}
+                            title="Editar"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button 
+                            className="btn btn-icon btn-ghost btn-sm text-danger/70 hover:text-danger" 
+                            onClick={async () => {
+                              if (confirm('¿Eliminar este objetivo de ahorro completado?')) {
+                                await deleteGoal(goal.id)
+                                loadGoals()
+                              }
+                            }}
+                            title="Eliminar"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Create Goal Modal */}
       <UiModal 
         isOpen={showGoalModal} 
-        onClose={() => setShowGoalModal(false)}
-        title={t('savings.modal.newTitle')}
+        onClose={() => { setShowGoalModal(false); resetGoalForm(); }}
         width="500px"
       >
         <form onSubmit={handleCreateGoal}>
+          <UiModalHeader>{t('savings.modal.newTitle')}</UiModalHeader>
           <UiModalBody>
-            <div className="form-group">
+            {/* Error Banner */}
+            {formError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-2">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                <div>
+                  <strong>Error:</strong> {formError}
+                </div>
+              </div>
+            )}
+            <div className="mb-4">
               <UiInput
                 label={t('savings.modal.name')}
                 value={goalName}
@@ -307,7 +387,7 @@ export default function SavingsList() {
                 required
               />
             </div>
-            <div className="form-group">
+            <div className="mb-4">
               <UiNumber
                 label={`${t('savings.modal.targetAmount')} (€)`}
                 value={targetAmount}
@@ -318,20 +398,20 @@ export default function SavingsList() {
                 required
               />
             </div>
-            <div className="form-group">
+            <div className="mb-4">
               <UiField label={t('savings.modal.targetDate')}>
                 <UiDatePicker
-                    value={dueDate}
-                    onChange={(d) => setDueDate(d ? formatISODateString(d) : '')}
+                    value={targetDate}
+                    onChange={(d) => setTargetDate(d ? formatISODateString(d) : '')}
                 />
               </UiField>
             </div>
-            <div className="form-group">
+            <div className="mb-4">
               <UiTextarea
                 label={t('savings.modal.description')}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Añade detalles sobre tu objetivo..."
+                placeholder="Añade detalles sobre tu objetivo... (opcional)"
                 rows={3}
               />
             </div>
@@ -351,12 +431,12 @@ export default function SavingsList() {
       <UiModal 
         isOpen={showContribModal} 
         onClose={() => setShowContribModal(false)}
-        title={t('savings.contrib.newTitle')}
         width="400px"
       >
         <form onSubmit={handleAddContribution}>
+          <UiModalHeader>{t('savings.contrib.newTitle')}</UiModalHeader>
           <UiModalBody>
-            <div className="form-group">
+            <div className="mb-4">
               <UiNumber
                 label={`${t('common.amount')} (€)`}
                 value={contribAmount}
@@ -367,7 +447,7 @@ export default function SavingsList() {
                 required
               />
             </div>
-            <div className="form-group">
+            <div className="mb-4">
               <UiField label={t('common.date')}>
                 <UiDatePicker
                   value={contribDate}
@@ -376,7 +456,7 @@ export default function SavingsList() {
                 />
               </UiField>
             </div>
-            <div className="form-group">
+            <div className="mb-4">
               <UiInput
                 label={t('savings.contrib.note')}
                 value={contribNote}
@@ -397,93 +477,4 @@ export default function SavingsList() {
       </UiModal>
     </div>
   )
-}
-
-const styles: { [key: string]: React.CSSProperties } = {
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '1.5rem',
-  },
-  title: {
-    fontSize: '1.75rem',
-    fontWeight: 700,
-    color: 'var(--gray-800)',
-    marginBottom: '0.25rem',
-  },
-  subtitle: {
-    color: 'var(--gray-500)',
-    fontSize: '0.875rem',
-  },
-  sectionTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontSize: '1.125rem',
-    fontWeight: 600,
-    color: 'var(--gray-700)',
-    marginBottom: '1rem',
-  },
-  goalsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-    gap: '1rem',
-  },
-  goalCard: {
-    padding: '1.25rem',
-  },
-  goalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '1rem',
-  },
-  goalName: {
-    fontSize: '1.125rem',
-    fontWeight: 600,
-    color: 'var(--gray-800)',
-    marginBottom: '0.25rem',
-  },
-  amountRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '0.5rem',
-    marginBottom: '0.75rem',
-  },
-  currentAmount: {
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    color: 'var(--primary)',
-  },
-  progressContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-  },
-  progressBar: {
-    flex: 1,
-    height: '8px',
-    background: 'var(--gray-200)',
-    borderRadius: '9999px',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    background: 'var(--primary)',
-    borderRadius: '9999px',
-    transition: 'width 0.3s ease',
-  },
-  progressText: {
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    color: 'var(--gray-600)',
-    minWidth: '40px',
-    textAlign: 'right',
-  },
-  goalActions: {
-    display: 'flex',
-    gap: '0.5rem',
-    marginTop: '1rem',
-  },
 }

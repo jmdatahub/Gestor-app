@@ -1,6 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, Tag } from 'lucide-react'
-import { fetchCategories } from '../../services/catalogCache'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { UiSelect, UiSelectOption } from '../ui/UiSelect'
 import { UiField } from '../ui/UiField'
 import { supabase } from '../../lib/supabaseClient'
@@ -33,7 +31,6 @@ export interface CategoryAutocompleteProps {
  * - Filtra en tiempo real desde la primera letra
  * - Ranking: uso reciente + frecuencia
  * - Permite crear nueva categoría con confirmación
- * - Usa cache de catalogCache para eficiencia
  */
 export function CategoryAutocomplete({ 
   value, 
@@ -46,7 +43,7 @@ export function CategoryAutocomplete({
 }: CategoryAutocompleteProps) {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm] = useState('')
   
   useEffect(() => {
     loadCategories()
@@ -55,19 +52,19 @@ export function CategoryAutocomplete({
   const loadCategories = async () => {
     try {
       setLoading(true)
-      // Use cache for efficiency
-      const data = await fetchCategories()
+      const { data, error: loadError } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name')
       
-      // Filter by type and add usage metadata
-      const filtered = data
-        .filter((c: Category) => c.type === type || type === 'investment')
-        .map((c: Category) => ({
-          ...c,
-          usage_count: c.usage_count || 0,
-          last_used_at: c.last_used_at || null
-        }))
+      if (loadError) throw loadError
       
-      setCategories(filtered)
+      // Filter by type
+      const filtered = (data || []).filter(c => 
+        c.type === type || type === 'investment'
+      )
+      
+      setCategories(filtered as Category[])
     } catch (err) {
       console.error('[CategoryAutocomplete] Error loading categories:', err)
     } finally {

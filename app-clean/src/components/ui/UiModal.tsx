@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -9,6 +9,7 @@ export interface UiModalProps {
   width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | 'full' | string; 
   className?: string;
   closeOnOutsideClick?: boolean;
+  title?: string; // Optional title shown in header
 }
 
 export function UiModal({ 

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabaseClient'
 import {
   getUserInvestments,
   createInvestment,
+  updateInvestment,
   updatePrice,
   deleteInvestment,
   calculateTotals,
@@ -11,7 +12,8 @@ import {
   type Investment,
   type CreateInvestmentInput
 } from '../../services/investmentService'
-import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2, Eye, X } from 'lucide-react'
+import { getAccountsWithBalances, type AccountWithBalance } from '../../services/accountService'
+import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2, Eye, X, Pencil } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import { useI18n } from '../../hooks/useI18n'
 import { useSettings } from '../../context/SettingsContext'
@@ -34,6 +36,8 @@ export default function InvestmentsList() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showPriceModal, setShowPriceModal] = useState(false)
   const [selectedInvestment, setSelectedInvestment] = useState<Investment | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
 
   // Create form
   const [name, setName] = useState('')
@@ -42,6 +46,8 @@ export default function InvestmentsList() {
   const [buyPrice, setBuyPrice] = useState('')
   const [currentPrice, setCurrentPrice] = useState('')
   const [notes, setNotes] = useState('')
+  const [accountId, setAccountId] = useState('') // Holding Account
+  const [fundFromId, setFundFromId] = useState('') // Funding Account
   const [submitting, setSubmitting] = useState(false)
 
   // Update price form
@@ -57,8 +63,12 @@ export default function InvestmentsList() {
     if (!user) return
 
     try {
-      const data = await getUserInvestments(user.id)
+      const [data, accountsData] = await Promise.all([
+        getUserInvestments(user.id),
+        getAccountsWithBalances(user.id)
+      ])
       setInvestments(data)
+      setAccounts(accountsData)
     } catch (error) {
       console.error('Error loading investments:', error)
     } finally {
@@ -66,7 +76,7 @@ export default function InvestmentsList() {
     }
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
 
@@ -81,14 +91,22 @@ export default function InvestmentsList() {
         quantity: parseFloat(quantity),
         buy_price: parseFloat(buyPrice),
         current_price: parseFloat(currentPrice),
-        notes: notes || null
+        notes: notes || null,
+        account_id: accountId || null,
+        fund_from_account_id: !editingId ? (fundFromId || null) : undefined
       }
-      await createInvestment(input)
+
+      if (editingId) {
+        await updateInvestment(editingId, input)
+      } else {
+        await createInvestment(input)
+      }
+
       setShowCreateModal(false)
       resetForm()
       loadData()
     } catch (error) {
-      console.error('Error creating investment:', error)
+      console.error('Error saving investment:', error)
     } finally {
       setSubmitting(false)
     }
@@ -134,12 +152,27 @@ export default function InvestmentsList() {
   }
 
   const resetForm = () => {
+    setEditingId(null)
     setName('')
     setType('manual')
     setQuantity('')
     setBuyPrice('')
     setCurrentPrice('')
     setNotes('')
+    setAccountId('')
+    setFundFromId('')
+  }
+  
+  const openEditModal = (inv: Investment) => {
+    setEditingId(inv.id)
+    setName(inv.name)
+    setType(inv.type)
+    setQuantity(inv.quantity.toString())
+    setBuyPrice(inv.buy_price.toString())
+    setCurrentPrice(inv.current_price.toString())
+    setNotes(inv.notes || '')
+    setAccountId(inv.account_id || '')
+    setShowCreateModal(true)
   }
 
   const formatCurrency = (amount: number) => {
@@ -233,7 +266,7 @@ export default function InvestmentsList() {
                     <th style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>{t('investments.currentPrice')}</th>
                     <th style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>{t('investments.totalValueTable')}</th>
                     <th style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>{t('investments.benefit')}</th>
-                    <th style={{ padding: '0.75rem 1.5rem' }}></th>
+                    <th className="sticky-actions-col" style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '0.75rem' }}>Acciones</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -265,8 +298,15 @@ export default function InvestmentsList() {
                                 <span className="text-sm">({profitPct >= 0 ? '+' : ''}{profitPct.toFixed(1)}%)</span>
                             </div>
                         </td>
-                        <td style={{ padding: '0.75rem 1.5rem' }}>
+                        <td className="sticky-actions-col" style={{ padding: '0.75rem 0.5rem' }}>
                             <div className="d-flex gap-1 justify-end">
+                                <button
+                                className="btn btn-icon btn-secondary"
+                                onClick={() => openEditModal(inv)}
+                                title={t('common.edit')}
+                                >
+                                <Pencil size={16} />
+                                </button>
                                 <button
                                 className="btn btn-icon btn-secondary"
                                 onClick={() => openPriceModal(inv)}
@@ -300,14 +340,23 @@ export default function InvestmentsList() {
         </UiCard>
       )}
 
-      {/* Create Modal */}
+      {/* Create/Edit Modal */}
       <UiModal 
         isOpen={showCreateModal} 
-        onClose={() => setShowCreateModal(false)} 
-        title={t('investments.modal.newTitle')}
+        onClose={() => { setShowCreateModal(false); resetForm(); }}
         width="600px"
       >
-        <form onSubmit={handleCreate}>
+        <UiModalHeader>
+          <div className="d-flex items-center justify-between">
+            <h3 className="text-xl font-bold">
+              {editingId ? t('investments.modal.editTitle') : t('investments.modal.newTitle')}
+            </h3>
+            <button onClick={() => { setShowCreateModal(false); resetForm(); }} className="p-1 hover:bg-gray-100 rounded-full">
+              <X size={20} />
+            </button>
+          </div>
+        </UiModalHeader>
+        <form onSubmit={handleSave}>
           <UiModalBody>
             <div className="form-group">
               <UiInput
@@ -359,6 +408,38 @@ export default function InvestmentsList() {
                 />
               </div>
             </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <UiSelect
+                value={accountId}
+                onChange={setAccountId}
+                label={t('investments.modal.holdingAccount') || "Cuenta Custodia (Invest/Broker) - Opcional"}
+                options={[
+                  { value: '', label: 'Sin asignar' },
+                  ...accounts.map(a => ({ value: a.id, label: a.name }))
+                ]}
+              />
+            </div>
+
+            {!editingId && (
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                  <UiSelect
+                      value={fundFromId}
+                      onChange={setFundFromId}
+                      label={t('investments.modal.fundingAccount') || "Pagar con fondos de... (Opcional)"}
+                      options={[
+                          { value: '', label: 'Ninguna (Solo registrar)' },
+                          ...accounts.map(a => ({ value: a.id, label: `${a.name} (${formatCurrency(a.balance)})` }))
+                      ]}
+                  />
+                  {fundFromId && (
+                    <p className="text-xs text-gray-500 mt-1">
+                        Se creará un gasto por el valor de compra ({formatCurrency(parseFloat(quantity || '0') * parseFloat(buyPrice || '0'))}).
+                    </p>
+                  )}
+              </div>
+            )}
+
             <div className="form-group">
               <UiInput
                 label={t('investments.modal.notes')}
@@ -369,11 +450,14 @@ export default function InvestmentsList() {
             </div>
           </UiModalBody>
           <UiModalFooter>
-             <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+             <button type="button" className="btn btn-secondary" onClick={() => { setShowCreateModal(false); resetForm(); }}>
               {t('common.cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? t('investments.modal.creating') : t('investments.modal.create')}
+              {submitting 
+                ? (editingId ? t('common.saving') : t('investments.modal.creating')) 
+                : (editingId ? t('common.save') : t('investments.modal.create'))
+              }
             </button>
           </UiModalFooter>
         </form>
@@ -383,9 +467,18 @@ export default function InvestmentsList() {
       <UiModal 
         isOpen={showPriceModal && !!selectedInvestment} 
         onClose={() => setShowPriceModal(false)}
-        title={selectedInvestment ? t('investments.modal.updateTitle', { name: selectedInvestment.name }) : ''}
         width="400px"
       >
+        <UiModalHeader>
+          <div className="d-flex items-center justify-between">
+            <h3 className="text-xl font-bold">
+              {selectedInvestment && t('investments.modal.updateTitle', { name: selectedInvestment.name })}
+            </h3>
+            <button onClick={() => setShowPriceModal(false)} className="p-1 hover:bg-gray-100 rounded-full">
+              <X size={20} />
+            </button>
+          </div>
+        </UiModalHeader>
         <form onSubmit={handleUpdatePrice}>
           <UiModalBody>
             <div className="form-group">

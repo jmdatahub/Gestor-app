@@ -10,18 +10,22 @@ import {
   type SavingsGoal,
   type SavingsContribution
 } from '../../services/savingsService'
+import { getAccountsWithBalances, type AccountWithBalance } from '../../services/accountService'
 import { ArrowLeft, Plus, Edit2, Check, X, CheckCircle2 } from 'lucide-react'
-import { UiDatePicker } from '../../components/ui/UiDatePicker'
-import { formatISODateString } from '../../utils/date'
 import { UiInput } from '../../components/ui/UiInput'
-import { UiNumber } from '../../components/ui/UiNumber'
 import { UiTextarea } from '../../components/ui/UiTextarea'
+import { UiDatePicker } from '../../components/ui/UiDatePicker'
+import { UiNumber } from '../../components/ui/UiNumber'
+import { UiSelect } from '../../components/ui/UiSelect'
+import confetti from 'canvas-confetti'
+import { formatISODateString } from '../../utils/date'
 
 export default function SavingsDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [goal, setGoal] = useState<SavingsGoal | null>(null)
   const [contributions, setContributions] = useState<SavingsContribution[]>([])
+  const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [showContribForm, setShowContribForm] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -30,6 +34,7 @@ export default function SavingsDetail() {
   const [contribAmount, setContribAmount] = useState('')
   const [contribDate, setContribDate] = useState(new Date().toISOString().split('T')[0])
   const [contribNote, setContribNote] = useState('')
+  const [contribAccountId, setContribAccountId] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   // Edit form
@@ -49,12 +54,20 @@ export default function SavingsDetail() {
         getGoalById(id),
         getContributionsByGoal(id)
       ])
+
       setGoal(goalData)
       setContributions(contribsData)
+      
+      // Fetch accounts separately
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const accs = await getAccountsWithBalances(user.id)
+        setAccounts(accs.filter(a => a.is_active))
+      }
       if (goalData) {
         setEditName(goalData.name)
         setEditTarget(goalData.target_amount.toString())
-        setEditDueDate(goalData.due_date || '')
+        setEditDueDate(goalData.target_date || '')
         setEditDescription(goalData.description || '')
       }
     } catch (error) {
@@ -75,14 +88,16 @@ export default function SavingsDetail() {
     try {
       await addContribution({
         goal_id: id,
-        user_id: user.id,
         amount: parseFloat(contribAmount),
         date: contribDate,
-        note: contribNote || null
+        note: contribNote || null,
+        source_account_id: contribAccountId || undefined,
+        user_id: user.id
       })
       setShowContribForm(false)
       setContribAmount('')
       setContribNote('')
+      setContribAccountId('')
       loadData()
     } catch (error) {
       console.error('Error adding contribution:', error)
@@ -97,7 +112,7 @@ export default function SavingsDetail() {
       await updateGoal(id, {
         name: editName,
         target_amount: parseFloat(editTarget),
-        due_date: editDueDate || null,
+        target_date: editDueDate || null,
         description: editDescription || null
       })
       setEditing(false)
@@ -111,6 +126,11 @@ export default function SavingsDetail() {
     if (!id) return
     try {
       await markGoalCompleted(id)
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      })
       loadData()
     } catch (error) {
       console.error('Error marking goal as completed:', error)
@@ -189,7 +209,7 @@ export default function SavingsDetail() {
             ) : (
               <h2 style={styles.goalName}>{goal.name}</h2>
             )}
-            {goal.is_completed ? (
+            {goal.status === 'completed' ? (
               <span className="badge badge-success">Completado</span>
             ) : (
               <span className="badge badge-warning">En progreso</span>
@@ -219,7 +239,7 @@ export default function SavingsDetail() {
               style={{ 
                 ...styles.progressFill, 
                 width: `${getProgress()}%`,
-                background: goal.is_completed ? 'var(--success)' : 'var(--primary)'
+                background: goal.status === 'completed' ? 'var(--success)' : 'var(--primary)'
               }} 
             />
           </div>
@@ -267,7 +287,7 @@ export default function SavingsDetail() {
               </div>
             ) : (
               <span style={styles.detailValue}>
-                {goal.due_date ? formatDate(goal.due_date) : '-'}
+                {goal.target_date ? formatDate(goal.target_date) : '-'}
               </span>
             )}
           </div>
@@ -292,7 +312,7 @@ export default function SavingsDetail() {
         </div>
 
         {/* Actions */}
-        {!goal.is_completed && (
+        {goal.status !== 'completed' && (
           <div style={styles.actionsRow}>
             <button className="btn btn-primary" onClick={() => setShowContribForm(!showContribForm)}>
               <Plus size={18} />
@@ -321,6 +341,19 @@ export default function SavingsDetail() {
                 />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                  Cuenta origen (Opcional)
+                </label>
+                <UiSelect
+                  value={contribAccountId}
+                  onChange={setContribAccountId}
+                  options={[
+                    { value: '', label: 'Ninguna (Solo registrar)' },
+                    ...accounts.map(acc => ({ value: acc.id, label: `${acc.name} (${acc.balance} €)` }))
+                  ]}
+                />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
                 <label className="label">Fecha</label>
                 <UiDatePicker
                   value={contribDate}
@@ -328,6 +361,7 @@ export default function SavingsDetail() {
                   required
                 />
               </div>
+
               <div className="form-group" style={{ margin: 0 }}>
                 <UiInput
                     label="Nota (opcional)"
@@ -393,7 +427,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '0.5rem',
     background: 'transparent',
     border: 'none',
-    color: 'var(--gray-600)',
+    color: 'var(--text-secondary)',
     cursor: 'pointer',
     padding: '0.5rem 0',
     fontSize: '0.875rem',
@@ -407,7 +441,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   goalName: {
     fontSize: '1.5rem',
     fontWeight: 700,
-    color: 'var(--gray-800)',
+    color: 'var(--text-primary)',
     marginBottom: '0.5rem',
   },
   progressSection: {
@@ -430,7 +464,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     marginTop: '0.5rem',
     fontSize: '0.875rem',
-    color: 'var(--gray-500)',
+    color: 'var(--text-secondary)',
   },
   detailsGrid: {
     display: 'grid',
@@ -447,14 +481,14 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   detailLabel: {
     fontSize: '0.75rem',
-    color: 'var(--gray-500)',
+    color: 'var(--text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
   detailValue: {
     fontSize: '1rem',
     fontWeight: 600,
-    color: 'var(--gray-800)',
+    color: 'var(--text-primary)',
   },
   actionsRow: {
     display: 'flex',
@@ -471,7 +505,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   sectionTitle: {
     fontSize: '1.125rem',
     fontWeight: 600,
-    color: 'var(--gray-800)',
+    color: 'var(--text-primary)',
     marginBottom: '1rem',
   },
 }

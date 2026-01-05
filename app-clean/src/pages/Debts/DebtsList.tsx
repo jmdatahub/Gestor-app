@@ -104,19 +104,25 @@ export default function DebtsList() {
       clearTimeout(timeoutId)
       console.error('[DebtsList] Error creating debt:', err)
       
-      let errorMsg = 'Error al crear la deuda. '
-      if (err instanceof Error) {
-        const msg = err.message.toLowerCase()
-        if (msg.includes('permission') || msg.includes('rls') || msg.includes('policy')) {
-          errorMsg += 'No tienes permisos. Verifica que estás conectado.'
-        } else if (msg.includes('duplicate') || msg.includes('unique')) {
-          errorMsg += 'Ya existe una deuda similar.'
-        } else if (msg.includes('violates') || msg.includes('constraint')) {
-          errorMsg += 'Datos inválidos. Revisa los campos.'
-        } else {
-          errorMsg += err.message
-        }
+      // Mostrar error técnico completo para debugging
+      let errorMsg = 'Error al crear la deuda.'
+      let technicalDetail = ''
+      
+      if (err && typeof err === 'object') {
+        const supaError = err as { message?: string; details?: string; hint?: string; code?: string }
+        technicalDetail = supaError.message || JSON.stringify(err)
+        
+        // Add extra details if available
+        if (supaError.details) technicalDetail += ` | ${supaError.details}`
+        if (supaError.hint) technicalDetail += ` | Hint: ${supaError.hint}`
+        if (supaError.code) technicalDetail += ` | Code: ${supaError.code}`
       }
+      
+      // Display both user-friendly message and technical detail
+      if (technicalDetail) {
+        errorMsg += ` [${technicalDetail}]`
+      }
+      
       setFormError(errorMsg)
     } finally {
       setSubmitting(false)
@@ -195,9 +201,21 @@ export default function DebtsList() {
       ) : (
         <div className="d-flex flex-col gap-4">
           {filteredDebts.map((debt) => (
-            <UiCard 
-                key={debt.id} 
-                className="cursor-pointer hover:shadow-lg transition-all"
+            <div 
+              key={debt.id}
+              className="cursor-pointer"
+              onClick={() => navigate(`/app/debts/${debt.id}`)}
+              style={{ transition: 'all 0.2s ease-in-out' }}
+              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)'
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)'
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                e.currentTarget.style.boxShadow = ''
+              }}
+            >
+              <UiCard 
                 style={{
                   borderLeft: debt.is_closed
                     ? '4px solid var(--success)'
@@ -205,8 +223,8 @@ export default function DebtsList() {
                       ? '4px solid var(--danger)'
                       : '4px solid var(--primary)'
                 }}
-            >
-                <div onClick={() => navigate(`/app/debts/${debt.id}`)}>
+              >
+                <div>
                     <div className="card-header pb-2 border-0">
                         <div className="d-flex justify-between items-start">
                             <div>
@@ -249,6 +267,7 @@ export default function DebtsList() {
                     </div>
                 </div>
             </UiCard>
+            </div>
           ))}
         </div>
       )}

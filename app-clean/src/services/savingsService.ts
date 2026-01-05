@@ -1,22 +1,34 @@
 import { supabase } from '../lib/supabaseClient'
 
-// Types for Savings Goals
+/**
+ * Schema REAL de savings_goals en Supabase:
+ * - id, user_id, name, target_amount, current_amount (default 0)
+ * - target_date (DATE, nullable) - NO "due_date"
+ * - color, icon
+ * - status (TEXT, default 'active') - NO "is_completed", valores: 'active' | 'completed' | 'cancelled'
+ * - created_at
+ * 
+ * Tabla de contribuciones: savings_contributions (NO savings_goal_contributions)
+ */
+
+// Types for Savings Goals - MATCH ACTUAL DB SCHEMA
 export interface SavingsGoal {
   id: string
   user_id: string
   name: string
   target_amount: number
   current_amount: number
-  description: string | null
-  due_date: string | null
-  is_completed: boolean
+  target_date: string | null
+  description: string | null  // Añadido: descripción/comentario
+  color: string | null
+  icon: string | null
+  status: 'active' | 'completed' | 'cancelled'
   created_at: string
 }
 
 export interface SavingsContribution {
   id: string
   goal_id: string
-  user_id: string
   amount: number
   date: string
   note: string | null
@@ -25,17 +37,21 @@ export interface SavingsContribution {
 
 // Fetch all goals for user
 export async function getGoalsByUser(userId: string): Promise<SavingsGoal[]> {
+  console.log('[savingsService] Fetching goals for user:', userId)
+  
   const { data, error } = await supabase
     .from('savings_goals')
     .select('*')
     .eq('user_id', userId)
-    .order('is_completed', { ascending: true })
+    .order('status', { ascending: true })
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('Error fetching savings goals:', error)
+    console.error('[savingsService] Error fetching savings goals:', error)
     throw error
   }
+  
+  console.log('[savingsService] Goals fetched:', data?.length || 0)
   return data || []
 }
 
@@ -48,7 +64,7 @@ export async function getGoalById(goalId: string): Promise<SavingsGoal | null> {
     .single()
 
   if (error) {
-    console.error('Error fetching goal:', error)
+    console.error('[savingsService] Error fetching goal:', error)
     throw error
   }
   return data
@@ -59,30 +75,58 @@ export interface CreateGoalInput {
   user_id: string
   name: string
   target_amount: number
-  description?: string | null
-  due_date?: string | null
+  target_date?: string | null
+  description?: string | null  // Añadido: descripción opcional
+  color?: string | null
 }
 
 export async function createGoal(input: CreateGoalInput): Promise<SavingsGoal> {
+  console.log('[savingsService] Creating goal:', input)
+  
+  // Build payload with ONLY valid DB columns
+  const payload: Record<string, unknown> = {
+    user_id: input.user_id,
+    name: input.name,
+    target_amount: input.target_amount,
+    current_amount: 0,
+    status: 'active'
+  }
+  
+  // Only add optional fields if provided
+  if (input.target_date) {
+    payload.target_date = input.target_date
+  }
+  if (input.description) {
+    payload.description = input.description
+  }
+  if (input.color) {
+    payload.color = input.color
+  }
+  
   const { data, error } = await supabase
     .from('savings_goals')
-    .insert([{
-      ...input,
-      current_amount: 0,
-      is_completed: false
-    }])
+    .insert([payload])
     .select()
     .single()
 
   if (error) {
-    console.error('Error creating goal:', error)
+    console.error('[savingsService] Error creating goal:', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code
+    })
     throw error
   }
+  
+  console.log('[savingsService] Goal created successfully:', data)
   return data
 }
 
 // Update goal
 export async function updateGoal(goalId: string, updates: Partial<SavingsGoal>): Promise<SavingsGoal> {
+  console.log('[savingsService] Updating goal:', goalId, updates)
+  
   const { data, error } = await supabase
     .from('savings_goals')
     .update(updates)
@@ -91,83 +135,132 @@ export async function updateGoal(goalId: string, updates: Partial<SavingsGoal>):
     .single()
 
   if (error) {
-    console.error('Error updating goal:', error)
+    console.error('[savingsService] Error updating goal:', error)
     throw error
   }
+  
+  console.log('[savingsService] Goal updated:', data)
   return data
 }
 
 // Mark goal as completed
 export async function markGoalCompleted(goalId: string): Promise<SavingsGoal> {
-  return updateGoal(goalId, { is_completed: true })
+  return updateGoal(goalId, { status: 'completed' })
 }
 
-// Get contributions for a goal
+// Delete goal
+export async function deleteGoal(goalId: string): Promise<void> {
+  console.log('[savingsService] Deleting goal:', goalId)
+  
+  const { error } = await supabase
+    .from('savings_goals')
+    .delete()
+    .eq('id', goalId)
+
+  if (error) {
+    console.error('[savingsService] Error deleting goal:', error)
+    throw error
+  }
+  
+  console.log('[savingsService] Goal deleted:', goalId)
+}
+
+// Get contributions for a goal - CORRECT TABLE NAME
 export async function getContributionsByGoal(goalId: string): Promise<SavingsContribution[]> {
+  console.log('[savingsService] Fetching contributions for goal:', goalId)
+  
   const { data, error } = await supabase
-    .from('savings_goal_contributions')
+    .from('savings_contributions')  // CORRECT: not savings_goal_contributions
     .select('*')
     .eq('goal_id', goalId)
     .order('date', { ascending: false })
 
   if (error) {
-    console.error('Error fetching contributions:', error)
+    console.error('[savingsService] Error fetching contributions:', error)
     throw error
   }
+  
   return data || []
 }
+
+// Link to movement service
+import { createMovement } from './movementService'
 
 // Add contribution to a goal
 export interface AddContributionInput {
   goal_id: string
-  user_id: string
   amount: number
   date: string
   note?: string | null
+  source_account_id?: string // Optional source account
+  user_id?: string // Required for movement creation
 }
 
 export async function addContribution(input: AddContributionInput): Promise<SavingsContribution> {
-  // 1. Insert contribution
+  console.log('[savingsService] Adding contribution:', input)
+  
+  // Insert contribution - CORRECT TABLE NAME
   const { data: contribution, error: contribError } = await supabase
-    .from('savings_goal_contributions')
-    .insert([input])
+    .from('savings_contributions')  // CORRECT: not savings_goal_contributions
+    .insert([{
+      goal_id: input.goal_id,
+      amount: input.amount,
+      date: input.date,
+      note: input.note || null
+    }])
     .select()
     .single()
 
   if (contribError) {
-    console.error('Error adding contribution:', contribError)
+    console.error('[savingsService] Error adding contribution:', contribError)
     throw contribError
   }
 
-  // 2. Recalculate current_amount for the goal
+  // If linked account provided, create expense movement
+  if (input.source_account_id && input.user_id) {
+    try {
+      // Get goal name for description
+      const { data: goal } = await supabase
+        .from('savings_goals')
+        .select('name')
+        .eq('id', input.goal_id)
+        .single()
+        
+      const description = `Aportación: ${goal?.name || 'Objetivo Ahorro'}`
+      
+      await createMovement({
+        user_id: input.user_id,
+        account_id: input.source_account_id,
+        kind: 'expense', // Expense from the account point of view
+        amount: input.amount,
+        date: input.date,
+        description: description,
+        category_id: null // Or fetch 'Ahorro' category if needed
+      })
+      console.log('[savingsService] Created linked expense movement')
+    } catch (movError) {
+      console.error('[savingsService] Error creating linked movement:', movError)
+      // Don't fail the contribution if movement fails, just log it
+    }
+  }
+
+  // Recalculate current_amount for the goal
   await recalculateCurrentAmount(input.goal_id)
 
-  // TODO: In the future, this is where we could also create a movement
-  // in the movements table to track this as a transfer to savings.
-  // Example:
-  // await createMovement({
-  //   user_id: input.user_id,
-  //   account_id: savingsAccountId,
-  //   type: 'investment',
-  //   amount: input.amount,
-  //   date: input.date,
-  //   description: `Aportación a objetivo: ${goalName}`,
-  //   category: 'Ahorro'
-  // })
-
+  console.log('[savingsService] Contribution added:', contribution)
   return contribution
 }
 
 // Recalculate current_amount from contributions
 export async function recalculateCurrentAmount(goalId: string): Promise<void> {
-  // Get sum of contributions
+  // Get sum of contributions - CORRECT TABLE NAME
   const { data: contributions, error: fetchError } = await supabase
-    .from('savings_goal_contributions')
+    .from('savings_contributions')  // CORRECT: not savings_goal_contributions
     .select('amount')
     .eq('goal_id', goalId)
 
   if (fetchError) {
-    console.error('Error fetching contributions for sum:', fetchError)
+    console.error('[savingsService] Error fetching contributions for sum:', fetchError)
     return
   }
 
@@ -180,18 +273,18 @@ export async function recalculateCurrentAmount(goalId: string): Promise<void> {
     .eq('id', goalId)
     .single()
 
-  const isCompleted = goal ? total >= goal.target_amount : false
+  const newStatus = goal && total >= goal.target_amount ? 'completed' : 'active'
 
   // Update goal with new current_amount
   const { error: updateError } = await supabase
     .from('savings_goals')
     .update({ 
       current_amount: total,
-      is_completed: isCompleted
+      status: newStatus
     })
     .eq('id', goalId)
 
   if (updateError) {
-    console.error('Error updating current_amount:', updateError)
+    console.error('[savingsService] Error updating current_amount:', updateError)
   }
 }

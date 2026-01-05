@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { DayPicker, useDayPicker } from 'react-day-picker'
 import { es, enUS } from 'date-fns/locale'
@@ -6,7 +6,6 @@ import { Calendar as CalendarIcon, X, ChevronLeft, ChevronRight } from 'lucide-r
 import { formatHumanDate, parseISODateString } from '../../utils/date'
 import { useI18n } from '../../hooks/useI18n'
 import { UiSelect } from './UiSelect'
-import type { AppLanguage } from '../../context/SettingsContext'
 
 // Import basic DayPicker styles
 import 'react-day-picker/style.css'
@@ -126,7 +125,7 @@ export function DatePicker({
   error,
   className = ''
 }: DatePickerProps) {
-  const { t, lang } = useI18n()
+  const { t, language } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const calendarRef = useRef<HTMLDivElement>(null)
@@ -225,12 +224,12 @@ export function DatePicker({
     onChange(null)
   }
 
-  const localeMap = {
+  const localeMap: Record<string, typeof es> = {
       es: es,
       en: enUS
   }
 
-  const currentLocale = localeMap[lang as AppLanguage] || es
+  const currentLocale = localeMap[language] || es
 
   return (
     <div className={`date-picker-container ${className}`}>
@@ -249,7 +248,7 @@ export function DatePicker({
         <span className={`select-value ${!selectedDate ? 'placeholder' : ''}`}>
            <div className="flex items-center gap-2">
               <CalendarIcon size={16} className="text-gray-400" />
-              <span>{selectedDate ? formatHumanDate(selectedDate, lang as 'es'|'en') : placeholder}</span>
+               <span>{selectedDate ? formatHumanDate(selectedDate, language) : placeholder}</span>
            </div>
         </span>
         

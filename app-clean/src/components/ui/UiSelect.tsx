@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { ChevronDown, Check, Search, Plus } from 'lucide-react'
 import { UiPopover } from './UiPopover'
 

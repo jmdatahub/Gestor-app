@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import {
   getAccountsWithBalances,
@@ -20,6 +21,7 @@ import { UiSelect } from '../../components/ui/UiSelect'
 import { UiCard, UiCardBody } from '../../components/ui/UiCard'
 import { UiField } from '../../components/ui/UiField'
 import { UiInput } from '../../components/ui/UiInput'
+import { UiTextarea } from '../../components/ui/UiTextarea'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { Plus, Edit2, Power, PowerOff, X, CreditCard, Wallet, PiggyBank, TrendingUp, AlertTriangle } from 'lucide-react'
 import { Breadcrumbs } from '../../components/Breadcrumbs'
@@ -27,6 +29,7 @@ import { SkeletonList } from '../../components/Skeleton'
 import { formatISODateString } from '../../utils/date'
 
 export default function AccountsList() {
+  const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
@@ -40,6 +43,7 @@ export default function AccountsList() {
   const [parentId, setParentId] = useState<string>('') 
   const [name, setName] = useState('')
   const [type, setType] = useState<CreateAccountInput['type']>('general')
+  const [description, setDescription] = useState('')  // Añadido: descripción
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -80,6 +84,7 @@ export default function AccountsList() {
         user_id: user.id, 
         name, 
         type,
+        description: description || null,  // Añadido
         parent_account_id: parentId || null 
       })
       setShowCreateModal(false)
@@ -136,6 +141,7 @@ export default function AccountsList() {
     setSelectedAccount(acc)
     setName(acc.name)
     setType(acc.type)
+    setDescription(acc.description || '')  // Añadido
     setParentId(acc.parent_account_id || '')
     setErrorMsg(null)
     setShowEditModal(true)
@@ -144,6 +150,7 @@ export default function AccountsList() {
   const resetForm = () => {
     setName('')
     setType('general')
+    setDescription('')  // Añadido
     setParentId('')
     setErrorMsg(null)
   }
@@ -253,13 +260,23 @@ export default function AccountsList() {
               </thead>
               <tbody>
                 {flatAccounts.map((acc) => (
-                  <tr key={acc.id} style={{ opacity: !acc.is_active ? 0.5 : 1 }}>
+                  <tr 
+                    key={acc.id} 
+                    style={{ opacity: !acc.is_active ? 0.5 : 1 }}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
+                    onClick={() => navigate(`/app/accounts/${acc.id}`)}
+                  >
                     <td style={{ padding: '0.75rem 1.5rem', fontWeight: 600 }}>
                       <div style={{ marginLeft: `${acc.level * 1.5}rem` }} className="d-flex items-center gap-2">
                         {acc.level > 0 && (
                           <div style={{ width: 8, height: 8, borderLeft: '1px solid var(--gray-400)', borderBottom: '1px solid var(--gray-400)', marginBottom: 4 }} />
                         )}
-                        <span>{acc.name}</span>
+                        <span 
+                          className="hover:text-primary cursor-pointer hover:underline"
+                          onClick={() => navigate(`/app/accounts/${acc.id}`)}
+                        >
+                          {acc.name}
+                        </span>
                       </div>
                     </td>
                     <td style={{ padding: '0.75rem 1.5rem' }}>
@@ -304,10 +321,10 @@ export default function AccountsList() {
       <UiModal 
         isOpen={showCreateModal} 
         onClose={() => setShowCreateModal(false)}
-        title={t('accounts.new')}
         width="500px"
       >
         <form onSubmit={handleCreate}>
+          <UiModalHeader>{t('accounts.new')}</UiModalHeader>
           <UiModalBody>
             {errorMsg && (
                 <div className="d-flex items-center gap-2 mb-4 p-2 bg-gray-50 border border-danger text-danger rounded">
@@ -358,6 +375,15 @@ export default function AccountsList() {
                 />
               </UiField>
             </div>
+            <div className="form-group">
+              <UiTextarea
+                label="Descripción (opcional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Añade un comentario sobre esta cuenta..."
+                rows={3}
+              />
+            </div>
           </UiModalBody>
           <UiModalFooter>
              <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
@@ -378,10 +404,10 @@ export default function AccountsList() {
       <UiModal 
         isOpen={showEditModal && !!selectedAccount} 
         onClose={() => setShowEditModal(false)}
-        title={t('accounts.edit')}
         width="500px"
       >
         <form onSubmit={handleEdit}>
+          <UiModalHeader>{t('accounts.edit')}</UiModalHeader>
           <UiModalBody>
             {errorMsg && (
                 <div className="d-flex items-center gap-2 mb-4 p-2 bg-gray-50 border border-danger text-danger rounded">
@@ -431,6 +457,15 @@ export default function AccountsList() {
                   ]}
                 />
               </UiField>
+            </div>
+            <div className="form-group">
+              <UiTextarea
+                label="Descripción (opcional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Añade un comentario sobre esta cuenta..."
+                rows={3}
+              />
             </div>
           </UiModalBody>
           <UiModalFooter>

@@ -27,11 +27,11 @@ import {
 } from '../../utils/format'
 // Added formatISODateString
 import { formatISODateString } from '../../utils/date'
-import { Plus, TrendingUp, TrendingDown, X, ArrowUpDown, CreditCard, AlertCircle, ChevronDown, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, X, ArrowUpDown, CreditCard, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 // import { DayPicker } from 'react-day-picker' // Removed
 // import { format } from 'date-fns' // Removed
 // import { es } from 'date-fns/locale' // Removed
-import { formatSupabaseError, mapSupabaseErrorToSpanish, type AppError } from '../../utils/errorUtils'
+import { formatSupabaseError, type AppError } from '../../utils/errorUtils'
 
 import { useI18n } from '../../hooks/useI18n'
 
@@ -336,12 +336,12 @@ export default function MovementsList() {
   }
 
   return (
-    <div>
+    <div className="page-container">
       {/* Header */}
-      <div style={styles.header}>
+      <div className="page-header">
         <div>
-          <h1 style={styles.title}>{t('movements.title')}</h1>
-          <p style={styles.subtitle}>{t('movements.subtitle')}</p>
+          <h1 className="page-title">{t('movements.title')}</h1>
+          <p className="page-subtitle">{t('movements.subtitle')}</p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <Plus size={20} />
@@ -350,153 +350,161 @@ export default function MovementsList() {
       </div>
 
       {/* Monthly Summary */}
-      <div style={styles.summaryGrid}>
-        <div style={{ ...styles.summaryCard, borderLeft: '4px solid var(--success)' }}>
-          <div style={styles.summaryLabel}>{t('movements.income')}</div>
-          <div style={{ ...styles.summaryValue, color: 'var(--success)' }}>
-            +{formatCurrency(summary.income)}
+      <div className="kpi-grid">
+        <div className="kpi-card" style={{ borderLeft: '4px solid var(--success)' }}>
+          <div className="kpi-content">
+            <div className="kpi-label">{t('movements.income')}</div>
+            <div className="kpi-value text-success">
+              +{formatCurrency(summary.income)}
+            </div>
           </div>
         </div>
-        <div style={{ ...styles.summaryCard, borderLeft: '4px solid var(--danger)' }}>
-          <div style={styles.summaryLabel}>{t('movements.expenses')}</div>
-          <div style={{ ...styles.summaryValue, color: 'var(--danger)' }}>
-            -{formatCurrency(summary.expense)}
+        <div className="kpi-card" style={{ borderLeft: '4px solid var(--danger)' }}>
+          <div className="kpi-content">
+            <div className="kpi-label">{t('movements.expenses')}</div>
+            <div className="kpi-value text-danger">
+              -{formatCurrency(summary.expense)}
+            </div>
           </div>
         </div>
-        <div style={{ ...styles.summaryCard, borderLeft: `4px solid ${summary.balance >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
-          <div style={styles.summaryLabel}>{t('movements.balance')}</div>
-          <div style={{ ...styles.summaryValue, color: summary.balance >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-            {summary.balance >= 0 ? '+' : ''}{formatCurrency(summary.balance)}
+        <div className="kpi-card" style={{ borderLeft: `4px solid ${summary.balance >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
+          <div className="kpi-content">
+            <div className="kpi-label">{t('movements.balance')}</div>
+            <div className="kpi-value" style={{ color: summary.balance >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+              {summary.balance >= 0 ? '+' : ''}{formatCurrency(summary.balance)}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Movements List */}
       {movements.length === 0 ? (
-        <div className="card text-center" style={{ padding: '3rem' }}>
-          <ArrowUpDown size={48} style={{ color: 'var(--gray-300)', marginBottom: '1rem' }} />
-          <p className="text-gray-500">{t('movements.empty')}</p>
-          <button className="btn btn-primary mt-4" onClick={() => setShowModal(true)}>
+        <div className="section-card flex flex-col items-center justify-center p-12 text-center">
+          <ArrowUpDown size={48} className="text-gray-300 mb-4" />
+          <p className="text-gray-500 mb-4">{t('movements.empty')}</p>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             {t('movements.createFirst')}
           </button>
         </div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>{t('common.date')}</th>
-                <th>{t('common.type')}</th>
-                <th>{t('common.account')}</th>
-                <th>{t('common.category')}</th>
-                <th>{t('common.description')}</th>
-                <th style={{ textAlign: 'right' }}>{t('common.amount')}</th>
-                <th style={{ textAlign: 'center', width: '100px' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movements.map((mov) => (
-                <tr key={mov.id}>
-                  <td>{formatDate(mov.date)}</td>
-                  <td>
-                    <span className="flex items-center gap-2">
-                      {mov.kind === 'income' ? (
-                        <TrendingUp size={16} style={{ color: 'var(--success)' }} />
-                      ) : mov.kind === 'expense' ? (
-                        <TrendingDown size={16} style={{ color: 'var(--danger)' }} />
-                      ) : (
-                        <ArrowUpDown size={16} style={{ color: 'var(--primary)' }} />
-                      )}
-                      {getTypeLabel(mov.kind)}
-                    </span>
-                  </td>
-                  <td>{mov.account?.name || '-'}</td>
-                  <td>
-                    {mov.category ? (
-                      <span
-                        className={`category-pill ${getTextColorClass(mov.category.color)}`}
-                        style={getCategoryPillStyle(mov.category.color)}
-                      >
-                        {mov.category.name}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="text-gray-500">{mov.description || '-'}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: getTypeColor(mov.kind) }}>
-                    {mov.kind === 'income' ? '+' : mov.kind === 'expense' ? '-' : ''}
-                    {formatCurrency(mov.amount)}
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        type="button"
-                        className="btn btn-icon btn-ghost btn-sm"
-                        onClick={() => handleEdit(mov)}
-                        title="Editar"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-icon btn-ghost btn-sm text-danger"
-                        onClick={() => handleDelete(mov.id)}
-                        disabled={deletingId === mov.id}
-                        title="Eliminar"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-slate-800/50">
+                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderTopLeftRadius: '0.75rem' }}>📅 {t('common.date')}</th>
+                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📊 {t('common.type')}</th>
+                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🏦 {t('common.account')}</th>
+                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🏷️ {t('common.category')}</th>
+                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📝 {t('common.description')}</th>
+                  <th style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>💰 {t('common.amount')}</th>
+                  <th style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', borderTopRightRadius: '0.75rem' }}>⚙️</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {movements.map((mov) => (
+                  <tr key={mov.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-slate-800/30 transition-colors">
+                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatDate(mov.date)}</div>
+                    </td>
+                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                      <span 
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold"
+                        style={{ 
+                          color: mov.kind === 'income' ? 'var(--success)' : mov.kind === 'expense' ? 'var(--danger)' : 'var(--primary)'
+                        }}
+                      >
+                        {mov.kind === 'income' ? (
+                          <TrendingUp size={14} />
+                        ) : mov.kind === 'expense' ? (
+                          <TrendingDown size={14} />
+                        ) : (
+                          <ArrowUpDown size={14} />
+                        )}
+                        {getTypeLabel(mov.kind)}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.75rem 1.5rem', color: 'var(--text-secondary)' }}>
+                      {mov.account?.name || '-'}
+                    </td>
+                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                      {mov.category ? (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                          style={{ 
+                            backgroundColor: `${mov.category.color}15`, 
+                            color: mov.category.color 
+                          }}
+                        >
+                          {mov.category.name}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.75rem 1.5rem', color: 'var(--text-secondary)', maxWidth: '200px' }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={mov.description || ''}>
+                        {mov.description || '-'}
+                      </div>
+                    </td>
+                    <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>
+                      <span style={{ fontWeight: 700, color: getTypeColor(mov.kind) }}>
+                        {mov.kind === 'income' ? '+' : mov.kind === 'expense' ? '-' : ''}
+                        {formatCurrency(mov.amount)}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem' }}>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          className="btn btn-icon btn-secondary"
+                          onClick={() => handleEdit(mov)}
+                          title="Editar"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-icon btn-danger"
+                          onClick={() => handleDelete(mov.id)}
+                          disabled={deletingId === mov.id}
+                          title="Eliminar"
+                        >
+                          {deletingId === mov.id ? (
+                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                          ) : (
+                            <Trash2 size={16} />
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* Create/Edit Modal */}
-      <UiModal 
-        isOpen={showModal} 
-        onClose={() => { setShowModal(false); resetForm(); }}
-        width="500px"
-      >
-        <form onSubmit={handleSubmit}>
-          <UiModalHeader>{editingMovement ? 'Editar movimiento' : t('movements.new')}</UiModalHeader>
-          <UiModalBody>
-            {appError && (
-              <div className="alert alert-danger mb-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="shrink-0 mt-0.5 text-danger" size={18} />
-                  <div className="flex-1 overflow-hidden">
-                    {(() => {
-                      const friendly = mapSupabaseErrorToSpanish(appError);
-                      return (
-                        <>
-                          <h4 className="font-semibold text-sm text-danger-dark">{friendly.title}</h4>
-                          <p className="text-xs text-danger-dark mt-1 opacity-90">{friendly.description}</p>
-                          {friendly.action && (
-                            <div className="mt-2 p-2 bg-white/50 rounded text-xs font-medium text-danger-dark border border-danger/10">
-                              <strong>Sugerencia:</strong> {friendly.action}
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                    
-                    {/* Collapsible Details */}
+      {/* Movement Modal */}
+      {showModal && (
+        <UiModal isOpen={showModal} onClose={() => { setShowModal(false); resetForm(); }}>
+          <UiModalHeader>
+            {editingMovement ? t('movements.editTitle') : t('movements.newTitle')}
+          </UiModalHeader>
+          <form onSubmit={handleSubmit}>
+            <UiModalBody>
+              {appError && (
+                <div className="mb-4 p-3 bg-danger/10 text-danger rounded-lg text-sm border border-danger/20 flex gap-3">
+                  <AlertTriangle className="shrink-0" size={20} />
+                  <div className="flex-1">
+                    <p className="font-bold">{appError.message}</p>
                     {appError.details && (
-                      <details className="mt-2 text-xs opacity-80 cursor-pointer text-danger-dark">
-                        <summary className="hover:underline flex items-center gap-1">
-                          <ChevronDown size={12} />
-                          Detalles técnicos
-                        </summary>
-                        <div className="mt-1 p-2 bg-white/50 rounded overflow-x-auto border border-danger/10">
-                          <p className="font-mono text-[10px] break-all whitespace-pre-wrap text-gray-700">
-                            {JSON.stringify(appError, null, 2)}
-                          </p>
-                        </div>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs opacity-80 hover:opacity-100">Ver detalles técnicos</summary>
+                        <pre className="mt-2 text-[10px] bg-black/5 p-2 rounded overflow-x-auto whitespace-pre-wrap">
+                          {appError.details}
+                        </pre>
                       </details>
                     )}
                   </div>
@@ -504,229 +512,165 @@ export default function MovementsList() {
                     <X size={16}/>
                   </button>
                 </div>
+              )}
+
+              <div className="mb-4">
+                <UiDatePicker
+                  label={t('common.date')}
+                  value={date}
+                  onChange={(d) => d && setDate(d)}
+                />
               </div>
-            )}
 
-            <div className="mb-4">
-              <UiDatePicker
-                label={t('common.date')}
-                value={date}
-                onChange={(d) => d && setDate(d)}
-              />
-            </div>
-
-            <div className="mb-4">
-              <UiField label={t('common.type')} error={undefined}>
-                  <UiSelect
-                    value={type}
-                    onChange={(val) => setType(val as 'income' | 'expense' | 'investment')}
-                    options={[
-                      { value: 'income', label: t('movements.type.income') },
-                      { value: 'expense', label: t('movements.type.expense') },
-                      { value: 'investment', label: t('movements.type.investment') }
-                    ]}
-                  />
-              </UiField>
-            </div>
-
-            <div className="mb-4">
-              {accounts.length === 0 ? (
-                <div style={styles.noAccountsBox}>
-                  <CreditCard size={32} style={{ color: 'var(--gray-400)', marginBottom: '0.75rem' }} />
-                  <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                    {t('movements.noAccount')}
-                  </p>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => setShowAccountModal(true)}
-                  >
-                    <Plus size={18} />
-                    {t('accounts.createFirst')}
-                  </button>
-                </div>
-              ) : (
-                <UiField label={getAccountLabel()}>
+              <div className="mb-4">
+                <UiField label={t('common.type')} error={undefined}>
                     <UiSelect
-                      value={accountId}
-                      onChange={handleAccountSelectChange}
+                      value={type}
+                      onChange={(val) => setType(val as 'income' | 'expense' | 'investment')}
                       options={[
-                        ...flatAccounts.map(acc => ({
-                          value: acc.id,
-                          label: '\u00A0\u00A0'.repeat(acc.level || 0) + ((acc.level || 0) > 0 ? '— ' : '') + acc.name
-                        })),
-                        { value: '__create_new__', label: '+ ' + t('accounts.new') }
+                        { value: 'income', label: t('movements.type.income') },
+                        { value: 'expense', label: t('movements.type.expense') },
+                        { value: 'investment', label: t('movements.type.investment') }
                       ]}
                     />
                 </UiField>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <UiNumber
-                label={`${t('common.amount')} (€)`}
-                value={amount}
-                onChange={(val) => setAmount(val)}
-                placeholder="0.00"
-                step="0.01"
-                min={0.01}
-                // required // Handled by validation manually
-              />
-            </div>
-
-            <div className="mb-4">
-              <CategoryPicker
-                label={t('common.category')}
-                type={type === 'income' ? 'income' : 'expense'}
-                value={categoryId}
-                onChange={setCategoryId}
-              />
-            </div>
-
-            <div className="mb-4">
-              <UiInput
-                label={`${t('common.description')} (${t('common.optional')})`}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={`${t('common.description')}...`}
-              />
-            </div>
-          </UiModalBody>
-          <UiModalFooter>
-             <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
-              {t('common.cancel')}
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? t('common.saving') : t('common.save')}
-            </button>
-          </UiModalFooter>
-        </form>
-      </UiModal>
-
-      {/* Account Creation Modal */}
-      <UiModal 
-        isOpen={showAccountModal} 
-        onClose={() => resetAccountModal()}
-        width="400px"
-      >
-        <UiModalHeader>{t('accounts.new')}</UiModalHeader>
-        <div className="modal-body">
-          {newAccountError && (
-              <div className="p-3 mb-4 bg-red-50 text-red-600 rounded-md text-sm flex items-start gap-2">
-                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-                  <span>{newAccountError}</span>
               </div>
-          )}
-          <div className="mb-4">
-            <UiInput
-              label={t('accounts.name')}
-              value={newAccountName}
-              onChange={(e) => setNewAccountName(e.target.value)}
-              placeholder="Ej: Cuenta corriente, Efectivo..."
-              autoFocus
-            />
-          </div>
-          <div className="mb-4">
-            <UiField label={t('accounts.type')}>
-                <UiSelect
-                  value={newAccountType}
-                  onChange={setNewAccountType}
-                  options={accountTypes}
+
+              <div className="mb-4">
+                {accounts.length === 0 ? (
+                  <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-xl text-center">
+                    <CreditCard size={32} className="text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-500 mb-3 text-sm">
+                      {t('movements.noAccount')}
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm w-full"
+                      onClick={() => setShowAccountModal(true)}
+                    >
+                      <Plus size={16} />
+                      {t('accounts.createFirst')}
+                    </button>
+                  </div>
+                ) : (
+                  <UiField label={getAccountLabel()}>
+                      <UiSelect
+                        value={accountId}
+                        onChange={handleAccountSelectChange}
+                        options={[
+                          ...flatAccounts.map(acc => ({
+                            value: acc.id,
+                            label: '\u00A0\u00A0'.repeat(acc.level || 0) + ((acc.level || 0) > 0 ? '— ' : '') + acc.name
+                          })),
+                          { value: '__create_new__', label: '+ ' + t('accounts.new') }
+                        ]}
+                      />
+                  </UiField>
+                )}
+              </div>
+
+              <div className="mb-4">
+                <UiNumber
+                  label={`${t('common.amount')} (€)`}
+                  value={amount}
+                  onChange={(val) => setAmount(val)}
+                  placeholder="0.00"
+                  step="0.01"
+                  min={0.01}
                 />
-            </UiField>
-          </div>
-          <div className="mb-4">
-            <UiField label={t('accounts.parent')}>
-                <UiSelect
-                   value={newAccountParentId}
-                   onChange={setNewAccountParentId}
-                   placeholder={t('accounts.noParent') || 'Ninguna'}
-                   options={[
-                     { value: '', label: t('accounts.noParent') || 'Sin cuenta padre' },
-                     ...flatAccounts.map(a => ({
-                        value: a.id,
-                        label: '\u00A0\u00A0'.repeat(a.level || 0) + ((a.level || 0) > 0 ? '— ' : '') + a.name
-                     }))
-                   ]}
+              </div>
+
+              <div className="mb-4">
+                <CategoryPicker
+                  label={t('common.category')}
+                  type={type === 'income' ? 'income' : 'expense'}
+                  value={categoryId}
+                  onChange={setCategoryId}
                 />
-            </UiField>
-          </div>
-        </div>
-        <UiModalFooter>
-          <button type="button" className="btn btn-secondary" onClick={() => resetAccountModal()}>
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleCreateAccount}
-            disabled={creatingAccount || !newAccountName.trim()}
-          >
-            {creatingAccount ? t('common.creating') : t('common.create')}
-          </button>
-        </UiModalFooter>
-      </UiModal>
+              </div>
+
+              <div className="mb-4">
+                <UiInput
+                  label={`${t('common.description')} (${t('common.optional')})`}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder={`${t('common.description')}...`}
+                />
+              </div>
+            </UiModalBody>
+            <UiModalFooter>
+               <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+                {t('common.cancel')}
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={submitting}>
+                {submitting ? t('common.saving') : t('common.save')}
+              </button>
+            </UiModalFooter>
+          </form>
+        </UiModal>
+      )}
+
+      {/* Account Creation Modal (Inline) */}
+      {showAccountModal && (
+        <UiModal isOpen={showAccountModal} onClose={resetAccountModal}>
+            <UiModalHeader>{t('accounts.new')}</UiModalHeader>
+            <UiModalBody>
+                {newAccountError && (
+                    <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-md text-sm border border-red-100">
+                        {newAccountError}
+                    </div>
+                )}
+                <div className="space-y-4">
+                    <UiInput 
+                        label={t('accounts.name')}
+                        value={newAccountName}
+                        onChange={(e) => setNewAccountName(e.target.value)}
+                        placeholder="Ej. Cuenta Corriente Principal"
+                        autoFocus
+                    />
+                     <UiField label={t('accounts.type')}>
+                        <UiSelect 
+                             value={newAccountType}
+                             onChange={(val) => setNewAccountType(val)}
+                             options={accountTypes.map(t => ({ value: t.value, label: t.label }))}
+                        />
+                    </UiField>
+                    
+                    <UiField label={`${t('accounts.parent')} (Opcional)`}>
+                        <UiSelect
+                           value={newAccountParentId}
+                           onChange={setNewAccountParentId}
+                           options={[
+                               { value: '', label: t('common.none') },
+                               ...flatAccounts.map(acc => ({
+                                   value: acc.id,
+                                   label: '\u00A0\u00A0'.repeat(acc.level || 0) + ((acc.level || 0) > 0 ? '— ' : '') + acc.name
+                               }))
+                           ]}
+                        />
+                    </UiField>
+                </div>
+            </UiModalBody>
+            <UiModalFooter>
+                <button 
+                    className="btn btn-secondary"
+                    onClick={resetAccountModal}
+                    disabled={creatingAccount}
+                >
+                    {t('common.cancel')}
+                </button>
+                <button 
+                    className="btn btn-primary"
+                    onClick={handleCreateAccount}
+                    disabled={!newAccountName.trim() || creatingAccount}
+                >
+                    {creatingAccount ?  t('common.saving') : t('common.save')}
+                </button>
+            </UiModalFooter>
+        </UiModal>
+      )}
     </div>
   )
 }
 
-const styles: { [key: string]: React.CSSProperties } = {
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '1.5rem',
-  },
-  title: {
-    fontSize: '1.75rem',
-    fontWeight: 700,
-    color: 'var(--gray-800)',
-    marginBottom: '0.25rem',
-  },
-  subtitle: {
-    color: 'var(--gray-500)',
-    fontSize: '0.875rem',
-  },
-  summaryGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '1rem',
-    marginBottom: '1.5rem',
-  },
-  summaryCard: {
-    background: 'white',
-    borderRadius: 'var(--border-radius)',
-    boxShadow: 'var(--shadow)',
-    padding: '1.25rem',
-  },
-  summaryLabel: {
-    fontSize: '0.75rem',
-    color: 'var(--gray-500)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: '0.5rem',
-  },
-  summaryValue: {
-    fontSize: '1.5rem',
-    fontWeight: 700,
-  },
-  error: {
-    background: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid var(--danger)',
-    color: 'var(--danger)',
-    padding: '0.75rem',
-    borderRadius: 'var(--border-radius)',
-    fontSize: '0.875rem',
-    marginBottom: '1rem',
-  },
-  noAccountsBox: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '1.5rem',
-    background: 'var(--gray-50)',
-    borderRadius: 'var(--border-radius)',
-    textAlign: 'center' as const,
-  },
-}
+

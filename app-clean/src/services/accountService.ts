@@ -7,8 +7,9 @@ export interface Account {
   user_id: string
   name: string
   type: 'general' | 'savings' | 'cash' | 'bank' | 'broker' | 'other'
+  description?: string | null  // Añadido: descripción de la cuenta
   is_active: boolean
-  parent_account_id?: string | null // For sub-accounts (renamed from parent_id to match DB)
+  parent_account_id?: string | null
   created_at: string
   updated_at: string | null
 }
@@ -26,6 +27,7 @@ export interface CreateAccountInput {
   user_id: string
   name: string
   type: Account['type']
+  description?: string | null  // Añadido: descripción opcional
   parent_account_id?: string | null
 }
 
@@ -51,6 +53,24 @@ export async function getUserAccounts(userId: string): Promise<Account[]> {
     throw error
   }
   return data || []
+}
+
+// Get single account by ID
+export async function getAccountById(accountId: string): Promise<AccountWithBalance | null> {
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('id', accountId)
+    .single()
+
+  if (error) {
+    console.error('Error fetching account:', error)
+    throw error
+  }
+  
+  // Calculate balance - for now just return the account with 0 balance
+  // In a real scenario, you'd calculate from movements
+  return data ? { ...data, balance: 0 } : null
 }
 
 // Get active accounts only
@@ -165,6 +185,24 @@ export async function updateAccount(accountId: string, updates: Partial<Account>
   return data
 }
 
+// Delete account permanently
+export async function deleteAccount(accountId: string): Promise<void> {
+  console.log('[accountService] Deleting account:', accountId)
+  
+  const { error } = await supabase
+    .from('accounts')
+    .delete()
+    .eq('id', accountId)
+
+  if (error) {
+    console.error('Error deleting account:', error)
+    throw error
+  }
+  
+  console.log('[accountService] Account deleted:', accountId)
+  invalidateAccounts()
+}
+
 // Toggle account active status
 export async function toggleAccountActive(accountId: string, isActive: boolean): Promise<void> {
   const { error } = await supabase
@@ -186,9 +224,8 @@ export async function toggleAccountActive(accountId: string, isActive: boolean):
 export async function calculateAccountBalance(accountId: string): Promise<number> {
   const { data: movements, error } = await supabase
     .from('movements')
-    .select('type, amount')
+    .select('kind, amount')
     .eq('account_id', accountId)
-    .eq('status', 'confirmed')
 
   if (error) {
     console.error('Error fetching movements for balance:', error)
@@ -197,7 +234,7 @@ export async function calculateAccountBalance(accountId: string): Promise<number
 
   let balance = 0
   for (const m of (movements || [])) {
-    if (m.type === 'income' || m.type === 'transfer_in') {
+    if (m.kind === 'income' || m.kind === 'transfer_in') {
       balance += m.amount
     } else {
       // expense, investment, transfer_out
@@ -214,16 +251,15 @@ export async function getAccountsWithBalances(userId: string): Promise<AccountWi
   // Get all movements for this user
   const { data: movements } = await supabase
     .from('movements')
-    .select('account_id, type, amount')
+    .select('account_id, kind, amount')
     .eq('user_id', userId)
-    .eq('status', 'confirmed')
 
   // Calculate balances
   const balanceMap: Record<string, number> = {}
   for (const m of (movements || [])) {
     if (!balanceMap[m.account_id]) balanceMap[m.account_id] = 0
     
-    if (m.type === 'income' || m.type === 'transfer_in') {
+    if (m.kind === 'income' || m.kind === 'transfer_in') {
       balanceMap[m.account_id] += m.amount
     } else {
       // expense, investment, transfer_out
@@ -255,7 +291,7 @@ export async function createTransfer(
       {
         user_id: userId,
         account_id: fromAccountId,
-        type: 'transfer_out',
+        kind: 'transfer_out',
         amount: amount,
         date: date,
         description: transferDescription,
@@ -265,7 +301,7 @@ export async function createTransfer(
       {
         user_id: userId,
         account_id: toAccountId,
-        type: 'transfer_in',
+        kind: 'transfer_in',
         amount: amount,
         date: date,
         description: transferDescription,

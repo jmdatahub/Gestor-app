@@ -32,6 +32,7 @@ export interface Category {
   name: string
   kind: string // income or expense
   color?: string // hex color like #RRGGBB
+  description?: string | null  // Añadido: descripción de la categoría
 }
 
 // Fetch movements for user

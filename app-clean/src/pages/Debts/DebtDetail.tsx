@@ -194,55 +194,65 @@ export default function DebtDetail() {
             </div>
         </div>
 
-        {/* Details Grid */}
-        <div className="d-grid gap-4 py-4 border-t border-b border-gray-100 mb-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-secondary mb-1">Importe Total</div>
-            <div className="text-lg font-bold text-gray-800">{formatCurrency(debt.total_amount)}</div>
+        {/* Details Grid - Improved spacing */}
+        <div 
+          className="d-grid gap-6 py-6 border-t border-b border-gray-100 my-6" 
+          style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}
+        >
+          {/* Importe Total */}
+          <div className="p-4 rounded-lg" style={{ background: 'var(--gray-50)' }}>
+            <div className="text-xs uppercase tracking-wider text-secondary mb-2">Importe Total</div>
+            <div className="text-2xl font-bold text-gray-800">{formatCurrency(debt.total_amount)}</div>
           </div>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-secondary mb-1">Restante</div>
-            <div className={`text-lg font-bold ${debt.is_closed ? 'text-success' : 'text-danger'}`}>
+          
+          {/* Restante */}
+          <div className="p-4 rounded-lg" style={{ background: 'var(--gray-50)' }}>
+            <div className="text-xs uppercase tracking-wider text-secondary mb-2">Restante</div>
+            <div className={`text-2xl font-bold ${debt.is_closed ? 'text-success' : 'text-danger'}`}>
                 {formatCurrency(debt.remaining_amount)}
             </div>
           </div>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-secondary mb-1">Fecha Límite</div>
+          
+          {/* Fecha Límite */}
+          <div className="p-4 rounded-lg" style={{ background: 'var(--gray-50)' }}>
+            <div className="text-xs uppercase tracking-wider text-secondary mb-2">Fecha Límite</div>
             {editing ? (
-              <div className="mt-1">
+              <div className="mt-2">
                 <UiDatePicker
                   value={editDueDate}
                   onChange={(d) => setEditDueDate(d ? formatISODateString(d) : '')}
                 />
               </div>
             ) : (
-              <div className="text-lg font-bold text-gray-800">
-                {debt.due_date ? formatDate(debt.due_date) : '-'}
+              <div className="text-xl font-bold text-gray-800">
+                {debt.due_date ? formatDate(debt.due_date) : 'Sin fecha'}
               </div>
             )}
           </div>
-          <div>
-            <div className="text-xs uppercase tracking-wider text-secondary mb-1">Estado</div>
-            <span className={`badge ${debt.is_closed ? 'badge-success' : 'badge-warning'}`}>
+          
+          {/* Estado */}
+          <div className="p-4 rounded-lg" style={{ background: 'var(--gray-50)' }}>
+            <div className="text-xs uppercase tracking-wider text-secondary mb-2">Estado</div>
+            <span className={`badge ${debt.is_closed ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}>
               {debt.is_closed ? 'Cerrada' : 'Pendiente'}
             </span>
           </div>
         </div>
 
-        {/* Description */}
-        <div>
-          <div className="text-xs uppercase tracking-wider text-secondary mb-1">Descripción</div>
+        {/* Description - Improved */}
+        <div className="py-4">
+          <div className="text-xs uppercase tracking-wider text-secondary mb-2">Descripción</div>
           {editing ? (
-            <div className="mt-1">
+            <div className="mt-2">
                 <UiTextarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
-                  rows={2}
+                  rows={3}
                   placeholder="Añadir descripción..."
                 />
             </div>
           ) : (
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-lg">
               {debt.description || 'Sin descripción'}
             </p>
           )}

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabaseClient'
+import { createMovement } from './movementService'
 
 // Types
 export interface Investment {
@@ -11,6 +12,7 @@ export interface Investment {
   current_price: number
   currency: string
   notes: string | null
+  account_id?: string | null // Account where the investment is held
   created_at: string
   updated_at: string | null
 }
@@ -33,6 +35,8 @@ export interface CreateInvestmentInput {
   current_price: number
   currency?: string
   notes?: string | null
+  account_id?: string | null
+  fund_from_account_id?: string | null // Optional: Account to deduct funds from
 }
 
 // Get all investments for user
@@ -67,10 +71,13 @@ export async function getInvestmentById(investmentId: string): Promise<Investmen
 
 // Create new investment
 export async function createInvestment(input: CreateInvestmentInput): Promise<Investment> {
+  // Extract non-DB fields
+  const { fund_from_account_id, ...dbInput } = input
+
   const { data, error } = await supabase
     .from('investments')
     .insert([{
-      ...input,
+      ...dbInput,
       currency: input.currency || 'EUR'
     }])
     .select()
@@ -83,6 +90,26 @@ export async function createInvestment(input: CreateInvestmentInput): Promise<In
 
   // Add initial price history entry
   await addPriceHistoryEntry(data.id, input.user_id, input.current_price, new Date().toISOString().split('T')[0])
+
+  // If funding account specified, create expense
+  if (fund_from_account_id) {
+    const totalCost = input.quantity * input.buy_price
+    if (totalCost > 0) {
+      try {
+        await createMovement({
+          user_id: input.user_id,
+          account_id: fund_from_account_id,
+          kind: 'expense',
+          amount: totalCost,
+          date: new Date().toISOString().split('T')[0],
+          description: `Inversión: ${input.name}`,
+          category_id: null // Could map to 'Inversión' category if it exists
+        })
+      } catch (err) {
+        console.error('Error creating expense for investment:', err)
+      }
+    }
+  }
 
   return data
 }

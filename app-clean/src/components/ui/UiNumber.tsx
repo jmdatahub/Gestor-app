@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
 import { UiInput, UiInputProps } from './UiInput';
 
 export interface UiNumberProps extends Omit<UiInputProps, 'type' | 'onChange'> {

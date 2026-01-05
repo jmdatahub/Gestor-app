@@ -98,64 +98,86 @@
 }
 
 [data-theme='dark'] {
-  /* Brand Colors - Adjusted for Dark Mode */
-  --primary: #6366F1;
-  --primary-hover: #818CF8;
-  --primary-soft: rgba(99, 102, 241, 0.15);
-  --secondary: #818CF8;
+  /* Brand Colors - Solid & Readable */
+  --primary: #818cf8; /* Light Indigo */
+  --primary-hover: #a5b4fc;
+  --primary-soft: rgba(79, 70, 229, 0.2);
+  --secondary: #94a3b8;
   
-  /* Semantic Colors */
-  --success: #4ADE80;
-  --success-soft: #052E16;
-  --warning: #FBBF24;
-  --warning-soft: #451A03;
-  --danger: #F87171;
-  --danger-soft: #450A0A;
+  /* Semantic Colors - Distinct */
+  --success: #34d399; 
+  --success-soft: rgba(16, 185, 129, 0.2);
+  --warning: #fbbf24;
+  --warning-soft: rgba(245, 158, 11, 0.2);
+  --danger: #f87171;
+  --danger-soft: rgba(239, 68, 68, 0.2);
   
-  /* Neutral Palette - Reverted to Standard Dark (Gray/Zinc) for Content */
+  /* Backgrounds - High Contrast Dark */
+  --bg-body: #0b1120; 
+  --bg-gradient: linear-gradient(to bottom, #0f172a, #0b1120); 
+  --bg-card: #1e293b; 
+  --bg-header: #1e293b;
+  --bg-sidebar: #0f172a;
+  
+  /* Text - High Contrast */
+  --text-primary: #f8fafc; 
+  --text-secondary: #cbd5e1; 
+  --text-muted: #94a3b8; 
+  --text-inverse: #0f172a;
+  
+  /* Restoring Gray Palette for Contrast (Critical for Buttons) */
   --gray-50: #111827; 
-  --gray-100: #1F2937;
-  --gray-200: #374151;
-  --gray-300: #4B5563;
-  --gray-400: #9CA3AF;
-  --gray-500: #D1D5DB;
-  --gray-600: #E5E7EB;
-  --gray-700: #F3F4F6;
-  --gray-800: #F9FAFB;
-  --gray-900: #FFFFFF;
-  
-  /* Semantic Backgrounds - Reverted for Content */
-  --bg-body: #111827; /* Standard Dark Mode BG */
-  --bg-card: #1F2937; /* Standard Dark Mode Card */
-  --bg-header: #1F2937;
-  
-  /* Sidebar Specifics - KEPT Slate for Contrast (as requested) */
-  --bg-sidebar: #0F172A; 
-  --bg-sidebar-hover: #1E293B; 
-  --sidebar-border: #1E293B;
-  --sidebar-width: 280px;
-  --sidebar-width-collapsed: 72px;
-  
-  /* Text Colors */
-  --text-primary: #F3F4F6;
-  --text-secondary: #9CA3AF;
-  --text-muted: #6B7280;
-  --text-inverse: #111827;
+  --gray-100: #1F2937; /* Dark Button BG */
+  --gray-200: #334155; /* Dark Button Hover */
+  --gray-300: #475569;
+  --gray-400: #94a3b8;
+  --gray-500: #cbd5e1;
   
   /* Borders */
-  --border-color: #374151;
+  --border-color: #334155; 
+  --sidebar-border: #1e293b;
   
   /* Dropdowns */
-  --dropdown-bg: #1F2937;
-  --dropdown-border: #374151;
-  --dropdown-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --dropdown-bg: #1e293b;
+}
 
-  /* Shadows for Dark Mode */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.4);
+/* Button Sizing Fixes (Compacting) */
+.btn {
+  font-size: 0.875rem !important;
+  padding: 0.5rem 1rem !important;
+  height: auto !important;
+  min-height: 38px;
+}
+.btn-sm {
+  padding: 0.25rem 0.5rem !important;
+  min-height: 30px;
+  font-size: 0.8rem !important;
+}
+.btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Revert gradients on text for readability */
+.page-title, .section-title {
+  background: none;
+  -webkit-text-fill-color: initial;
+  color: var(--text-primary);
+}
+
+/* Solid Cards */
+.kpi-card, .section-card, .ui-card, .card {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* Apply gradient to body in dark mode */
+[data-theme='dark'] body {
+  background: var(--bg-gradient);
+  background-attachment: fixed;
 } 
 
 
@@ -529,7 +551,7 @@ a:hover {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   border: 1px solid var(--border-color);
-  padding: 1.5rem;
+  padding: 2.5rem;
   margin-bottom: 1.5rem;
 }
 
@@ -683,10 +705,15 @@ a:hover {
 }
 
 .btn-icon {
-  width: 36px;
-  height: 36px;
-  padding: 0;
+  width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 !important;
   border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .w-full {
@@ -774,6 +801,54 @@ a:hover {
     gap: 0.5rem;
     flex: 1;
     overflow: hidden;
+}
+
+/* Suggestions Dropdown */
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+  z-index: 50;
+  max-height: 240px;
+  overflow-y: auto;
+  animation: dropdown-in 0.2s ease;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover,
+.suggestion-item.active {
+  background: var(--bg-body);
+}
+
+.suggestion-match {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.suggestion-info {
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 
 .select-value .placeholder {
@@ -3673,4 +3748,73 @@ textarea.input {
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* Sticky Table Column (Investments) */
+.sticky-actions-col {
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 10 !important;
+  background-color: var(--bg-card) !important;
+  box-shadow: -4px 0 8px rgba(0,0,0,0.1) !important;
+  border-left: 1px solid var(--border-color);
+}
+
+/* Replicate row hover effect */
+tr:hover .sticky-actions-col {
+  background-color: var(--gray-50) !important;
+}
+
+[data-theme='dark'] .sticky-actions-col {
+  background-color: #1F2937 !important; /* Hardcoded gray-800 */
+}
+
+
+[data-theme='dark'] tr:hover .sticky-actions-col {
+  background-color: #374151 !important; /* Hardcoded gray-700 for hover */
+}
+
+/* Responsive Table Container */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  position: relative; /* Context for sticky */
+}
+
+
+/* ==============================================
+   CLEAN & SOLID STYLES (Refined)
+   ============================================== */
+.kpi-card, .section-card, .ui-card, .card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease;
+}
+
+.kpi-card:hover, .ui-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-color); /* No glowing border */
+}
+
+/* Clear Headings */
+.page-title, .section-title {
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Badges - Solid */
+.badge {
+  font-weight: 600;
+  border: none;
+}
+.badge-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+.badge-primary {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
 }

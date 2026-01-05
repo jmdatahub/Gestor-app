@@ -15,6 +15,7 @@ import InvestmentsList from './pages/Investments/InvestmentsList'
 import InvestmentDetail from './pages/Investments/InvestmentDetail'
 import AlertsList from './pages/Alerts/AlertsList'
 import AccountsList from './pages/Accounts/AccountsList'
+import AccountDetail from './pages/Accounts/AccountDetail'
 import InsightsPage from './pages/Insights/InsightsPage'
 import SummaryPage from './pages/Summary/SummaryPage'
 import SettingsPage from './pages/Settings/SettingsPage'
@@ -31,6 +32,7 @@ function App() {
           <Route path="movements" element={<MovementsList />} />
           <Route path="categories" element={<CategoriesList />} />
           <Route path="accounts" element={<AccountsList />} />
+          <Route path="accounts/:id" element={<AccountDetail />} />
           <Route path="savings" element={<SavingsList />} />
           <Route path="savings/:id" element={<SavingsDetail />} />
           <Route path="investments" element={<InvestmentsList />} />

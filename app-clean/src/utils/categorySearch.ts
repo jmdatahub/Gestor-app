@@ -42,7 +42,7 @@ function levenshteinDistance(a: string, b: string): number {
 export function getCategorySuggestions(
   query: string, 
   categories: Category[], 
-  limit: number = 6
+  limit: number = 8
 ): CategorySuggestion[] {
   const normalizedQuery = normalizeText(query)
   if (!normalizedQuery) return []
@@ -55,24 +55,34 @@ export function getCategorySuggestions(
     if (normalizedName === normalizedQuery) {
       score = 1.0
     } 
-    // Prefix match (starts with)
+    // Prefix match (starts with) - HIGHEST PRIORITY for partial typing
     else if (normalizedName.startsWith(normalizedQuery)) {
-      score = 0.8 + (normalizedQuery.length / normalizedName.length) * 0.1
+      // The more chars typed relative to name length, the better
+      score = 0.85 + (normalizedQuery.length / normalizedName.length) * 0.15
     }
-    // Substring match
+    // Contains the query anywhere in the name
     else if (normalizedName.includes(normalizedQuery)) {
-      score = 0.6 + (normalizedQuery.length / normalizedName.length) * 0.1
+      score = 0.65 + (normalizedQuery.length / normalizedName.length) * 0.15
     }
-    // Fuzzy match (Levenshtein) - only if not a strong match yet
+    // Check if any word in the name starts with the query
     else {
+      const words = normalizedName.split(/\s+/)
+      for (const word of words) {
+        if (word.startsWith(normalizedQuery)) {
+          score = 0.7 + (normalizedQuery.length / word.length) * 0.1
+          break
+        }
+      }
+    }
+    
+    // Fuzzy match (Levenshtein) - only if not matched yet and query is long enough
+    if (score === 0 && normalizedQuery.length >= 3) {
       const distance = levenshteinDistance(normalizedQuery, normalizedName)
       const maxLength = Math.max(normalizedQuery.length, normalizedName.length)
       if (maxLength > 0) {
         const similarity = 1 - (distance / maxLength)
-        // Bonus for sharing tokens (e.g. "restau" vs "restaurantes") logic already covered partially by prefix/substring, 
-        // but for typos this helps.
-        if (similarity > 0.4) { // Only consider if reasonably similar
-          score = similarity * 0.5 // Penalty for being fuzzy
+        if (similarity > 0.5) {
+          score = similarity * 0.5
         }
       }
     }
@@ -84,9 +94,11 @@ export function getCategorySuggestions(
     }
   })
 
-  // Filter by threshold and sort
+  // Filter by minimum score (very low threshold for short queries)
+  const threshold = normalizedQuery.length <= 2 ? 0.15 : 0.3
+  
   return suggestions
-    .filter(s => s.score >= 0.4) // Threshold
+    .filter(s => s.score >= threshold)
     .sort((a, b) => {
       // Sort by score desc
       if (Math.abs(b.score - a.score) > 0.01) return b.score - a.score

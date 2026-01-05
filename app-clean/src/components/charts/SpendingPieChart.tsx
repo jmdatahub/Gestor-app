@@ -29,7 +29,7 @@ export function SpendingPieChart({ data }: SpendingPieChartProps) {
             ))}
           </Pie>
           <Tooltip 
-            formatter={(value: number) => [new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value || 0), 'Valor']}
+            formatter={(value) => [new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(value) || 0), 'Valor']}
             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
           />
           <Legend verticalAlign="bottom" height={36} />

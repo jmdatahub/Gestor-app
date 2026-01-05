@@ -1,0 +1,30 @@
+﻿src/components/charts/SpendingPieChart.tsx(32,13): error TS2322: Type '(value: number) => [string, "Valor"]' is not assignable to type 'Formatter<number, "Valor">'.
+  Types of parameters 'value' and 'value' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/components/charts/TrendBarChart.tsx(39,13): error TS2322: Type '(value: number) => [string, ""]' is not assignable to type 'Formatter<number, "">'.
+  Types of parameters 'value' and 'value' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/components/SettingsPanel.tsx(4,24): error TS6196: 'NotificationSettings' is declared but never used.
+src/pages/Accounts/AccountsList.tsx(26,40): error TS6133: 'X' is declared but its value is never read.
+src/pages/Accounts/AccountsList.tsx(29,1): error TS6133: 'formatISODateString' is declared but its value is never read.
+src/pages/Accounts/AccountsList.tsx(33,14): error TS6133: 'language' is declared but its value is never read.
+src/pages/Accounts/AccountsList.tsx(34,9): error TS6133: 'settings' is declared but its value is never read.
+src/pages/Accounts/AccountsList.tsx(165,9): error TS6133: 'isParentOptionDisabled' is declared but its value is never read.
+src/pages/Categories/CategoriesList.tsx(5,23): error TS6133: 'X' is declared but its value is never read.
+src/pages/Categories/CategoriesList.tsx(10,19): error TS6133: 'UiModalHeader' is declared but its value is never read.
+src/pages/Categories/CategoriesList.tsx(189,9): error TS2322: Type '{ children: Element; isOpen: boolean; onClose: () => void; title: string; width: string; }' is not assignable to type 'IntrinsicAttributes & UiModalProps'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & UiModalProps'.
+src/pages/Export/ExportPage.tsx(25,1): error TS6133: 'useI18n' is declared but its value is never read.
+src/pages/Insights/InsightsPage.tsx(22,9): error TS6133: 'settings' is declared but its value is never read.
+src/pages/Investments/InvestmentsList.tsx(17,1): error TS6133: 'ExcelJS' is declared but its value is never read.
+src/pages/Investments/InvestmentsList.tsx(32,9): error TS6133: 'settings' is declared but its value is never read.
+src/pages/Investments/InvestmentsList.tsx(33,9): error TS6133: 'locale' is declared but its value is never read.
+src/pages/Movements/MovementsList.tsx(22,1): error TS6192: All imports in import declaration are unused.
+src/pages/Recurring/RecurringList.tsx(11,33): error TS6133: 'X' is declared but its value is never read.
+src/pages/Recurring/RecurringList.tsx(20,19): error TS6133: 'UiModalHeader' is declared but its value is never read.
+src/pages/Recurring/RecurringList.tsx(262,9): error TS2322: Type '{ children: Element; isOpen: boolean; onClose: () => void; title: string; width: string; }' is not assignable to type 'IntrinsicAttributes & UiModalProps'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & UiModalProps'.
+src/services/exportService.ts(3,70): error TS6133: 'Account' is declared but its value is never read.
+src/utils/errorCatalog.ts(65,9): error TS6133: 'hint' is declared but its value is never read.

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Check, Search, Plus } from 'lucide-react'
 
@@ -84,7 +84,6 @@ export function SelectSearch({
   const calculatePosition = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
-      const MAX_MENU_HEIGHT = 280
       const GAP = 4
       const spaceBelow = window.innerHeight - rect.bottom
       const spaceAbove = rect.top
