@@ -5,8 +5,9 @@ import { invalidateCategories } from './catalogCache'
 export interface Movement {
   id: string
   user_id: string
+  organization_id?: string | null // [NEW] Multi-Workspace support
   account_id: string
-  kind: 'income' | 'expense' | 'investment' // DB uses 'kind' not 'type'
+  kind: 'income' | 'expense' | 'investment'
   amount: number
   date: string
   description: string | null
@@ -22,6 +23,7 @@ export interface Movement {
 export interface Account {
   id: string
   user_id: string
+  organization_id?: string | null
   name: string
   type: string
 }
@@ -29,24 +31,34 @@ export interface Account {
 export interface Category {
   id: string
   user_id: string
+  organization_id?: string | null
   name: string
-  kind: string // income or expense
-  color?: string // hex color like #RRGGBB
-  description?: string | null  // Añadido: descripción de la categoría
+  kind: string
+  color?: string
+  description?: string | null
 }
 
-// Fetch movements for user
-export async function fetchMovements(userId: string, limit = 50): Promise<Movement[]> {
-  const { data, error } = await supabase
+// Fetch movements for user (OR Organization)
+export async function fetchMovements(userId: string, limit = 50, organizationId?: string | null): Promise<Movement[]> {
+  let query = supabase
     .from('movements')
     .select(`
       *,
       account:accounts(id, name),
       category:categories(id, name, color)
     `)
-    .eq('user_id', userId)
     .order('date', { ascending: false })
     .limit(limit)
+
+  if (organizationId) {
+    // Org Mode: Filter by Org ID
+    query = query.eq('organization_id', organizationId)
+  } else {
+    // Personal Mode: Filter by User ID AND Org ID is NULL
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching movements:', error)
@@ -56,20 +68,27 @@ export async function fetchMovements(userId: string, limit = 50): Promise<Moveme
 }
 
 // Fetch movements for current month
-export async function fetchMonthlyMovements(userId: string): Promise<Movement[]> {
+export async function fetchMonthlyMovements(userId: string, organizationId?: string | null): Promise<Movement[]> {
   const now = new Date()
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('movements')
     .select(`
       *,
       category:categories(id, name, color)
     `)
-    .eq('user_id', userId)
     .gte('date', firstDay)
     .lte('date', lastDay)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching monthly movements:', error)
@@ -102,8 +121,9 @@ export function calculateMonthlySummary(movements: Movement[]) {
 // Create movement
 export interface CreateMovementInput {
   user_id: string
+  organization_id?: string | null // [NEW] Optional org context
   account_id: string
-  kind: 'income' | 'expense' | 'investment' // DB uses 'kind'
+  kind: 'income' | 'expense' | 'investment'
   amount: number
   date: string
   description?: string | null
@@ -117,6 +137,7 @@ export async function createMovement(input: CreateMovementInput): Promise<Moveme
     .from('movements')
     .insert([{
       user_id: input.user_id,
+      organization_id: input.organization_id || null, // Ensure explicit null for personal
       account_id: input.account_id,
       kind: input.kind,
       amount: input.amount,
@@ -177,11 +198,16 @@ export async function deleteMovement(movementId: string): Promise<void> {
 }
 
 // Fetch user accounts
-export async function fetchAccounts(userId: string): Promise<Account[]> {
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('*')
-    .eq('user_id', userId)
+export async function fetchAccounts(userId: string, organizationId?: string | null): Promise<Account[]> {
+  let query = supabase.from('accounts').select('*')
+  
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+  
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching accounts:', error)
@@ -191,14 +217,18 @@ export async function fetchAccounts(userId: string): Promise<Account[]> {
 }
 
 // Fetch user categories
-export async function fetchCategories(userId: string): Promise<Category[]> {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('user_id', userId)
+export async function fetchCategories(userId: string, organizationId?: string | null): Promise<Category[]> {
+  let query = supabase.from('categories').select('*')
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data, error } = await query
 
   if (error) {
-    // Categories might not exist yet, return empty
     console.warn('Categories fetch failed, might not exist:', error)
     return []
   }
@@ -210,12 +240,14 @@ export async function createCategory(
   userId: string, 
   name: string, 
   kind: 'income' | 'expense' = 'expense',
-  color?: string
+  color?: string,
+  organizationId?: string | null
 ): Promise<Category> {
   const { data, error } = await supabase
     .from('categories')
     .insert([{
       user_id: userId,
+      organization_id: organizationId || null,
       name: name.trim(),
       kind,
       color: color || getRandomCategoryColor()
@@ -227,7 +259,8 @@ export async function createCategory(
     console.error('Error creating category:', error)
     throw error
   }
-  invalidateCategories(userId)
+  // Invalidate cache for the specific context
+  invalidateCategories(organizationId || userId) 
   return data
 }
 
@@ -235,24 +268,30 @@ export async function createCategory(
 export async function getOrCreateCategory(
   userId: string,
   name: string,
-  kind: 'income' | 'expense' = 'expense'
+  kind: 'income' | 'expense' = 'expense',
+  organizationId?: string | null
 ): Promise<Category> {
   const trimmedName = name.trim()
   
-  // Check if category already exists
-  const { data: existing } = await supabase
+  let query = supabase
     .from('categories')
     .select('*')
-    .eq('user_id', userId)
     .ilike('name', trimmedName)
-    .single()
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data: existing } = await query.single()
 
   if (existing) {
     return existing
   }
 
   // Create new category
-  return createCategory(userId, trimmedName, kind)
+  return createCategory(userId, trimmedName, kind, undefined, organizationId)
 }
 
 // Random color generator for new categories

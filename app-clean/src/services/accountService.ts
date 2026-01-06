@@ -5,9 +5,10 @@ import { invalidateAccounts } from './catalogCache'
 export interface Account {
   id: string
   user_id: string
+  organization_id?: string | null // [NEW] Multi-Workspace support
   name: string
   type: 'general' | 'savings' | 'cash' | 'bank' | 'broker' | 'other'
-  description?: string | null  // Añadido: descripción de la cuenta
+  description?: string | null
   is_active: boolean
   parent_account_id?: string | null
   created_at: string
@@ -25,9 +26,10 @@ export interface AccountNode extends AccountWithBalance {
 
 export interface CreateAccountInput {
   user_id: string
+  organization_id?: string | null // [NEW] Optional
   name: string
   type: Account['type']
-  description?: string | null  // Añadido: descripción opcional
+  description?: string | null
   parent_account_id?: string | null
 }
 
@@ -40,13 +42,20 @@ export const accountTypes = [
   { value: 'other', label: 'Otra' }
 ]
 
-// Get all accounts for user
-export async function getUserAccounts(userId: string): Promise<Account[]> {
-  const { data, error } = await supabase
+// Get all accounts for user (OR Organization)
+export async function getUserAccounts(userId: string, organizationId?: string | null): Promise<Account[]> {
+  let query = supabase
     .from('accounts')
-    .select('*') // select * will include parent_account_id if it exists in DB
-    .eq('user_id', userId)
+    .select('*')
     .order('created_at', { ascending: true })
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching accounts:', error)
@@ -57,6 +66,7 @@ export async function getUserAccounts(userId: string): Promise<Account[]> {
 
 // Get single account by ID
 export async function getAccountById(accountId: string): Promise<AccountWithBalance | null> {
+  // ID is unique, so no need for strict Org filter here, but RLS will handle visibility
   const { data, error } = await supabase
     .from('accounts')
     .select('*')
@@ -68,19 +78,24 @@ export async function getAccountById(accountId: string): Promise<AccountWithBala
     throw error
   }
   
-  // Calculate balance - for now just return the account with 0 balance
-  // In a real scenario, you'd calculate from movements
   return data ? { ...data, balance: 0 } : null
 }
 
 // Get active accounts only
-export async function getActiveAccounts(userId: string): Promise<Account[]> {
-  const { data, error } = await supabase
+export async function getActiveAccounts(userId: string, organizationId?: string | null): Promise<Account[]> {
+  let query = supabase
     .from('accounts')
     .select('*')
-    .eq('user_id', userId)
     .eq('is_active', true)
     .order('name', { ascending: true })
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching active accounts:', error)
@@ -152,6 +167,7 @@ export async function createAccount(input: CreateAccountInput): Promise<Account>
     .from('accounts')
     .insert([{
       ...input,
+      organization_id: input.organization_id || null, // Explicit null
       is_active: true
     }])
     .select()
@@ -181,7 +197,7 @@ export async function updateAccount(accountId: string, updates: Partial<Account>
     console.error('Error updating account:', error)
     throw error
   }
-  invalidateAccounts()
+  invalidateAccounts() // Ideally, we'd know which context to invalidate, but generic global invalidate is safe for now
   return data
 }
 
@@ -245,14 +261,21 @@ export async function calculateAccountBalance(accountId: string): Promise<number
 }
 
 // Get all accounts with balances
-export async function getAccountsWithBalances(userId: string): Promise<AccountWithBalance[]> {
-  const accounts = await getUserAccounts(userId)
+export async function getAccountsWithBalances(userId: string, organizationId?: string | null): Promise<AccountWithBalance[]> {
+  const accounts = await getUserAccounts(userId, organizationId)
   
-  // Get all movements for this user
-  const { data: movements } = await supabase
+  // Get all movements for this user / Org
+  let query = supabase
     .from('movements')
     .select('account_id, kind, amount')
-    .eq('user_id', userId)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data: movements } = await query
 
   // Calculate balances
   const balanceMap: Record<string, number> = {}
@@ -332,8 +355,8 @@ export function calculateTotalsByType(accounts: AccountWithBalance[]) {
 }
 
 // Get account summary (total balance + count)
-export async function fetchAccountsSummary(userId: string) {
-  const accounts = await getAccountsWithBalances(userId)
+export async function fetchAccountsSummary(userId: string, organizationId?: string | null) {
+  const accounts = await getAccountsWithBalances(userId, organizationId)
   return {
     totalBalance: accounts.reduce((sum, acc) => sum + acc.balance, 0),
     accountCount: accounts.filter(a => a.is_active).length

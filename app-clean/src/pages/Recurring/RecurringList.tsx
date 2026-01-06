@@ -19,11 +19,13 @@ import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { SkeletonList } from '../../components/Skeleton'
+import { CategoryPicker } from '../../components/domain/CategoryPicker'
 
 export default function RecurringList() {
   const { t, language } = useI18n()
   const [rules, setRules] = useState<RecurringRule[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<{ id: string; name: string; type: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
 
@@ -48,12 +50,14 @@ export default function RecurringList() {
     if (!user) return
 
     try {
-      const [rulesData, accountsData] = await Promise.all([
+      const [rulesData, accountsData, categoriesData] = await Promise.all([
         getUserRecurringRules(user.id),
-        fetchAccounts(user.id)
+        fetchAccounts(user.id),
+        supabase.from('categories').select('id, name, type').eq('user_id', user.id).order('name')
       ])
       setRules(rulesData)
       setAccounts(accountsData)
+      setCategories(categoriesData.data || [])
       
       const generalAccount = accountsData.find(a => a.type === 'general')
       if (generalAccount) setAccountId(generalAccount.id)
@@ -301,11 +305,21 @@ export default function RecurringList() {
               </div>
 
               <div style={{ flex: 1 }}>
-                <UiInput
-                    label={t('recurring.modal.category')}
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    placeholder="Ej: Alquiler..."
+                <CategoryPicker
+                  value={category}
+                  onChange={(val) => {
+                    // CategoryPicker returns id or '__new__:name' format
+                    // For recurring rules we just want the category name
+                    if (val.startsWith('__new__:')) {
+                      setCategory(val.split(':')[1])
+                    } else {
+                      // Find category name by id
+                      const cat = categories.find(c => c.id === val)
+                      setCategory(cat ? cat.name : val)
+                    }
+                  }}
+                  type={kind}
+                  label={t('recurring.modal.category')}
                 />
               </div>
             </div>

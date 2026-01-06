@@ -12,6 +12,8 @@ import { useSettings } from '../context/SettingsContext'
 import { SkeletonDashboard } from '../components/Skeleton'
 import { NetWorthInfo, NetWorthChart, useNetWorth } from '../components/ChartSection'
 
+import { useWorkspace } from '../context/WorkspaceContext'
+
 interface AccountSummary {
   totalBalance: number
   accountCount: number
@@ -23,12 +25,11 @@ interface MonthlySummary {
   balance: number
 }
 
-
-
 export default function Dashboard() {
   const navigate = useNavigate()
   const { t } = useI18n()
   const { settings } = useSettings()
+  const { currentWorkspace, isLoading: workspaceLoading } = useWorkspace() // [NEW] Get active workspace
   const [loading, setLoading] = useState(true)
   const [accountsSummary, setAccountsSummary] = useState<AccountSummary>({ totalBalance: 0, accountCount: 0 })
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary>({ income: 0, expense: 0, balance: 0 })
@@ -36,22 +37,30 @@ export default function Dashboard() {
   const [topAccounts, setTopAccounts] = useState<AccountWithBalance[]>([])
 
   useEffect(() => {
-    loadDashboardData()
-  }, [settings.rollupAccountsByParent])
+    if (!workspaceLoading) {
+      loadDashboardData()
+    }
+  }, [settings.rollupAccountsByParent, currentWorkspace?.id, workspaceLoading])
 
   const loadDashboardData = async () => {
+    // Only set loading if it's an initial fetch or workspace switch, to avoid flicker on minor updates if possible
+    // But safely:
+    setLoading(true)
+    
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
-      // Warmup catalog cache for faster subsequent loads
+      // Warmup catalog cache for faster subsequent loads (invalidate if workspace changed?)
       warmupCache(user.id)
       
+      const workspaceId = currentWorkspace?.id || null // Org ID or NULL for personal
+
       const [accounts, movements, accountList, financialData] = await Promise.all([
-        fetchAccountsSummary(user.id),
-        fetchMonthlyMovements(user.id),
-        getAccountBalancesSummary(user.id, { includeChildrenRollup: settings.rollupAccountsByParent }),
-        getFinancialDistribution(user.id)
+        fetchAccountsSummary(user.id, workspaceId),
+        fetchMonthlyMovements(user.id, workspaceId),
+        getAccountBalancesSummary(user.id, { includeChildrenRollup: settings.rollupAccountsByParent }, workspaceId),
+        getFinancialDistribution(user.id, workspaceId)
       ])
 
       if (accounts) {
@@ -71,8 +80,6 @@ export default function Dashboard() {
       const summary = calculateMonthlySummary(movements || [])
       setMonthlySummary(summary)
 
-
-
     } catch (error) {
       console.error('Error loading dashboard:', error)
     } finally {
@@ -87,8 +94,6 @@ export default function Dashboard() {
     }).format(amount)
   }
 
-
-
   // Financial Overview Logic (Lifted State)
   const { 
       chartType, setChartType, 
@@ -97,7 +102,7 @@ export default function Dashboard() {
       activeConfig 
   } = useNetWorth(financialOverview)
 
-  if (loading) {
+  if (loading || workspaceLoading) {
     return <SkeletonDashboard />
   }
 

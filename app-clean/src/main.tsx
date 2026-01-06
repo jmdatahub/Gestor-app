@@ -6,6 +6,7 @@ import { SettingsProvider } from './context/SettingsContext'
 import { I18nProvider } from './i18n/I18nContext'
 import { ToastProvider } from './components/Toast'
 import { OfflineProvider } from './context/OfflineContext'
+import { WorkspaceProvider } from './context/WorkspaceContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -13,7 +14,9 @@ createRoot(document.getElementById('root')!).render(
       <I18nProvider>
         <ToastProvider>
           <OfflineProvider>
-            <App />
+            <WorkspaceProvider>
+              <App />
+            </WorkspaceProvider>
           </OfflineProvider>
         </ToastProvider>
       </I18nProvider>

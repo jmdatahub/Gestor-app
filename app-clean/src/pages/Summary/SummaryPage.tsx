@@ -5,11 +5,13 @@ import {
   getMonthlyCategoryBreakdown,
   getNetWorthSummary,
   getBalanceHistory,
+  getWeeklyHistory,
   formatCurrency,
   getAccountBalancesSummary,
   type MonthlySummary,
   type CategorySummary,
-  type NetWorthSummary
+  type NetWorthSummary,
+  type WeeklySummary
 } from '../../services/summaryService'
 import { downloadFile, exportSummaryToExcel } from '../../services/exportService'
 import { type AccountWithBalance } from '../../services/accountService'
@@ -31,6 +33,8 @@ export default function SummaryPage() {
   const [periodType, setPeriodType] = useState<PeriodType>('monthly')
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
+  const [chartGrouping, setChartGrouping] = useState<0.25 | 0.5 | 1 | 2 | 3>(1) // 0.25=bi-weekly, 0.5=weekly, 1=monthly, 2=bi-monthly, 3=quarterly
+  const [historyMonths, setHistoryMonths] = useState<number>(12) // 3, 6, 12, or 24 months
   
   // Roll-up state from context
   const rollupEnabled = settings.rollupAccountsByParent
@@ -39,6 +43,7 @@ export default function SummaryPage() {
   const [categories, setCategories] = useState<CategorySummary[]>([])
   const [netWorth, setNetWorth] = useState<NetWorthSummary | null>(null)
   const [history, setHistory] = useState<MonthlySummary[]>([])
+  const [weeklyHistory, setWeeklyHistory] = useState<WeeklySummary[]>([])
   const [accountBalances, setAccountBalances] = useState<AccountWithBalance[]>([])
   
   const [loading, setLoading] = useState(true)
@@ -46,7 +51,7 @@ export default function SummaryPage() {
 
   useEffect(() => {
     loadData()
-  }, [rollupEnabled, periodType, year, month])
+  }, [rollupEnabled, periodType, year, month, historyMonths, chartGrouping])
 
   const loadData = async () => {
     setLoading(true)
@@ -60,11 +65,15 @@ export default function SummaryPage() {
       const accountsPromise = getAccountBalancesSummary(user.id, { includeChildrenRollup: rollupEnabled })
 
       if (periodType === 'monthly') {
-        const [summaryData, categoriesData, netWorthData, historyData, accountsData] = await Promise.all([
+        // Fetch monthly history always, and weekly if needed
+        const weeksToFetch = historyMonths * 4 // ~4 weeks per month
+        
+        const [summaryData, categoriesData, netWorthData, historyData, weeklyData, accountsData] = await Promise.all([
           getMonthlySummary(user.id, year, month),
           getMonthlyCategoryBreakdown(user.id, year, month),
           getNetWorthSummary(user.id),
-          getBalanceHistory(user.id, 12),
+          getBalanceHistory(user.id, historyMonths),
+          (chartGrouping === 0.5 || chartGrouping === 0.25) ? getWeeklyHistory(user.id, weeksToFetch) : Promise.resolve([]),
           accountsPromise
         ])
 
@@ -72,6 +81,7 @@ export default function SummaryPage() {
         setCategories(categoriesData)
         setNetWorth(netWorthData)
         setHistory(historyData)
+        setWeeklyHistory(weeklyData)
         setAccountBalances(accountsData)
       } else {
         // Annual
@@ -439,104 +449,345 @@ export default function SummaryPage() {
       </UiCard>
 
        {/* Charts Row */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: '2fr 1fr', 
-        gap: '1.5rem', 
-        marginBottom: '1.5rem',
-        minHeight: '320px',
-        marginTop: '1.5rem'
-      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
          {/* Evolution Chart */}
-        <UiCard className="min-h-[320px] shadow-sm">
-           <UiCardHeader title={periodType === 'monthly' ? t('summary.evolutionLast12') : t('summary.evolutionMonthly', { year })} />
+        <UiCard>
+           <UiCardHeader 
+             title={`Evolución últimos ${historyMonths} meses`}
+             action={
+               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                 {/* Period selector */}
+                 <div style={{ display: 'flex', gap: '0.125rem', background: 'rgba(99, 102, 241, 0.1)', borderRadius: '0.5rem', padding: '0.125rem' }}>
+                   {[3, 6, 12, 24].map(m => (
+                     <button
+                       key={m}
+                       onClick={() => setHistoryMonths(m)}
+                       style={{
+                         padding: '0.25rem 0.5rem',
+                         fontSize: '0.7rem',
+                         fontWeight: historyMonths === m ? 600 : 400,
+                         borderRadius: '0.375rem',
+                         border: 'none',
+                         cursor: 'pointer',
+                         background: historyMonths === m ? '#6366f1' : 'transparent',
+                         color: historyMonths === m ? 'white' : 'inherit'
+                       }}
+                     >
+                       {m}m
+                     </button>
+                   ))}
+                 </div>
+                 
+                 {/* Grouping selector */}
+                 <div style={{ display: 'flex', gap: '0.125rem', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '0.5rem', padding: '0.125rem' }}>
+                   {([
+                     { value: 0.5 as const, label: 'Sem' },
+                     { value: 0.25 as const, label: '2Sem' },
+                     { value: 1 as const, label: 'Mes' },
+                     { value: 2 as const, label: 'Bim' },
+                     { value: 3 as const, label: 'Trim' }
+                   ]).map(opt => (
+                     <button
+                       key={opt.value}
+                       onClick={() => setChartGrouping(opt.value)}
+                       style={{
+                         padding: '0.25rem 0.5rem',
+                         fontSize: '0.7rem',
+                         fontWeight: chartGrouping === opt.value ? 600 : 400,
+                         borderRadius: '0.375rem',
+                         border: 'none',
+                         cursor: 'pointer',
+                         background: chartGrouping === opt.value ? '#10b981' : 'transparent',
+                         color: chartGrouping === opt.value ? 'white' : 'inherit'
+                       }}
+                     >
+                       {opt.label}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+             }
+           />
            <UiCardBody>
              {loading ? (
                <div className="loading-container"><div className="spinner"></div></div>
-             ) : history.length === 0 ? (
-               <div className="h-[240px] flex items-center justify-center text-muted">
+             ) : ((chartGrouping === 0.5 || chartGrouping === 0.25) ? weeklyHistory.length === 0 : history.length === 0) ? (
+               <div style={{ height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
                  {t('summary.noDataHistory')}
                </div>
-             ) : (
-               <div className="h-[240px] flex flex-col">
-                 <div className="flex-1 flex items-end gap-1 pb-2">
-                  {history.map((h, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center h-full group relative">
-                      {/* Bars */}
-                      <div className="flex-1 flex gap-[2px] items-end w-full relative z-10">
-                        <div 
-                          className="flex-1 bg-success rounded-t-[2px] opacity-80 group-hover:opacity-100 transition-opacity min-h-[4px]"
-                          style={{ height: `${(h.income / maxHistoryValue) * 100}%` }}
-                          title={`${t('summary.income')}: ${formatCurrency(h.income, locale)}`}
-                        />
-                        <div 
-                          className="flex-1 bg-danger rounded-t-[2px] opacity-80 group-hover:opacity-100 transition-opacity min-h-[4px]"
-                          style={{ height: `${(h.expenses / maxHistoryValue) * 100}%` }}
-                          title={`${t('summary.expenses')}: ${formatCurrency(h.expenses, locale)}`}
-                        />
-                      </div>
-                      <span className="text-[10px] text-muted mt-2 whitespace-nowrap">
-                        {h.month}/{String(h.year).slice(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-center gap-6 pt-3 border-t border-border">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="w-2.5 h-2.5 rounded-full bg-success" />
-                    {t('summary.income')}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="w-2.5 h-2.5 rounded-full bg-danger" />
-                    {t('summary.expenses')}
-                  </div>
-                </div>
-               </div>
-             )}
+             ) : (() => {
+               // Group data based on chartGrouping mode
+               let chartData: { label: string; income: number; expenses: number }[] = []
+               
+               if (chartGrouping === 0.5) {
+                 // Weekly data - single weeks
+                 chartData = weeklyHistory.map(w => ({
+                   label: w.weekLabel,
+                   income: w.income,
+                   expenses: w.expenses
+                 }))
+               } else if (chartGrouping === 0.25) {
+                 // Bi-weekly data - group 2 weeks together
+                 for (let i = 0; i < weeklyHistory.length; i += 2) {
+                   const w1 = weeklyHistory[i]
+                   const w2 = weeklyHistory[i + 1]
+                   if (w1 && w2) {
+                     chartData.push({
+                       label: `${w1.weekLabel.split(' ')[0]}-${w2.weekLabel}`,
+                       income: w1.income + w2.income,
+                       expenses: w1.expenses + w2.expenses
+                     })
+                   } else if (w1) {
+                     chartData.push({
+                       label: w1.weekLabel,
+                       income: w1.income,
+                       expenses: w1.expenses
+                     })
+                   }
+                 }
+               } else {
+                 // Monthly grouping
+                 const groupSize = chartGrouping // 1, 2, or 3 months per bar
+                 
+                 for (let i = 0; i < history.length; i += groupSize) {
+                   const group = history.slice(i, i + groupSize)
+                   if (group.length > 0) {
+                     const firstMonth = group[0]
+                     const lastMonth = group[group.length - 1]
+                     let label: string
+                     
+                     if (groupSize === 1) {
+                       label = `${firstMonth.month}/${String(firstMonth.year).slice(2)}`
+                     } else if (groupSize === 2) {
+                       label = `${firstMonth.month}-${lastMonth.month}/${String(lastMonth.year).slice(2)}`
+                     } else {
+                       label = `T${Math.ceil((firstMonth.month) / 3)}/${String(firstMonth.year).slice(2)}`
+                     }
+                     
+                     chartData.push({
+                       label,
+                       income: group.reduce((sum, h) => sum + h.income, 0),
+                       expenses: group.reduce((sum, h) => sum + h.expenses, 0)
+                     })
+                   }
+                 }
+               }
+               
+               const maxValue = Math.max(...chartData.flatMap(d => [d.income, d.expenses]), 1)
+               const formatShort = (n: number) => n >= 1000 ? `${(n/1000).toFixed(0)}k` : n.toFixed(0)
+               
+               return (
+                 <div style={{ height: '220px', display: 'flex', flexDirection: 'column' }}>
+                   {/* Bars area */}
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', justifyContent: chartData.length <= 12 ? 'space-around' : 'space-between', gap: '2px', paddingBottom: '0.5rem', paddingTop: '1.5rem', position: 'relative' }}>
+                     {/* Background grid lines */}
+                     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+                       {[0, 1, 2, 3].map((_, i) => (
+                         <div key={i} style={{ borderBottom: '1px solid rgba(156, 163, 175, 0.15)' }} />
+                       ))}
+                     </div>
+                                          {chartData.map((d, i) => {
+                        const incomeHeight = maxValue > 0 ? (d.income / maxValue) * 100 : 0
+                        const expenseHeight = maxValue > 0 ? (d.expenses / maxValue) * 100 : 0
+                        const isSmallChart = chartData.length <= 12
+                        
+                        return (
+                          <div key={i} style={{ 
+                            flex: '1 1 0',
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'center', 
+                            minWidth: '0',
+                            maxWidth: isSmallChart ? '80px' : '35px',
+                            position: 'relative',
+                            marginTop: '1.5rem'
+                          }}>
+                            {/* Values on top - show if enough space */}
+                            {chartData.length <= 30 && (
+                              <div style={{ 
+                                position: 'absolute', 
+                                top: '-1.5rem', 
+                                left: '-50%', 
+                                right: '-50%', 
+                                display: 'flex', 
+                                flexDirection: 'column',
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                gap: '0',
+                                fontSize: chartData.length <= 12 ? '0.6rem' : '0.45rem',
+                                opacity: 0.9,
+                                zIndex: 20,
+                                textAlign: 'center'
+                              }}>
+                                <span style={{ color: d.income > 0 ? '#059669' : '#9ca3af', fontWeight: d.income > 0 ? 600 : 400, lineHeight: 1 }}>
+                                  {formatShort(d.income)}
+                                </span>
+                                <span style={{ color: d.expenses > 0 ? '#dc2626' : '#9ca3af', fontWeight: d.expenses > 0 ? 600 : 400, lineHeight: 1 }}>
+                                  {formatShort(d.expenses)}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Bars Container - fixed height, align to bottom */}
+                            <div style={{ 
+                              height: '130px',
+                              display: 'flex', 
+                              gap: isSmallChart ? '3px' : '2px', 
+                              alignItems: 'flex-end', 
+                              width: '100%', 
+                              padding: isSmallChart ? '0 3px' : '0 1px'
+                            }}>
+                              {/* Income Bar */}
+                              <div 
+                                style={{ 
+                                  flex: 1,
+                                  background: 'linear-gradient(to top, #059669, #34d399)',
+                                  borderRadius: isSmallChart ? '4px 4px 0 0' : '3px 3px 0 0',
+                                  height: `${Math.max(incomeHeight, 3)}%`,
+                                  minHeight: d.income > 0 ? '6px' : '2px',
+                                  transition: 'all 0.3s ease',
+                                  boxShadow: d.income > 0 ? '0 2px 6px rgba(16, 185, 129, 0.35)' : 'none',
+                                  cursor: 'pointer'
+                                }}
+                                title={`Ingresos: ${formatCurrency(d.income, locale)}`}
+                              />
+                              {/* Expense Bar */}
+                              <div 
+                                style={{ 
+                                  flex: 1,
+                                  background: 'linear-gradient(to top, #dc2626, #f87171)',
+                                  borderRadius: isSmallChart ? '4px 4px 0 0' : '3px 3px 0 0',
+                                  height: `${Math.max(expenseHeight, 3)}%`,
+                                  minHeight: d.expenses > 0 ? '6px' : '2px',
+                                  transition: 'all 0.3s ease',
+                                  boxShadow: d.expenses > 0 ? '0 2px 6px rgba(239, 68, 68, 0.35)' : 'none',
+                                  cursor: 'pointer'
+                                }}
+                                title={`Gastos: ${formatCurrency(d.expenses, locale)}`}
+                              />
+                            </div>
+                            
+                            {/* Period Label */}
+                            {chartData.length <= 26 && (
+                              <span style={{ 
+                                fontSize: isSmallChart ? '0.6rem' : '0.5rem', 
+                                color: '#9ca3af', 
+                                marginTop: '3px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                width: '100%',
+                                textAlign: 'center',
+                                fontWeight: 500
+                              }}>
+                                {d.label}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                   </div>
+                   
+                   {/* Legend */}
+                   <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(156, 163, 175, 0.2)' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                       <span style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'linear-gradient(to top, #10b981, #34d399)' }} />
+                       <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{t('summary.income')}</span>
+                     </div>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                       <span style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'linear-gradient(to top, #ef4444, #f87171)' }} />
+                       <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{t('summary.expenses')}</span>
+                     </div>
+                   </div>
+                 </div>
+               )
+             })()}
            </UiCardBody>
         </UiCard>
  
          {/* Category Breakdown */}
-         <UiCard className="min-h-[320px] shadow-sm">
+         <UiCard>
             <UiCardHeader title={t('summary.spendingBreakdown')} />
             <UiCardBody>
              {loading ? (
                <div className="loading-container"><div className="spinner"></div></div>
              ) : categories.length === 0 ? (
-               <div className="h-[240px] flex items-center justify-center text-muted">
+               <div className="h-[280px] flex items-center justify-center text-muted">
                  {t('summary.noDataSpending')}
                </div>
-             ) : (
-               <div className="flex flex-col gap-3">
-                 {categories.slice(0, 6).map((cat) => (
-                   <div key={cat.categoryId} className="flex flex-col gap-1">
-                     <div className="flex justify-between items-center">
-                       <span className="flex items-center gap-2 text-sm text-foreground">
-                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: cat.color }} />
-                         {cat.categoryName}
-                       </span>
-                       <span className="text-sm font-semibold text-foreground">
-                         {formatCurrency(cat.total, locale)}
-                       </span>
-                     </div>
-                     <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                       <div className="h-full rounded-full transition-all duration-300" style={{ 
-                         width: `${(cat.total / totalExpenses) * 100}%`,
-                         background: cat.color 
-                       }} />
-                     </div>
-                     <span className="text-[10px] text-muted">
-                       {((cat.total / totalExpenses) * 100).toFixed(1)}%
-                     </span>
+             ) : (() => {
+               const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6']
+               const topCategories = categories.slice(0, 6)
+               let cumulativePercent = 0
+               
+               return (
+                 <div className="flex flex-col items-center gap-4">
+                   {/* Donut Chart */}
+                   <div className="relative">
+                     <svg width="160" height="160" viewBox="0 0 160 160">
+                       {topCategories.map((cat, index) => {
+                         const percent = (cat.total / totalExpenses) * 100
+                         const color = cat.color || colors[index % colors.length]
+                         
+                         // Calculate SVG arc
+                         const radius = 60
+                         const circumference = 2 * Math.PI * radius
+                         const strokeDasharray = (percent / 100) * circumference
+                         const strokeDashoffset = -cumulativePercent / 100 * circumference
+                         cumulativePercent += percent
+                         
+                         return (
+                           <circle
+                             key={cat.categoryId}
+                             cx="80"
+                             cy="80"
+                             r={radius}
+                             fill="none"
+                             stroke={color}
+                             strokeWidth="24"
+                             strokeDasharray={`${strokeDasharray} ${circumference}`}
+                             strokeDashoffset={strokeDashoffset}
+                             transform="rotate(-90 80 80)"
+                             className="transition-all duration-500"
+                             style={{ filter: `drop-shadow(0 0 4px ${color}40)` }}
+                           />
+                         )
+                       })}
+                       {/* Center text */}
+                       <text x="80" y="75" textAnchor="middle" className="text-2xl font-bold fill-current">
+                         {formatCurrency(totalExpenses, locale).replace(/[^\d.,€$]/g, '').slice(0, 8)}
+                       </text>
+                       <text x="80" y="95" textAnchor="middle" className="text-xs fill-muted">
+                         Total
+                       </text>
+                     </svg>
                    </div>
-                 ))}
-                 {categories.length > 6 && (
-                   <p className="text-xs text-secondary mt-2">
-                     +{categories.length - 6} categorías más
-                   </p>
-                 )}
-               </div>
-             )}
+                   
+                   {/* Legend */}
+                   <div className="w-full space-y-2">
+                     {topCategories.map((cat, index) => {
+                       const percent = (cat.total / totalExpenses) * 100
+                       const color = cat.color || colors[index % colors.length]
+                       
+                       return (
+                         <div key={cat.categoryId} className="flex items-center justify-between text-sm">
+                           <div className="flex items-center gap-2">
+                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                             <span className="text-foreground truncate max-w-[120px]">
+                               {cat.categoryName || t('common.noCategory')}
+                             </span>
+                           </div>
+                           <div className="flex items-center gap-2 text-muted">
+                             <span className="text-xs">({formatCurrency(cat.total, locale)})</span>
+                             <span className="font-semibold text-foreground">{percent.toFixed(0)}%</span>
+                           </div>
+                         </div>
+                       )
+                     })}
+                   </div>
+                 </div>
+               )
+             })()}
             </UiCardBody>
          </UiCard>
       </div>
@@ -548,64 +799,159 @@ export default function SummaryPage() {
           <UiCardBody><div className="loading-container"><div className="spinner"></div></div></UiCardBody>
         ) : (
           <UiCardBody>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-               <div className="flex items-center gap-4">
-               <div className="kpi-icon kpi-icon-primary">
-                 <CreditCard size={28} />
-               </div>
-               <div>
-                 <span className="block text-xs text-muted uppercase tracking-wider mb-1">
-                   {t('summary.accountsBalance')}
-                 </span>
-                 <span className="block text-2xl font-bold text-foreground">
-                   {formatCurrency(netWorth?.cashBalance || 0, locale)}
-                 </span>
-               </div>
-             </div>
- 
-             <div className="flex items-center gap-4">
-               <div className="kpi-icon kpi-icon-success">
-                 <TrendingUp size={28} />
-               </div>
-               <div>
-                 <span className="block text-xs text-muted uppercase tracking-wider mb-1">
-                   {t('summary.investmentsValue')}
-                 </span>
-                 <span className="block text-2xl font-bold text-success">
-                   {formatCurrency(netWorth?.investmentsValue || 0, locale)}
-                 </span>
-               </div>
-             </div>
- 
-             <div className="flex items-center gap-4">
-               <div className="kpi-icon kpi-icon-danger">
-                 <Wallet size={28} />
-               </div>
-               <div>
-                 <span className="block text-xs text-muted uppercase tracking-wider mb-1">
-                   {t('summary.debtsPending')}
-                 </span>
-                 <span className="block text-2xl font-bold text-danger">
-                   -{formatCurrency(netWorth?.debtsPending || 0, locale)}
-                 </span>
-               </div>
-             </div>
- 
-             <div className={`flex items-center p-6 rounded-lg ${
-               (netWorth?.netWorth || 0) >= 0 ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'
-             }`}>
-               <div>
-                 <span className="block text-sm text-secondary uppercase tracking-wider mb-1">
-                   {t('summary.totalNetWorth')}
-                 </span>
-                 <span className={`block text-3xl font-bold ${
-                   (netWorth?.netWorth || 0) >= 0 ? 'text-success' : 'text-danger'
-                 }`}>
-                   {formatCurrency(netWorth?.netWorth || 0, locale)}
-                 </span>
-               </div>
-             </div>
-           </div>
+            {/* Main Layout: 3 small cards + 1 big card */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.5fr', gap: '1rem' }}>
+              
+              <div style={{
+                position: 'relative',
+                padding: '0.875rem 1rem',
+                borderRadius: '0.75rem',
+                background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                border: '1px solid #c7d2fe'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <div style={{
+                    width: '2rem',
+                    height: '2rem',
+                    borderRadius: '0.5rem',
+                    background: '#6366f1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white'
+                  }}>
+                    <CreditCard size={16} />
+                  </div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#4f46e5', textTransform: 'uppercase' }}>
+                    Cuentas
+                  </span>
+                </div>
+                <span style={{ display: 'block', fontSize: '1.25rem', fontWeight: 700, color: '#4338ca' }}>
+                  {formatCurrency(netWorth?.cashBalance || 0, locale)}
+                </span>
+              </div>
+              
+              <div style={{
+                position: 'relative',
+                padding: '0.875rem 1rem',
+                borderRadius: '0.75rem',
+                background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                border: '1px solid #a7f3d0'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <div style={{
+                    width: '2rem',
+                    height: '2rem',
+                    borderRadius: '0.5rem',
+                    background: '#10b981',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white'
+                  }}>
+                    <TrendingUp size={16} />
+                  </div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#059669', textTransform: 'uppercase' }}>
+                    Inversiones
+                  </span>
+                </div>
+                <span style={{ display: 'block', fontSize: '1.25rem', fontWeight: 700, color: '#047857' }}>
+                  {formatCurrency(netWorth?.investmentsValue || 0, locale)}
+                </span>
+              </div>
+              
+              <div style={{
+                position: 'relative',
+                padding: '0.875rem 1rem',
+                borderRadius: '0.75rem',
+                background: 'linear-gradient(135deg, #fef2f2 0%, #fecaca 100%)',
+                border: '1px solid #fca5a5'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <div style={{
+                    width: '2rem',
+                    height: '2rem',
+                    borderRadius: '0.5rem',
+                    background: '#ef4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white'
+                  }}>
+                    <Wallet size={16} />
+                  </div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#dc2626', textTransform: 'uppercase' }}>
+                    Deudas
+                  </span>
+                </div>
+                <span style={{ display: 'block', fontSize: '1.25rem', fontWeight: 700, color: '#b91c1c' }}>
+                  -{formatCurrency(netWorth?.debtsPending || 0, locale)}
+                </span>
+              </div>
+              
+              {/* Total Net Worth - Featured Card */}
+              <div style={{
+                position: 'relative',
+                padding: '0.875rem 1rem',
+                borderRadius: '0.75rem',
+                overflow: 'hidden',
+                background: (netWorth?.netWorth || 0) >= 0 
+                  ? 'linear-gradient(135deg, #10b981 0%, #059669 50%, #0d9488 100%)' 
+                  : 'linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #e11d48 100%)'
+              }}>
+                {/* Decorative circles */}
+                <div style={{
+                  position: 'absolute',
+                  right: '-1.5rem',
+                  top: '-1.5rem',
+                  width: '6rem',
+                  height: '6rem',
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '50%'
+                }} />
+                <div style={{
+                  position: 'absolute',
+                  right: '-0.5rem',
+                  bottom: '-2rem',
+                  width: '4rem',
+                  height: '4rem',
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '50%'
+                }} />
+                
+                <div style={{ position: 'relative' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.25rem' }}>
+                    <PiggyBank size={20} style={{ color: 'rgba(255,255,255,0.8)' }} />
+                    <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Patrimonio Neto
+                    </span>
+                  </div>
+                  <span style={{ display: 'block', fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>
+                    {formatCurrency(netWorth?.netWorth || 0, locale)}
+                  </span>
+                  
+                  {/* Mini composition preview */}
+                  <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ flex: 1, height: '0.375rem', borderRadius: '9999px', background: 'rgba(255,255,255,0.2)', overflow: 'hidden', display: 'flex' }}>
+                      {(() => {
+                        const total = (netWorth?.cashBalance || 0) + (netWorth?.investmentsValue || 0)
+                        const cashP = total > 0 ? ((netWorth?.cashBalance || 0) / total) * 100 : 50
+                        return (
+                          <>
+                            <div style={{ height: '100%', background: 'rgba(255,255,255,0.5)', width: `${cashP}%` }} />
+                            <div style={{ height: '100%', background: 'rgba(255,255,255,0.8)', width: `${100 - cashP}%` }} />
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.625rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.25rem' }}>
+                    <span>Cuentas</span>
+                    <span>Inversiones</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </UiCardBody>
         )}
       </UiCard>

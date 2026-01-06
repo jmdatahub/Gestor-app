@@ -51,19 +51,26 @@ export async function getMonthlySummary(
   userId: string,
   year: number,
   month: number,
-  _options: { includeChildrenRollup?: boolean } = {}
+  options: { includeChildrenRollup?: boolean } = {},
+  organizationId?: string | null // [NEW]
 ): Promise<MonthlySummary> {
   const range = getMonthRange(year, month)
-  // Note: includeChildrenRollup is currently unused locally but prepared for future filtering
 
   // Get movements for this month (excluding transfers)
-  const { data: movements } = await supabase
+  let query = supabase
     .from('movements')
     .select('kind, amount')
-    .eq('user_id', userId)
     .not('kind', 'in', '(transfer_in,transfer_out)')
     .gte('date', range.start)
     .lte('date', range.end)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data: movements } = await query
 
   let income = 0
   let expenses = 0
@@ -76,15 +83,21 @@ export async function getMonthlySummary(
     }
   }
 
-  // Get savings contributions for this month
-  const { data: contributions } = await supabase
-    .from('savings_goal_contributions')
-    .select('amount')
-    .eq('user_id', userId)
-    .gte('date', range.start)
-    .lte('date', range.end)
-
-  const savingsChange = (contributions || []).reduce((sum, c) => sum + c.amount, 0)
+  // Get savings contributions for this month (Only for Personal currently? Or Org too if table adapted?)
+  // Table savings_goal_contributions is NOT yet adapted to shadow mode (It was NOT in MIG_003).
+  // So for now, we only query it if organizationId is NULL.
+  
+  let savingsChange = 0
+  if (!organizationId) {
+    const { data: contributions } = await supabase
+        .from('savings_goal_contributions')
+        .select('amount')
+        .eq('user_id', userId)
+        .gte('date', range.start)
+        .lte('date', range.end)
+    
+    savingsChange = (contributions || []).reduce((sum, c) => sum + c.amount, 0)
+  }
 
   return {
     year,
@@ -100,18 +113,26 @@ export async function getMonthlySummary(
 export async function getMonthlyCategoryBreakdown(
   userId: string,
   year: number,
-  month: number
+  month: number,
+  organizationId?: string | null // [NEW]
 ): Promise<CategorySummary[]> {
   const range = getMonthRange(year, month)
 
   // Get expense movements with categories
-  const { data: movements } = await supabase
+  let query = supabase
     .from('movements')
     .select('category:categories(name), amount')
-    .eq('user_id', userId)
     .eq('kind', 'expense')
     .gte('date', range.start)
     .lte('date', range.end)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data: movements } = await query
 
   // Aggregate by category
   const categoryTotals: Record<string, number> = {}
@@ -137,13 +158,21 @@ export async function getMonthlyCategoryBreakdown(
 // Get net worth summary
 export async function getNetWorthSummary(
   userId: string,
-  _atDate: Date = new Date()
+  atDate: Date = new Date(),
+  organizationId?: string | null // [NEW]
 ): Promise<NetWorthSummary> {
   // Get all movements for balance calculation (including transfers)
-  const { data: movements } = await supabase
+  let query = supabase
     .from('movements')
     .select('kind, amount')
-    .eq('user_id', userId)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data: movements } = await query
 
   let cashBalance = 0
   for (const m of (movements || [])) {
@@ -154,28 +183,36 @@ export async function getNetWorthSummary(
     }
   }
 
-  // Get investments value
-  const { data: investments } = await supabase
-    .from('investments')
-    .select('quantity, current_price')
-    .eq('user_id', userId)
+  // Investments and Debts are separate tables.
+  // Currently debts/investments are NOT migrated to Organization ID.
+  // So we return 0 for those in Org Mode.
+  let investmentsValue = 0
+  let debtsPending = 0
 
-  const investmentsValue = (investments || []).reduce(
-    (sum, inv) => sum + (inv.quantity * inv.current_price),
-    0
-  )
+  if (!organizationId) {
+     // Get investments value
+    const { data: investments } = await supabase
+        .from('investments')
+        .select('quantity, current_price')
+        .eq('user_id', userId)
 
-  // Get pending debts
-  const { data: debts } = await supabase
-    .from('debts')
-    .select('remaining_amount')
-    .eq('user_id', userId)
-    .eq('is_closed', false)
+    investmentsValue = (investments || []).reduce(
+        (sum, inv) => sum + (inv.quantity * inv.current_price),
+        0
+    )
 
-  const debtsPending = (debts || []).reduce(
-    (sum, d) => sum + (d.remaining_amount || 0),
-    0
-  )
+    // Get pending debts
+    const { data: debts } = await supabase
+        .from('debts')
+        .select('remaining_amount')
+        .eq('user_id', userId)
+        .eq('is_closed', false)
+
+    debtsPending = (debts || []).reduce(
+        (sum, d) => sum + (d.remaining_amount || 0),
+        0
+    )
+  }
 
   return {
     cashBalance,
@@ -188,7 +225,8 @@ export async function getNetWorthSummary(
 // Get balance history for last N months
 export async function getBalanceHistory(
   userId: string,
-  monthsBack: number
+  monthsBack: number,
+  organizationId?: string | null
 ): Promise<MonthlySummary[]> {
   const results: MonthlySummary[] = []
   const now = new Date()
@@ -198,10 +236,121 @@ export async function getBalanceHistory(
     const year = date.getFullYear()
     const month = date.getMonth() + 1
 
-    const summary = await getMonthlySummary(userId, year, month)
+    const summary = await getMonthlySummary(userId, year, month, {}, organizationId)
     results.push(summary)
   }
 
+  return results
+}
+
+// Weekly summary interface
+export interface WeeklySummary {
+  weekStart: string // ISO date string
+  weekLabel: string // e.g., "S1 Ene", "S2 Ene"
+  income: number
+  expenses: number
+}
+
+// Get weekly history for last N weeks
+export async function getWeeklyHistory(
+  userId: string,
+  weeksBack: number,
+  organizationId?: string | null
+): Promise<WeeklySummary[]> {
+  const now = new Date()
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  
+  // Helper to format date as YYYY-MM-DD in local timezone
+  const formatLocalDate = (d: Date): string => {
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  
+  // Helper to get Monday of the week for a given date
+  const getMonday = (d: Date): Date => {
+    const result = new Date(d)
+    result.setHours(0, 0, 0, 0)
+    const day = result.getDay()
+    const diff = result.getDate() - day + (day === 0 ? -6 : 1)
+    result.setDate(diff)
+    return result
+  }
+  
+  // Generate all weeks in the range first
+  const weeklyData: Map<string, { income: number; expenses: number; weekStart: Date }> = new Map()
+  
+  // Start from weeksBack weeks ago
+  for (let w = weeksBack - 1; w >= 0; w--) {
+    const weekDate = new Date(now)
+    weekDate.setDate(weekDate.getDate() - (w * 7))
+    const monday = getMonday(weekDate)
+    const weekKey = formatLocalDate(monday)
+    
+    if (!weeklyData.has(weekKey)) {
+      weeklyData.set(weekKey, { income: 0, expenses: 0, weekStart: new Date(monday) })
+    }
+  }
+  
+  // Get the date range - sort entries first to get correct min/max
+  const sortedEntries = Array.from(weeklyData.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  if (sortedEntries.length === 0) return []
+  
+  const startDate = sortedEntries[0][0] // First week key
+  const endDate = formatLocalDate(now)
+  
+  // Fetch all movements in the date range
+  let query = supabase
+    .from('movements')
+    .select('date, kind, amount')
+    .not('kind', 'in', '(transfer_in,transfer_out)')
+    .gte('date', startDate)
+    .lte('date', endDate)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data: movements } = await query
+  
+  console.log(`[WeeklyHistory] Weeks: ${sortedEntries.length}, Range: ${startDate} to ${endDate}`)
+  console.log(`[WeeklyHistory] Fetched ${movements?.length || 0} movements`)
+  
+  // Aggregate movements into weeks
+  for (const m of (movements || [])) {
+    // Parse the date string directly to avoid timezone issues
+    const [year, month, day] = m.date.split('-').map(Number)
+    const mDate = new Date(year, month - 1, day)
+    const monday = getMonday(mDate)
+    const weekKey = formatLocalDate(monday)
+    
+    const week = weeklyData.get(weekKey)
+    if (week) {
+      if (m.kind === 'income') {
+        week.income += m.amount
+      } else if (m.kind === 'expense') {
+        week.expenses += m.amount
+      }
+    }
+  }
+  
+  // Convert to array and sort by date
+  const results: WeeklySummary[] = Array.from(weeklyData.entries())
+    .map(([weekKey, data]) => {
+      const d = data.weekStart
+      const weekOfMonth = Math.ceil(d.getDate() / 7)
+      return {
+        weekStart: weekKey,
+        weekLabel: `S${weekOfMonth} ${monthNames[d.getMonth()]}`,
+        income: data.income,
+        expenses: data.expenses
+      }
+    })
+    .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+  
   return results
 }
 
@@ -234,10 +383,11 @@ export function getMonthName(month: number, locale: string = 'es-ES'): string {
 // Get account balances with optional roll-up logic
 export async function getAccountBalancesSummary(
   userId: string,
-  options: { includeChildrenRollup?: boolean } = {}
+  options: { includeChildrenRollup?: boolean } = {},
+  organizationId?: string | null
 ): Promise<AccountWithBalance[]> {
   // 1. Get raw accounts with balances
-  const accounts = await getAccountsWithBalances(userId)
+  const accounts = await getAccountsWithBalances(userId, organizationId)
 
   // 2. If no roll-up, return as is
   if (!options.includeChildrenRollup) {
@@ -257,11 +407,6 @@ export async function getAccountBalancesSummary(
     // Ensure root exists in our rootMap
     if (!rootMap.has(rootId)) {
       if (accountMap.has(rootId)) {
-        // Clone root and reset balance to 0 (we will sum all descendants INCLUDING the root itself)
-        // Wait, if we use getRootAccountId, 'acc' could BE the root.
-        // If we reset to 0, we must ensure we add the root's own balance when we iterate over it.
-        // The iteration covers all accounts, so when we encounter the root in the loop, we add its balance.
-        // So yes, initializing to 0 is correct.
         rootMap.set(rootId, { ...accountMap.get(rootId)!, balance: 0 }) 
       }
     }
@@ -285,31 +430,38 @@ export interface FinancialDistribution {
   distribution: { name: string; value: number; color: string }[]
 }
 
-export async function getFinancialDistribution(userId: string): Promise<FinancialDistribution> {
+export async function getFinancialDistribution(
+    userId: string, 
+    organizationId?: string | null
+): Promise<FinancialDistribution> {
   // 1. Get Accounts with Balances
-  const accounts = await getAccountsWithBalances(userId)
+  const accounts = await getAccountsWithBalances(userId, organizationId)
 
-  // 2. Get Investments Value
-  const userInvestments = await getUserInvestments(userId)
-  const invTotals = calculateTotals(userInvestments)
-  const investmentsAssetsValue = invTotals.totalValue
+  // 2. Get Investments Value (Only Personal for now)
+  let investmentsAssetsValue = 0
+  let investmentSubItems: { [key: string]: number } = {}
+  let goalsTotal = 0
+  let goalsSubItems: any[] = []
 
-  // Group Investments by Type
-  const investmentSubItems: { [key: string]: number } = {}
-  userInvestments.forEach(inv => {
-     const t = inv.type || 'Otros'
-     const val = inv.quantity * inv.current_price
-     investmentSubItems[t] = (investmentSubItems[t] || 0) + val
-  })
-  
-  // 2.5 Get Savings Goals
-  const { data: goals } = await supabase
-    .from('savings_goals')
-    .select('name, current_amount')
-    .eq('user_id', userId)
-  
-  const goalsTotal = (goals || []).reduce((sum, g) => sum + g.current_amount, 0)
-  const goalsSubItems = (goals || []).map(g => ({ name: g.name, value: g.current_amount, color: '#fbcfe8' })) // light pink
+  if (!organizationId) {
+      const userInvestments = await getUserInvestments(userId)
+      const invTotals = calculateTotals(userInvestments)
+      investmentsAssetsValue = invTotals.totalValue
+
+      userInvestments.forEach(inv => {
+         const t = inv.type || 'Otros'
+         const val = inv.quantity * inv.current_price
+         investmentSubItems[t] = (investmentSubItems[t] || 0) + val
+      })
+      
+      const { data: goals } = await supabase
+        .from('savings_goals')
+        .select('name, current_amount')
+        .eq('user_id', userId)
+      
+      goalsTotal = (goals || []).reduce((sum, g) => sum + g.current_amount, 0)
+      goalsSubItems = (goals || []).map(g => ({ name: g.name, value: g.current_amount, color: '#fbcfe8' }))
+  }
 
   // 3. Categorize Accounts
   let bank = 0
@@ -361,30 +513,8 @@ export async function getFinancialDistribution(userId: string): Promise<Financia
   }
 
   const liquidity = bank + cash
-
-  // 5. Total Assets (Net)
-  // Note: Savings Goals are often inside accounts. 
-  // If we just ADD them, we duplicate if they are physically in "Bank".
-  // User asked for them to be visible. We will show them as a separate slice for distribution visualization, 
-  // BUT the totalAssets calculation technically is sum of accounts + investments.
-  // If we assume "Savings Goals" track money that is INSIDE "Bank" or "Savings" accounts.
-  // We shouldn't double count in "Total Assets".
-  // However, for the PIE chart, we have to decide:
-  // Option A: Deduct goal amount from source account (complex, don't know source).
-  // Option B: Show Goals, but acknowledge Total might be "Visual Distribution Total".
-  // To be safe and clean, I will keep TotalAssets as the REAL accounting total.
-  // But the Distribution Pie might sum to MORE than TotalAssets if we include Goals without deducting.
-  // OR we assume Goals are separate?
-  // Let's stick to: "Total Assets" = (Liquidity + Savings + Investments).
-  // Goals are just a "breakdown" or we treat them as a "Category" that steals from others?
-  // Given user request: "deben de contabilizarse... quesito separado".
-  // I will add them as a slice. 
-  // If the chart sums to > 100% of real assets, it's confusing. 
-  // But usually users with this app structure treat goals as virtual.
-  // I will NOT modify 'bank'/'savings' variables to deduct goals (too risky without source mapping).
-  // I'll add "Objetivos" to the list. The Pie will simply show the relative proportion of these concepts.
   
-  const totalAssets = liquidity + savings + totalInvestments + other // + goalsTotal? No, avoid double calc for net worth.
+  const totalAssets = liquidity + savings + totalInvestments + other
 
   // 6. Distribution Data
   const distribution: { name: string; value: number; color: string; subItems?: any[] }[] = [
@@ -426,8 +556,6 @@ export async function getFinancialDistribution(userId: string): Promise<Financia
     }
   ].filter(d => d.value > 0).map(d => ({
       ...d,
-      // Assign specific colors to subItems if needed, or generated?
-      // For now, simpler subItems.
       subItems: d.subItems?.map(s => ({ ...s, color: d.color, opacity: 0.7 })) // simplistic styling
   }))
 
