@@ -4,6 +4,7 @@ import AppLayout from './layouts/AppLayout'
 import Dashboard from './pages/Dashboard'
 import DebtsList from './pages/Debts/DebtsList'
 import DebtDetail from './pages/Debts/DebtDetail'
+import OrganizationsList from './pages/Organizations/OrganizationsList'
 import MovementsList from './pages/Movements/MovementsList'
 import CategoriesList from './pages/Categories/CategoriesList'
 import SavingsList from './pages/Savings/SavingsList'
@@ -28,6 +29,7 @@ function App() {
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<Navigate to="/app/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="organizations" element={<OrganizationsList />} />
           <Route path="summary" element={<SummaryPage />} />
           <Route path="movements" element={<MovementsList />} />
           <Route path="categories" element={<CategoriesList />} />
