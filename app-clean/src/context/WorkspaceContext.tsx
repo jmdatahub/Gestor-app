@@ -63,6 +63,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       }
 
       setWorkspaces(data as any[]);
+      console.log('[WorkspaceContext] Fetched workspaces:', data); // DIAGNOSTIC LOG
       
       // Load last used workspace from localStorage if available
       const savedOrgId = localStorage.getItem('last_workspace_id');

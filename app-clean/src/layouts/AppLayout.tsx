@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   X,
+  Building,
   ArrowUpDown,
   PiggyBank,
   RefreshCw,
@@ -111,6 +112,7 @@ export default function AppLayout() {
 
   const navItems = [
     { key: 'nav.dashboard', path: '/app/dashboard', icon: LayoutDashboard },
+    { key: 'nav.organizations', path: '/app/organizations', icon: Building },
     { key: 'nav.summary', path: '/app/summary', icon: BarChart3 },
     { key: 'nav.movements', path: '/app/movements', icon: ArrowUpDown },
     { key: 'nav.categories', path: '/app/categories', icon: Tag },

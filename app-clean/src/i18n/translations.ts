@@ -6,6 +6,7 @@ export const translations: Record<string, Record<string, string>> = {
     
     // Navigation
     'nav.dashboard': 'Dashboard',
+    'nav.organizations': 'Organizaciones',
     'nav.summary': 'Resumen',
     'nav.movements': 'Movimientos',
     'movements.title': 'Movimientos',
@@ -353,6 +354,7 @@ export const translations: Record<string, Record<string, string>> = {
     
     // Navigation
     'nav.dashboard': 'Dashboard',
+    'nav.organizations': 'Organizations',
     'nav.summary': 'Summary',
     'nav.movements': 'Movements',
     'movements.title': 'Movements',
