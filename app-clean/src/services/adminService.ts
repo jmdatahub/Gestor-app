@@ -117,17 +117,20 @@ export async function checkIsSuperAdmin(): Promise<boolean> {
   }
 }
 
-// Check if the profiles table exists and is accessible
+// Check if the profiles table exists and is accessible with correct schema
 export async function checkDatabaseHealth(): Promise<{ profilesExists: boolean }> {
   try {
-    const { error } = await supabase.from('profiles').select('count', { count: 'exact', head: true })
+    // Try to select specific columns we depend on validation
+    const { error } = await supabase
+      .from('profiles')
+      .select('id, email, is_suspended, is_super_admin')
+      .limit(1)
     
-    // If error code is 42P01 (undefined_table), the table is missing
-    if (error && error.code === '42P01') {
+    // If any error occurs (missing table 42P01, missing column 42703, etc), return false
+    if (error) {
       return { profilesExists: false }
     }
     
-    // For other errors (permission, etc) or success, we assume it exists
     return { profilesExists: true }
   } catch (err) {
     return { profilesExists: false }

@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import SettingsPanel from '../components/SettingsPanel'
 import { useI18n } from '../hooks/useI18n'
 import { useOffline } from '../context/OfflineContext'
-import WorkspaceSwitcher from '../components/layout/WorkspaceSwitcher' // [NEW] Import
+import SidebarUserMenu from '../components/layout/SidebarUserMenu' // [NEW] Import
 
 import { 
   LayoutDashboard, 
@@ -188,22 +188,7 @@ export default function AppLayout() {
         </nav>
         
         <div className="sidebar-footer">
-           <div className="user-profile mb-2">
-              <div className="user-avatar">
-                   U
-              </div>
-              <div className="user-info flex flex-col overflow-hidden">
-                   <span className="text-sm font-medium truncate text-[var(--text-primary)]">Usuario</span>
-                   <span className="text-xs text-[var(--text-secondary)] truncate">Free Plan</span>
-              </div>
-           </div>
-
-          <button onClick={handleSignOut} className="nav-item w-full" title={isCollapsed ? t('nav.logout') : ''}>
-             <div className="nav-item-icon text-red-400">
-               <LogOut size={20} />
-             </div>
-             <span className="nav-item-text text-red-400">{t('nav.logout')}</span>
-          </button>
+           <SidebarUserMenu isCollapsed={isCollapsed} />
         </div>
       </aside>
 
@@ -318,8 +303,6 @@ export default function AppLayout() {
         </div>
       </main>
 
-      {/* Floating Workspace Switcher */}
-      <WorkspaceSwitcher />
     </div>
   )
 }
