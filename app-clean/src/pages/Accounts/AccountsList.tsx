@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getAccountsWithBalances,
   createAccount,
@@ -32,6 +33,7 @@ export default function AccountsList() {
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
+  const { currentWorkspace } = useWorkspace()  // Add workspace context
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
   const [flatAccounts, setFlatAccounts] = useState<AccountNode[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,20 +45,22 @@ export default function AccountsList() {
   const [parentId, setParentId] = useState<string>('') 
   const [name, setName] = useState('')
   const [type, setType] = useState<CreateAccountInput['type']>('general')
-  const [description, setDescription] = useState('')  // Añadido: descripción
+  const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  // Reload when workspace changes
   useEffect(() => {
     loadData()
-  }, [])
+  }, [currentWorkspace])
 
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
-      const data = await getAccountsWithBalances(user.id)
+      const orgId = currentWorkspace?.id || null
+      const data = await getAccountsWithBalances(user.id, orgId)
       setAccounts(data)
       
       const tree = buildAccountTree(data)
@@ -82,9 +86,10 @@ export default function AccountsList() {
     try {
       await createAccount({ 
         user_id: user.id, 
+        organization_id: currentWorkspace?.id || null,  // Include workspace
         name, 
         type,
-        description: description || null,  // Añadido
+        description: description || null,
         parent_account_id: parentId || null 
       })
       setShowCreateModal(false)

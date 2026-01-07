@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { 
   fetchMovements, 
   fetchMonthlyMovements,
@@ -53,6 +54,7 @@ interface FlatAccount extends Account {
 export default function MovementsList() {
   const { t } = useI18n()
   const { settings } = useSettings()
+  const { currentWorkspace } = useWorkspace()  // Add workspace context
   const [movements, setMovements] = useState<Movement[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [flatAccounts, setFlatAccounts] = useState<FlatAccount[]>([]) // Flattened hierarchy for selectors
@@ -87,22 +89,24 @@ export default function MovementsList() {
   const [editingMovement, setEditingMovement] = useState<Movement | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  // Reload when workspace changes
   useEffect(() => {
     loadData()
-  }, [])
+  }, [currentWorkspace])
 
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
+      const orgId = currentWorkspace?.id || null
       // Ensure default accounts exist first
       await ensureDefaultAccountsForUser(user.id)
 
       const [movementsData, monthlyData, accountsData] = await Promise.all([
-        fetchMovements(user.id),
-        fetchMonthlyMovements(user.id),
-        fetchAccounts(user.id)
+        fetchMovements(user.id, 50, orgId),
+        fetchMonthlyMovements(user.id, orgId),
+        fetchAccounts(user.id, orgId)
       ])
 
       setMovements(movementsData)
@@ -168,6 +172,7 @@ export default function MovementsList() {
 
       const movementData = {
         user_id: user.id,
+        organization_id: currentWorkspace?.id || null,  // Include workspace
         account_id: accountId,
         kind: type as 'income' | 'expense' | 'investment',
         amount: parseFloat(amount),
