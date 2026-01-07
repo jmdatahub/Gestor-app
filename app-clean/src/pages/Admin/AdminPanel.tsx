@@ -156,7 +156,7 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto pb-12">
+    <div className="w-full max-w-[1600px] mx-auto pb-24 px-4 sm:px-6"> 
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div>
@@ -190,10 +190,10 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+      {/* KPI Grid - Using Flex Wrap for Robustness */}
+      <div className="flex flex-wrap gap-6 mb-10">
         {/* Users Card */}
-        <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
+        <div className="flex-1 min-w-[300px] bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
           <div className="flex justify-between items-start mb-6">
             <div className="p-3 rounded-2xl bg-blue-500/10 text-blue-400 group-hover:scale-110 transition-transform duration-300">
               <Users size={24} />
@@ -211,7 +211,7 @@ export default function AdminPanel() {
         </div>
 
         {/* Organizations Card */}
-        <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
+        <div className="flex-1 min-w-[300px] bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
           <div className="flex justify-between items-start mb-6">
             <div className="p-3 rounded-2xl bg-violet-500/10 text-violet-400 group-hover:scale-110 transition-transform duration-300">
               <Building size={24} />
@@ -229,7 +229,7 @@ export default function AdminPanel() {
         </div>
 
         {/* Security Card */}
-        <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
+        <div className="flex-1 min-w-[300px] bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
           <div className="flex justify-between items-start mb-6">
             <div className="p-3 rounded-2xl bg-red-500/10 text-red-400 group-hover:scale-110 transition-transform duration-300">
               <Activity size={24} />
@@ -301,10 +301,10 @@ export default function AdminPanel() {
               <table className="w-full text-left border-collapse">
                 <thead className="bg-[#1e293b] border-b border-[#334155]">
                   <tr>
-                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider w-[40%]">Usuario</th>
-                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider w-[20%]">Registro</th>
-                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider w-[20%]">Estado</th>
-                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider w-[20%] text-right">Acciones</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Usuario</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Registro</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Estado</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#334155]">

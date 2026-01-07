@@ -34,14 +34,14 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     navigate('/auth')
   }
 
-  // Get current display info
+  // Info
   const displayName = currentWorkspace ? currentWorkspace.name : 'Espacio Personal'
   const displaySubtext = currentWorkspace ? 'Organización Pro' : 'Plan Gratuito'
   
-  // Custom Gradients (using standard Tailwind colors instead of vars for gradients to ensure render)
+  // Gradients
   const avatarGradient = currentWorkspace 
-    ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500' 
-    : 'bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900'
+    ? 'bg-gradient-to-br from-indigo-600 via-indigo-500 to-indigo-400' 
+    : 'bg-gradient-to-br from-slate-700 via-slate-600 to-slate-500'
 
   return (
     <div className="relative" ref={menuRef}>
@@ -49,63 +49,48 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
       {/* Menu Popup */}
       {isOpen && (
         <div 
-          className="absolute bottom-full left-0 mb-3 w-[260px] rounded-2xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200 z-50 shadow-2xl"
-          style={{
-            backgroundColor: 'var(--bg-card)', // Solid color fallback
-            border: '1px solid var(--border-color)',
-            left: isCollapsed ? '-0.5rem' : '0'
-          }}
+          className="absolute bottom-full left-0 mb-3 w-[260px] rounded-xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200 z-50 shadow-2xl bg-[#1e293b] border border-slate-700 ring-1 ring-black/20"
+          style={{ left: isCollapsed ? '-0.5rem' : '0' }}
         >
-           {/* Header Section */}
-           <div 
-             className="p-4 border-b flex items-center justify-between"
-             style={{ background: 'var(--bg-header)', borderColor: 'var(--border-color)' }}
-           >
-             <h3 className="text-xs font-bold uppercase tracking-wider flex items-center justify-between w-full" style={{ color: 'var(--text-secondary)' }}>
-               <span>Cambiar Espacio</span>
-               <span style={{ background: 'var(--primary-soft)', color: 'var(--primary)' }} className="text-[10px] px-2 py-0.5 rounded-full">
-                 {workspaces.length + 1} disponibles
-               </span>
-             </h3>
+           {/* Header */}
+           <div className="px-3 py-3 bg-[#0f172a] border-b border-slate-700 flex items-center justify-between">
+             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+               Cambiar Espacio
+             </span>
+             <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-medium border border-indigo-500/20">
+               {workspaces.length + 1} disponibles
+             </span>
            </div>
 
            {/* List */}
-           <div className="p-2 flex flex-col gap-1 max-h-[300px] overflow-y-auto custom-scrollbar">
+           <div className="p-1 flex flex-col gap-1 max-h-[300px] overflow-y-auto custom-scrollbar bg-[#1e293b]">
               
               {/* Personal Option */}
               <button
                 onClick={() => handleSwitch(null)}
-                className="group flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 border"
-                style={{ 
-                  backgroundColor: !currentWorkspace ? 'var(--primary-soft)' : 'transparent',
-                  borderColor: 'transparent',
-                }}
+                className={`group flex items-center gap-3 w-full p-2 rounded-lg transition-all text-left ${
+                  !currentWorkspace ? 'bg-slate-700/50' : 'hover:bg-slate-800'
+                }`}
               >
                 <div className={`
-                  w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition-transform group-hover:scale-105
-                  ${!currentWorkspace ? 'text-white' : 'bg-gray-100 text-gray-500'}
-                `}
-                style={{ backgroundColor: !currentWorkspace ? 'var(--primary)' : undefined }}
-                >
+                  w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0
+                  ${!currentWorkspace ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-700 text-slate-400 group-hover:bg-slate-600 group-hover:text-slate-200'}
+                `}>
                   <User size={16} />
                 </div>
-                <div className="flex-1 text-left">
-                  <div className="text-sm font-semibold" style={{ color: !currentWorkspace ? 'var(--primary)' : 'var(--text-primary)' }}>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-medium truncate ${!currentWorkspace ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>
                     Personal
                   </div>
-                  <div className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>Tu espacio privado</div>
+                  <div className="text-[10px] text-slate-500 truncate">Tu espacio privado</div>
                 </div>
-                {!currentWorkspace && (
-                  <div className="rounded-full p-1" style={{ backgroundColor: 'var(--primary)' }}>
-                    <Check size={10} className="text-white" strokeWidth={4} />
-                  </div>
-                )}
+                {!currentWorkspace && <Check size={14} className="text-indigo-400" strokeWidth={2.5} />}
               </button>
 
-              {/* Separator Label */}
+              {/* Label */}
               {workspaces.length > 0 && (
-                <div className="px-3 py-2 mt-1">
-                  <span className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Organizaciones</span>
+                <div className="px-2 py-1.5 mt-1 border-t border-slate-700/50">
+                  <span className="text-[10px] font-bold uppercase text-slate-500">Organizaciones</span>
                 </div>
               )}
 
@@ -116,109 +101,82 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
                   <button
                     key={ws.org_id}
                     onClick={() => handleSwitch(ws.org_id)}
-                    className="group flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 border"
-                    style={{ 
-                      backgroundColor: isActive ? 'var(--primary-soft)' : 'transparent',
-                      borderColor: 'transparent'
-                    }}
+                    className={`group flex items-center gap-3 w-full p-2 rounded-lg transition-all text-left ${
+                      isActive ? 'bg-slate-700/50' : 'hover:bg-slate-800'
+                    }`}
                   >
                     <div className={`
-                      w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition-transform group-hover:scale-105
-                    `}
-                    style={{ 
-                      background: isActive ? 'linear-gradient(to bottom right, #6366f1, #a855f7)' : 'rgba(99, 102, 241, 0.1)',
-                      color: isActive ? 'white' : 'var(--primary)'
-                    }}
-                    >
+                      w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0
+                      ${isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700 group-hover:border-slate-600'}
+                    `}>
                       <Building size={16} />
                     </div>
-                    <div className="flex-1 text-left min-w-0">
-                      <div className="text-sm font-semibold truncate" style={{ color: isActive ? 'var(--primary)' : 'var(--text-primary)' }}>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>
                         {ws.organization.name}
                       </div>
-                      <div className="text-[10px] truncate" style={{ color: 'var(--text-secondary)' }}>
-                        {isActive ? 'Activo ahora' : 'Ver espacio'}
+                      <div className="text-[10px] text-slate-500 truncate">
+                        {isActive ? 'Activo' : 'Organización'}
                       </div>
                     </div>
-                    {isActive && (
-                      <div className="rounded-full p-1" style={{ backgroundColor: 'var(--primary)' }}>
-                        <Check size={10} className="text-white" strokeWidth={4} />
-                      </div>
-                    )}
+                    {isActive && <Check size={14} className="text-indigo-400" strokeWidth={2.5} />}
                   </button>
                 )
               })}
            </div>
 
-           {/* Footer Actions */}
-           <div 
-             className="p-2 border-t grid grid-cols-2 gap-2"
-             style={{ 
-               background: 'var(--bg-header)', 
-               borderColor: 'var(--border-color)' 
-             }}
-           >
+           {/* Footer */}
+           <div className="p-1 border-t border-slate-700 bg-[#0f172a] grid grid-cols-2 gap-1">
               <button
                 onClick={() => { setIsOpen(false); navigate('/app/organizations'); }}
-                className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg transition-all"
-                style={{ color: 'var(--text-secondary)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-body)'; e.currentTarget.style.color = 'var(--primary)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                className="flex items-center justify-center gap-2 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                title="Crear nueva organización"
               >
-                 <Plus size={16} />
-                 <span className="text-[10px] font-medium">Crear Org</span>
+                 <Plus size={14} />
+                 <span className="text-[11px] font-medium">Crear</span>
               </button>
               
               <button 
                onClick={handleSignOut}
-               className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg transition-all"
-               style={{ color: 'var(--text-secondary)' }}
-               onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FEF2F2'; e.currentTarget.style.color = '#EF4444'; }}
-               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+               className="flex items-center justify-center gap-2 p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+               title="Cerrar sesión"
               >
-               <LogOut size={16} />
-               <span className="text-[10px] font-medium">Salir</span>
+               <LogOut size={14} />
+               <span className="text-[11px] font-medium">Salir</span>
              </button>
            </div>
         </div>
       )}
 
-      {/* Main Trigger Button */}
+      {/* Trigger Button */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          w-full flex items-center gap-3 p-2 rounded-2xl transition-all duration-200 border
+          w-full flex items-center gap-3 p-2 rounded-xl transition-all duration-200 border
+          ${isOpen ? 'bg-slate-800 border-slate-700' : 'border-transparent hover:bg-slate-800/50 hover:border-slate-800'}
         `}
-        style={{
-          backgroundColor: isOpen ? 'var(--bg-card)' : 'transparent',
-          borderColor: isOpen ? 'var(--border-color)' : 'transparent',
-          boxShadow: isOpen ? 'var(--shadow-lg)' : 'none'
-        }}
       >
-        {/* Avatar with Ring */}
         <div className={`
-          flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md
-          ${avatarGradient}
+          flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-md
+          ${avatarGradient} ring-1 ring-white/10
         `}>
-          {currentWorkspace ? <Building size={18} strokeWidth={2.5} /> : <User size={18} strokeWidth={2.5} />}
+          {currentWorkspace ? <Building size={16} strokeWidth={2.5} /> : <User size={16} strokeWidth={2.5} />}
         </div>
 
-        {/* Info Area */}
         {!isCollapsed && (
           <>
             <div className="flex-1 text-left min-w-0">
-              <div className="text-sm font-bold truncate flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+              <div className="text-sm font-bold text-slate-200 truncate flex items-center gap-1.5">
                 {displayName}
-                {currentWorkspace && <Sparkles size={10} className="text-amber-400 fill-amber-400 animate-pulse" />}
+                {currentWorkspace && <span className="flex h-1.5 w-1.5 rounded-full bg-indigo-500"></span>}
               </div>
-              <div className="text-[11px] font-medium truncate opacity-80" style={{ color: 'var(--text-secondary)' }}>
+              <div className="text-[11px] font-medium text-slate-500 truncate">
                 {displaySubtext}
               </div>
             </div>
 
-            {/* Selector Icon */}
-            <div style={{ color: 'var(--text-secondary)' }}>
-              <ChevronsUpDown size={16} />
+            <div className={`text-slate-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+              <ChevronsUpDown size={14} />
             </div>
           </>
         )}
