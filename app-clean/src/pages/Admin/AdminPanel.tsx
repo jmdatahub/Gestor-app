@@ -7,6 +7,7 @@ import {
   getOrganizationCount,
   suspendUser,
   unsuspendUser,
+  checkDatabaseHealth,
   type UserProfile 
 } from '../../services/adminService'
 import { useI18n } from '../../hooks/useI18n'
@@ -44,8 +45,10 @@ export default function AdminPanel() {
         setIsSuperAdmin(user.email === SUPER_ADMIN_EMAIL)
         
         if (user.email === SUPER_ADMIN_EMAIL) {
-          await loadStats()
-          await loadUsers()
+          const isHealthy = await loadStats()
+          if (isHealthy) {
+            await loadUsers()
+          }
         }
       }
     } catch (error) {
@@ -55,8 +58,15 @@ export default function AdminPanel() {
     }
   }
 
-  const loadStats = async () => {
+  const loadStats = async (): Promise<boolean> => {
     try {
+      // First check if the database is healthy
+      const health = await checkDatabaseHealth()
+      if (!health.profilesExists) {
+        setProfilesTableExists(false)
+        return false
+      }
+      
       const [users, orgs, suspended] = await Promise.all([
         getUserCount(),
         getOrganizationCount(),
@@ -66,9 +76,11 @@ export default function AdminPanel() {
       setOrgCount(orgs)
       setSuspendedCount(suspended)
       setProfilesTableExists(true)
+      return true
     } catch (error) {
       console.error('Error loading stats:', error)
       setProfilesTableExists(false)
+      return false
     }
   }
 
@@ -77,10 +89,9 @@ export default function AdminPanel() {
     try {
       const data = await getAllUsers()
       setUsers(data)
-      setProfilesTableExists(true)
+      // We don't set profilesTableExists here anymore, as loadStats determines it authoritatively
     } catch (error) {
       console.error('Error loading users:', error)
-      setProfilesTableExists(false)
     } finally {
       setLoadingUsers(false)
     }
@@ -549,7 +560,7 @@ export default function AdminPanel() {
               </table>
               {users.length === 0 && (
                 <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  <Users size={48} style={{ opacity: 0.2, margin: '0 auto 1rem' }} />
+                  <img src="https://cdni.iconscout.com/illustration/premium/thumb/empty-state-2130362-1800926.png" alt="Empty" style={{ height: '120px', opacity: 0.5, marginBottom: '1rem', mixBlendMode: 'multiply' }} />
                   <p>No se encontraron usuarios</p>
                 </div>
               )}

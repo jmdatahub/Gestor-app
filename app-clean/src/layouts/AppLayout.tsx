@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import SettingsPanel from '../components/SettingsPanel'
 import { useI18n } from '../hooks/useI18n'
 import { useOffline } from '../context/OfflineContext'
+import WorkspaceSwitcher from '../components/layout/WorkspaceSwitcher' // [NEW] Import
 
 import { 
   LayoutDashboard, 
@@ -312,10 +313,13 @@ export default function AppLayout() {
         {/* Settings Panel */}
         <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         
-        <div className="app-content">
+        <div className="p-6">
           <Outlet />
         </div>
       </main>
+
+      {/* Floating Workspace Switcher */}
+      <WorkspaceSwitcher />
     </div>
   )
 }
