@@ -32,16 +32,23 @@ export interface CreateRuleInput {
   next_occurrence: string
 }
 
-// Get all rules for user
-export async function getUserRecurringRules(userId: string): Promise<RecurringRule[]> {
-  const { data, error } = await supabase
+// Get all rules for user (filtered by organization if provided)
+export async function getUserRecurringRules(userId: string, organizationId: string | null = null): Promise<RecurringRule[]> {
+  let query = supabase
     .from('recurring_rules')
     .select(`
       *,
       account:accounts(id, name)
     `)
-    .eq('user_id', userId)
-    .order('next_occurrence', { ascending: true })
+  
+  // Filter by organization_id
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+  
+  const { data, error } = await query.order('next_occurrence', { ascending: true })
 
   if (error) {
     console.error('Error fetching recurring rules:', error)

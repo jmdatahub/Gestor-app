@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { fetchCategories, type Category } from '../../services/movementService'
 import { getTextColorClass, getCategoryPillStyle, getDefaultCategoryColor } from '../../utils/categoryColors'
 import { Plus, Edit2, X, Tag } from 'lucide-react'
@@ -10,6 +11,7 @@ import { UiInput } from '../../components/ui/UiInput'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 
 export default function CategoriesList() {
+  const { currentWorkspace } = useWorkspace()  // Add workspace context
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -21,16 +23,18 @@ export default function CategoriesList() {
   const [color, setColor] = useState('#818cf8')
   const [submitting, setSubmitting] = useState(false)
 
+  // Reload when workspace changes
   useEffect(() => {
     loadCategories()
-  }, [])
+  }, [currentWorkspace])
 
   const loadCategories = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
-      const data = await fetchCategories(user.id)
+      const orgId = currentWorkspace?.id || null
+      const data = await fetchCategories(user.id, orgId)
       setCategories(data)
     } catch (error) {
       console.error('Error loading categories:', error)
@@ -73,9 +77,10 @@ export default function CategoriesList() {
         if (error) throw error
       } else {
         // Create new
+        const orgId = currentWorkspace?.id || null
         const { error } = await supabase
           .from('categories')
-          .insert([{ user_id: user.id, name, kind, color }])
+          .insert([{ user_id: user.id, organization_id: orgId, name, kind, color }])
 
         if (error) throw error
       }

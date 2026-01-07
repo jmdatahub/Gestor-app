@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getMonthlySummary,
   getMonthlyCategoryBreakdown,
@@ -28,6 +29,7 @@ type PeriodType = 'monthly' | 'annual'
 export default function SummaryPage() {
   const { t, language } = useI18n()
   const { settings, updateSettings } = useSettings()
+  const { currentWorkspace } = useWorkspace()  // Add workspace context
   const locale = language === 'es' ? 'es-ES' : 'en-US'
   const now = new Date()
   const [periodType, setPeriodType] = useState<PeriodType>('monthly')
@@ -49,9 +51,10 @@ export default function SummaryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Reload when workspace or settings change
   useEffect(() => {
     loadData()
-  }, [rollupEnabled, periodType, year, month, historyMonths, chartGrouping])
+  }, [rollupEnabled, periodType, year, month, historyMonths, chartGrouping, currentWorkspace])
 
   const loadData = async () => {
     setLoading(true)
@@ -61,19 +64,21 @@ export default function SummaryPage() {
     if (!user) return
 
     try {
+      const orgId = currentWorkspace?.id || null  // Get current workspace
+      
       // Common data
-      const accountsPromise = getAccountBalancesSummary(user.id, { includeChildrenRollup: rollupEnabled })
+      const accountsPromise = getAccountBalancesSummary(user.id, { includeChildrenRollup: rollupEnabled }, orgId)
 
       if (periodType === 'monthly') {
         // Fetch monthly history always, and weekly if needed
         const weeksToFetch = historyMonths * 4 // ~4 weeks per month
         
         const [summaryData, categoriesData, netWorthData, historyData, weeklyData, accountsData] = await Promise.all([
-          getMonthlySummary(user.id, year, month),
-          getMonthlyCategoryBreakdown(user.id, year, month),
-          getNetWorthSummary(user.id),
-          getBalanceHistory(user.id, historyMonths),
-          (chartGrouping === 0.5 || chartGrouping === 0.25) ? getWeeklyHistory(user.id, weeksToFetch) : Promise.resolve([]),
+          getMonthlySummary(user.id, year, month, { includeChildrenRollup: rollupEnabled }, orgId),
+          getMonthlyCategoryBreakdown(user.id, year, month, orgId),
+          getNetWorthSummary(user.id, new Date(), orgId),
+          getBalanceHistory(user.id, historyMonths, orgId),
+          (chartGrouping === 0.5 || chartGrouping === 0.25) ? getWeeklyHistory(user.id, weeksToFetch, orgId) : Promise.resolve([]),
           accountsPromise
         ])
 
@@ -86,16 +91,16 @@ export default function SummaryPage() {
       } else {
         // Annual
          const monthsPromises = Array.from({ length: 12 }, (_, i) => 
-          getMonthlySummary(user.id, year, i + 1)
+          getMonthlySummary(user.id, year, i + 1, { includeChildrenRollup: rollupEnabled }, orgId)
         )
         const categoriesPromises = Array.from({ length: 12 }, (_, i) =>
-          getMonthlyCategoryBreakdown(user.id, year, i + 1)
+          getMonthlyCategoryBreakdown(user.id, year, i + 1, orgId)
         )
         
         const [monthsData, allCategories, netWorthData, accountsData] = await Promise.all([
           Promise.all(monthsPromises),
           Promise.all(categoriesPromises),
-          getNetWorthSummary(user.id),
+          getNetWorthSummary(user.id, new Date(), orgId),
           accountsPromise
         ])
 

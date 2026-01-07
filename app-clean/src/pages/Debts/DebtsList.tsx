@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { fetchDebts, createDebt, type Debt, type CreateDebtInput } from '../../services/debtService'
 import { Plus, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useI18n } from '../../hooks/useI18n'
@@ -18,6 +19,7 @@ import { UiModal, UiModalBody, UiModalFooter } from '../../components/ui/UiModal
 export default function DebtsList() {
   const { t, language } = useI18n()
   const navigate = useNavigate()
+  const { currentWorkspace } = useWorkspace()  // Add workspace context
   const [debts, setDebts] = useState<Debt[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'i_owe' | 'they_owe_me'>('i_owe')
@@ -31,9 +33,10 @@ export default function DebtsList() {
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // Reload when workspace changes
   useEffect(() => {
     loadDebts()
-  }, [])
+  }, [currentWorkspace])
 
   const loadDebts = async () => {
     const { data: { user } } = await supabase.auth.getUser()

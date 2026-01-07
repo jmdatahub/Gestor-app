@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { 
   getUserRecurringRules, 
   createRecurringRule,
@@ -23,6 +24,7 @@ import { CategoryPicker } from '../../components/domain/CategoryPicker'
 
 export default function RecurringList() {
   const { t, language } = useI18n()
+  const { currentWorkspace } = useWorkspace()  // Add workspace context
   const [rules, setRules] = useState<RecurringRule[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [categories, setCategories] = useState<{ id: string; name: string; type: string }[]>([])
@@ -36,23 +38,25 @@ export default function RecurringList() {
   const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
   const [frequency, setFrequency] = useState<'weekly' | 'monthly'>('monthly')
-  const [dayOfWeek, setDayOfWeek] = useState(1) // Monday
+  const [dayOfWeek, setDayOfWeek] = useState(1)
   const [dayOfMonth, setDayOfMonth] = useState(1)
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [submitting, setSubmitting] = useState(false)
 
+  // Reload when workspace changes
   useEffect(() => {
     loadData()
-  }, [])
+  }, [currentWorkspace])
 
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
+      const orgId = currentWorkspace?.id || null
       const [rulesData, accountsData, categoriesData] = await Promise.all([
-        getUserRecurringRules(user.id),
-        fetchAccounts(user.id),
+        getUserRecurringRules(user.id, orgId),
+        fetchAccounts(user.id, orgId),
         supabase.from('categories').select('id, name, type').eq('user_id', user.id).order('name')
       ])
       setRules(rulesData)
