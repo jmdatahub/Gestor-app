@@ -135,7 +135,13 @@ export default function OrganizationsList() {
                 <p className="text-gray-500 text-sm mb-2">
                   Rol: <span className="font-medium capitalize">{ws.role}</span>
                 </p>
-                <div className="flex justify-end mt-4">
+                <div className="flex justify-between mt-4">
+                  <button 
+                    className="btn btn-sm btn-ghost"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/app/organizations/${ws.org_id}`) }}
+                  >
+                    Ver detalles
+                  </button>
                   <button className="btn btn-sm btn-ghost">
                     Cambiar <ArrowRight size={16} className="ml-1" />
                   </button>
