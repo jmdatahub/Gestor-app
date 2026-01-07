@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getUserInvestments,
   createInvestment,
@@ -30,6 +31,7 @@ export default function InvestmentsList() {
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
+  const { currentWorkspace } = useWorkspace()  // Add workspace context
   const locale = language === 'es' ? 'es-ES' : 'en-US'
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,18 +56,20 @@ export default function InvestmentsList() {
   const [newPrice, setNewPrice] = useState('')
   const [priceDate, setPriceDate] = useState(new Date().toISOString().split('T')[0])
 
+  // Reload when workspace changes
   useEffect(() => {
     loadData()
-  }, [])
+  }, [currentWorkspace])
 
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
+      const orgId = currentWorkspace?.id || null
       const [data, accountsData] = await Promise.all([
-        getUserInvestments(user.id),
-        getAccountsWithBalances(user.id)
+        getUserInvestments(user.id, orgId),
+        getAccountsWithBalances(user.id, orgId)
       ])
       setInvestments(data)
       setAccounts(accountsData)
@@ -86,6 +90,7 @@ export default function InvestmentsList() {
     try {
       const input: CreateInvestmentInput = {
         user_id: user.id,
+        organization_id: currentWorkspace?.id || null,  // Include workspace
         name,
         type,
         quantity: parseFloat(quantity),

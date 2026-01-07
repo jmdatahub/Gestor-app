@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { 
   getGoalsByUser, 
   createGoal, 
@@ -20,7 +21,8 @@ import { UiTextarea } from '../../components/ui/UiTextarea'
 
 export default function SavingsList() {
   const navigate = useNavigate()
-  const { t } = useI18n()  // Removed lang - use 'es-ES' directly
+  const { t } = useI18n()
+  const { currentWorkspace } = useWorkspace()  // Add workspace context
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [loading, setLoading] = useState(true)
   const [showGoalModal, setShowGoalModal] = useState(false)
@@ -31,7 +33,7 @@ export default function SavingsList() {
   const [goalName, setGoalName] = useState('')
   const [targetAmount, setTargetAmount] = useState('')
   const [targetDate, setTargetDate] = useState('')
-  const [description, setDescription] = useState('')  // Añadido: descripción
+  const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -40,16 +42,19 @@ export default function SavingsList() {
   const [contribDate, setContribDate] = useState(new Date().toISOString().split('T')[0])
   const [contribNote, setContribNote] = useState('')
 
+  // Reload when workspace changes
   useEffect(() => {
     loadGoals()
-  }, [])
+  }, [currentWorkspace])
 
   const loadGoals = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
-      const data = await getGoalsByUser(user.id)
+      // Pass organization_id from workspace context
+      const orgId = currentWorkspace?.id || null
+      const data = await getGoalsByUser(user.id, orgId)
       setGoals(data)
     } catch (error) {
       console.error('Error loading goals:', error)
@@ -73,10 +78,11 @@ export default function SavingsList() {
     try {
       await createGoal({
         user_id: user.id,
+        organization_id: currentWorkspace?.id || null,  // Include workspace
         name: goalName,
         target_amount: parseFloat(targetAmount),
         target_date: targetDate || null,
-        description: description || null  // Añadido: descripción
+        description: description || null
       })
       setShowGoalModal(false)
       resetGoalForm()

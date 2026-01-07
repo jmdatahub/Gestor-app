@@ -28,6 +28,7 @@ export interface PriceHistoryEntry {
 
 export interface CreateInvestmentInput {
   user_id: string
+  organization_id?: string | null  // Add organization support
   name: string
   type: string
   quantity: number
@@ -39,12 +40,21 @@ export interface CreateInvestmentInput {
   fund_from_account_id?: string | null // Optional: Account to deduct funds from
 }
 
-// Get all investments for user
-export async function getUserInvestments(userId: string): Promise<Investment[]> {
-  const { data, error } = await supabase
+// Get all investments for user (filtered by organization if provided)
+export async function getUserInvestments(userId: string, organizationId: string | null = null): Promise<Investment[]> {
+  let query = supabase
     .from('investments')
     .select('*')
     .eq('user_id', userId)
+  
+  // Filter by organization_id (null for personal, specific ID for org)
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.is('organization_id', null)
+  }
+  
+  const { data, error } = await query
     .order('created_at', { ascending: false })
 
   if (error) {

@@ -35,14 +35,23 @@ export interface SavingsContribution {
   created_at: string
 }
 
-// Fetch all goals for user
-export async function getGoalsByUser(userId: string): Promise<SavingsGoal[]> {
-  console.log('[savingsService] Fetching goals for user:', userId)
+// Fetch all goals for user (filtered by organization if provided)
+export async function getGoalsByUser(userId: string, organizationId: string | null = null): Promise<SavingsGoal[]> {
+  console.log('[savingsService] Fetching goals for user:', userId, 'org:', organizationId)
   
-  const { data, error } = await supabase
+  let query = supabase
     .from('savings_goals')
     .select('*')
     .eq('user_id', userId)
+  
+  // Filter by organization_id (null for personal, specific ID for org)
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.is('organization_id', null)
+  }
+  
+  const { data, error } = await query
     .order('status', { ascending: true })
     .order('created_at', { ascending: false })
 
@@ -73,6 +82,7 @@ export async function getGoalById(goalId: string): Promise<SavingsGoal | null> {
 // Create new goal
 export interface CreateGoalInput {
   user_id: string
+  organization_id?: string | null  // Add organization support
   name: string
   target_amount: number
   target_date?: string | null
@@ -86,6 +96,7 @@ export async function createGoal(input: CreateGoalInput): Promise<SavingsGoal> {
   // Build payload with ONLY valid DB columns
   const payload: Record<string, unknown> = {
     user_id: input.user_id,
+    organization_id: input.organization_id || null,  // Include organization_id
     name: input.name,
     target_amount: input.target_amount,
     current_amount: 0,
