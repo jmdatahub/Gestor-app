@@ -21,6 +21,7 @@ import AccountDetail from './pages/Accounts/AccountDetail'
 import InsightsPage from './pages/Insights/InsightsPage'
 import SummaryPage from './pages/Summary/SummaryPage'
 import SettingsPage from './pages/Settings/SettingsPage'
+import AdminPanel from './pages/Admin/AdminPanel'
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
           <Route path="insights" element={<InsightsPage />} />
           <Route path="alerts" element={<AlertsList />} />
           <Route path="export" element={<ExportPage />} />
+          <Route path="admin" element={<AdminPanel />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/app" replace />} />

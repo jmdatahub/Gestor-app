@@ -16,6 +16,7 @@ import {
   PiggyBank,
   RefreshCw,
   WifiOff,
+  Shield,
   Download,
   TrendingUp,
   Bell,
@@ -124,6 +125,7 @@ export default function AppLayout() {
     { key: 'nav.insights', path: '/app/insights', icon: Lightbulb },
     { key: 'nav.alerts', path: '/app/alerts', icon: Bell },
     { key: 'nav.export', path: '/app/export', icon: Download },
+    { key: 'nav.admin', path: '/app/admin', icon: Shield },
   ]
 
   if (loading) {
