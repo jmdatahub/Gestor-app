@@ -100,6 +100,7 @@ export default function RecurringList() {
 
       const input: CreateRuleInput = {
         user_id: user.id,
+        organization_id: currentWorkspace?.id || null, // Pass organization_id
         account_id: accountId,
         kind,
         amount: parseFloat(amount),

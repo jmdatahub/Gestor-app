@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 export interface RecurringRule {
   id: string
   user_id: string
+  organization_id?: string | null // [NEW]
   account_id: string
   kind: 'income' | 'expense'
   amount: number
@@ -21,6 +22,7 @@ export interface RecurringRule {
 
 export interface CreateRuleInput {
   user_id: string
+  organization_id?: string | null // [NEW]
   account_id: string
   kind: 'income' | 'expense'
   amount: number
