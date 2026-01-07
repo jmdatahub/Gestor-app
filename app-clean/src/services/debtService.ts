@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 export interface Debt {
   id: string
   user_id: string
+  organization_id?: string | null // [NEW] Multi-workspace support
   direction: 'i_owe' | 'they_owe_me'
   counterparty_name: string
   total_amount: number
@@ -27,12 +28,20 @@ export interface DebtMovement {
 export type CreateDebtInput = Omit<Debt, 'id' | 'remaining_amount' | 'is_closed' | 'created_at'>
 
 // Fetch all debts for user
-export async function fetchDebts(userId: string): Promise<Debt[]> {
-  const { data, error } = await supabase
+export async function fetchDebts(userId: string, organizationId: string | null = null): Promise<Debt[]> {
+  let query = supabase
     .from('debts')
     .select('*')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+
+  // Filter by organization_id
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+    
+  const { data, error } = await query.order('created_at', { ascending: false })
 
   if (error) throw error
   return data || []
@@ -70,6 +79,7 @@ export async function createDebt(input: CreateDebtInput): Promise<Debt> {
     .from('debts')
     .insert([{
       user_id: input.user_id,
+      organization_id: input.organization_id || null, // Include org_id
       direction: input.direction,
       counterparty_name: input.counterparty_name,
       total_amount: input.total_amount,

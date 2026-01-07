@@ -43,7 +43,8 @@ export default function DebtsList() {
     if (!user) return
 
     try {
-      const data = await fetchDebts(user.id)
+      const orgId = currentWorkspace?.id || null
+      const data = await fetchDebts(user.id, orgId)
       setDebts(data)
     } catch (error) {
       console.error('Error loading debts:', error)
@@ -89,6 +90,7 @@ export default function DebtsList() {
       
       const input: CreateDebtInput = {
         user_id: user.id,
+        organization_id: currentWorkspace?.id || null, // Pass organization_id
         direction,
         counterparty_name: counterparty.trim(),
         total_amount: amountNum,

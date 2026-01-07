@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import SettingsPanel from '../components/SettingsPanel'
 import { useI18n } from '../hooks/useI18n'
 import { useOffline } from '../context/OfflineContext'
-import DevWorkspaceSelector from '../components/dev/DevWorkspaceSelector'
+
 import { 
   LayoutDashboard, 
   Wallet, 
@@ -316,7 +316,6 @@ export default function AppLayout() {
           <Outlet />
         </div>
       </main>
-      <DevWorkspaceSelector />
     </div>
   )
 }
