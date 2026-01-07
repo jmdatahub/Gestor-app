@@ -1,14 +1,24 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import { createOrganization } from '../../services/organizationService'
 import { useI18n } from '../../hooks/useI18n'
 import { Plus, Building, Users, ArrowRight, Check } from 'lucide-react'
 import { UiCard } from '../../components/ui/UiCard'
+import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { UiInput } from '../../components/ui/UiInput'
 
 export default function OrganizationsList() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const { currentWorkspace, workspaces, switchWorkspace, isLoading } = useWorkspace()
+  
+  // Modal State
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newOrgName, setNewOrgName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSwitchToPersonal = () => {
     switchWorkspace(null)
@@ -18,6 +28,35 @@ export default function OrganizationsList() {
   const handleSwitchToOrg = (orgId: string) => {
     switchWorkspace(orgId)
     navigate('/app/dashboard')
+  }
+
+  const handleCreateOrg = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newOrgName.trim()) return
+    
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('No se pudo obtener el usuario')
+        return
+      }
+
+      await createOrganization(user.id, { name: newOrgName.trim() })
+      
+      setShowCreateModal(false)
+      setNewOrgName('')
+      
+      // Refresh the page to reload workspaces
+      window.location.reload()
+    } catch (err: any) {
+      console.error('Error creating organization:', err)
+      setError(err.message || 'Error al crear la organización')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (isLoading) {
@@ -38,7 +77,7 @@ export default function OrganizationsList() {
           <h1 className="page-title">Mis Organizaciones</h1>
           <p className="page-subtitle">Gestiona tus empresas y espacios de trabajo</p>
         </div>
-        <button className="btn btn-primary" disabled>
+        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
           <Plus size={20} />
           Crear Organización
         </button>
@@ -115,6 +154,45 @@ export default function OrganizationsList() {
           <p className="text-sm">Crea una nueva organización o espera a que te inviten a una.</p>
         </div>
       )}
+
+      {/* Create Organization Modal */}
+      <UiModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} width="400px">
+        <UiModalHeader>
+          <h3 className="text-lg font-bold">Nueva Organización</h3>
+        </UiModalHeader>
+        <form onSubmit={handleCreateOrg}>
+          <UiModalBody>
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+            <UiInput
+              label="Nombre de la empresa"
+              placeholder="Ej: Mi StartUp S.L."
+              value={newOrgName}
+              onChange={(e) => setNewOrgName(e.target.value)}
+              required
+            />
+          </UiModalBody>
+          <UiModalFooter>
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              onClick={() => setShowCreateModal(false)}
+            >
+              Cancelar
+            </button>
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              disabled={submitting || !newOrgName.trim()}
+            >
+              {submitting ? 'Creando...' : 'Crear'}
+            </button>
+          </UiModalFooter>
+        </form>
+      </UiModal>
     </div>
   )
 }
