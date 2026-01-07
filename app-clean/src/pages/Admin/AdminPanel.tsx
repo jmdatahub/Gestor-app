@@ -11,10 +11,9 @@ import {
   type UserProfile 
 } from '../../services/adminService'
 import { useI18n } from '../../hooks/useI18n'
-import { Shield, Users, Building, AlertTriangle, UserX, UserCheck, RefreshCw, Activity, Search, Filter, MoreHorizontal, Download } from 'lucide-react'
-import { UiCard } from '../../components/ui/UiCard'
+import { Shield, Users, Building, AlertTriangle, UserX, UserCheck, RefreshCw, Activity, Search, Filter, MoreHorizontal, Download, ChevronDown } from 'lucide-react'
 
-// Super Admin email - hardcoded for now (can be moved to env or profiles table)
+// Super Admin email 
 const SUPER_ADMIN_EMAIL = 'mp.jorge00@gmail.com'
 
 export default function AdminPanel() {
@@ -60,7 +59,6 @@ export default function AdminPanel() {
 
   const loadStats = async (): Promise<boolean> => {
     try {
-      // First check if the database is healthy
       const health = await checkDatabaseHealth()
       if (!health.profilesExists) {
         setProfilesTableExists(false)
@@ -79,7 +77,6 @@ export default function AdminPanel() {
       return true
     } catch (error) {
       console.error('Error loading stats:', error)
-      setProfilesTableExists(false)
       return false
     }
   }
@@ -120,6 +117,7 @@ export default function AdminPanel() {
   }
 
   const formatDate = (date: string) => {
+    if (!date) return '-'
     return new Date(date).toLocaleDateString('es-ES', {
       day: '2-digit',
       month: 'short',
@@ -129,440 +127,269 @@ export default function AdminPanel() {
 
   if (loading) {
     return (
-      <div className="page-container">
-        <div className="d-flex items-center justify-center" style={{ minHeight: '200px' }}>
-          <div className="spinner"></div>
-        </div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
       </div>
     )
   }
 
   if (!isSuperAdmin) {
     return (
-      <div className="page-container">
-        <div style={{
-          maxWidth: '600px',
-          margin: '4rem auto',
-          textAlign: 'center',
-          padding: '3rem',
-          background: 'var(--bg-card)',
-          borderRadius: '24px',
-          border: '1px solid var(--border-color)',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-        }}>
-          <div style={{
-            width: '80px',
-            height: '80px',
-            borderRadius: '50%',
-            background: 'rgba(239, 68, 68, 0.1)',
-            color: '#EF4444',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 1.5rem'
-          }}>
-            <Shield size={40} />
-          </div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>Acceso Restringido</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-            Esta sección es exclusiva para la administración del sistema.
-          </p>
-          <div style={{
-            padding: '0.75rem 1rem',
-            background: 'var(--gray-50)',
-            borderRadius: '12px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            fontSize: '0.875rem',
-            color: 'var(--text-muted)'
-          }}>
-            <UserX size={16} />
-            {currentUserEmail || 'Usuario no identificado'}
-          </div>
+      <div className="flex flex-col items-center justify-center min-h-[500px] text-center p-6 bg-[#0f172a] rounded-3xl border border-[#1e293b]">
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-600/10 flex items-center justify-center mb-6 shadow-xl shadow-red-900/20">
+          <Shield size={40} className="text-red-500" />
+        </div>
+        <h2 className="text-3xl font-bold text-white mb-2">Acceso Restringido</h2>
+        <p className="text-gray-400 max-w-md mb-8 text-lg">
+          Esta sección es exclusiva para la administración del sistema. Tu cuenta no tiene los permisos necesarios.
+        </p>
+        <div className="flex items-center gap-3 px-4 py-2 bg-[#1e293b] rounded-full border border-[#334155]">
+          <UserX size={16} className="text-gray-400" />
+          <span className="text-gray-300 font-medium text-sm">{currentUserEmail}</span>
         </div>
       </div>
     )
   }
 
+  const getInitials = (email: string | null) => {
+    return (email || '?').charAt(0).toUpperCase()
+  }
+
   return (
-    <div className="page-container">
+    <div className="max-w-[1600px] mx-auto pb-12">
       {/* Header */}
-      <div className="page-header" style={{ marginBottom: '2.5rem' }}>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              borderRadius: '14px',
-              background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', // Green gradient for admin/security
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
-            }}>
-              <Shield size={24} color="white" />
+          <div className="flex items-center gap-4 mb-2">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+              <Shield size={24} className="text-white" />
             </div>
-            <h1 className="page-title" style={{ margin: 0 }}>Panel de Administración</h1>
+            <div>
+              <h1 className="text-3xl font-bold text-white tracking-tight">Panel de Administración</h1>
+            </div>
           </div>
-          <p className="page-subtitle" style={{ marginLeft: '60px' }}>
-            Vista general del sistema, métricas y gestión de usuarios
+          <p className="text-gray-400 ml-[64px] font-medium">
+            Métricas clave y control total del sistema
           </p>
         </div>
         
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div className="flex gap-3 ml-[64px] md:ml-0">
             <button 
-              className="btn"
+              className="px-4 py-2.5 rounded-xl bg-[#1e293b] border border-[#334155] text-gray-300 hover:text-white hover:bg-[#334155] transition-all flex items-center gap-2 font-medium text-sm shadow-sm"
               onClick={() => { loadStats(); loadUsers(); }}
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-color)',
-                color: 'var(--text-primary)',
-                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
-              }}
             >
-              <RefreshCw size={18} />
+              <RefreshCw size={16} />
               <span className="hidden sm:inline">Actualizar</span>
             </button>
             <button 
-              className="btn btn-primary"
-              style={{
-                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
-                border: 'none',
-                color: 'white'
-              }}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center gap-2 font-medium text-sm shadow-lg shadow-emerald-900/20 border border-emerald-500/50"
             >
-              <Download size={18} />
-              <span className="hidden sm:inline">Exportar Reporte</span>
+              <Download size={16} />
+              <span className="hidden sm:inline">Exportar Datos</span>
             </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* KPI: Users */}
-        <div style={{
-          background: 'var(--bg-card)',
-          borderRadius: '20px',
-          padding: '1.5rem',
-          border: '1px solid var(--border-color)',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-            <div style={{
-              padding: '0.75rem',
-              borderRadius: '12px',
-              background: 'rgba(59, 130, 246, 0.1)',
-              color: '#3B82F6'
-            }}>
+      {/* KPI Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+        {/* Users Card */}
+        <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
+          <div className="flex justify-between items-start mb-6">
+            <div className="p-3 rounded-2xl bg-blue-500/10 text-blue-400 group-hover:scale-110 transition-transform duration-300">
               <Users size={24} />
             </div>
-            <span style={{ 
-              fontSize: '0.75rem', 
-              fontWeight: 600, 
-              color: '#10B981', 
-              background: 'rgba(16, 185, 129, 0.1)', 
-              padding: '0.25rem 0.5rem', 
-              borderRadius: '10px' 
-            }}>
-              +12% mes
+            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+              +12% este mes
             </span>
           </div>
-          <div>
-            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginBottom: '0.25rem' }}>
-              {profilesTableExists ? userCount.toLocaleString() : '--'}
+          <div className="space-y-1">
+            <h3 className="text-4xl font-bold text-white tracking-tight">
+              {profilesTableExists ? userCount.toLocaleString() : '-'}
             </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500 }}>Usuarios Registrados</p>
+            <p className="text-gray-400 font-medium">Usuarios Registrados</p>
           </div>
         </div>
 
-        {/* KPI: Organizations */}
-        <div style={{
-          background: 'var(--bg-card)',
-          borderRadius: '20px',
-          padding: '1.5rem',
-          border: '1px solid var(--border-color)',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-            <div style={{
-              padding: '0.75rem',
-              borderRadius: '12px',
-              background: 'rgba(139, 92, 246, 0.1)',
-              color: '#8B5CF6'
-            }}>
+        {/* Organizations Card */}
+        <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
+          <div className="flex justify-between items-start mb-6">
+            <div className="p-3 rounded-2xl bg-violet-500/10 text-violet-400 group-hover:scale-110 transition-transform duration-300">
               <Building size={24} />
             </div>
-            <span style={{ 
-              fontSize: '0.75rem', 
-              fontWeight: 600, 
-              color: '#10B981', 
-              background: 'rgba(16, 185, 129, 0.1)', 
-              padding: '0.25rem 0.5rem', 
-              borderRadius: '10px' 
-            }}>
-              +5% mes
+            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+              +5% este mes
             </span>
           </div>
-          <div>
-            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginBottom: '0.25rem' }}>
+          <div className="space-y-1">
+            <h3 className="text-4xl font-bold text-white tracking-tight">
               {orgCount.toLocaleString()}
             </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500 }}>Organizaciones Activas</p>
+            <p className="text-gray-400 font-medium">Organizaciones Activas</p>
           </div>
         </div>
 
-        {/* KPI: Suspended */}
-        <div style={{
-          background: 'var(--bg-card)',
-          borderRadius: '20px',
-          padding: '1.5rem',
-          border: '1px solid var(--border-color)',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-            <div style={{
-              padding: '0.75rem',
-              borderRadius: '12px',
-              background: 'rgba(239, 68, 68, 0.1)',
-              color: '#EF4444'
-            }}>
+        {/* Security Card */}
+        <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-3xl p-6 border border-[#334155]/50 shadow-xl shadow-black/20 hover:border-[#334155] transition-all group">
+          <div className="flex justify-between items-start mb-6">
+            <div className="p-3 rounded-2xl bg-red-500/10 text-red-400 group-hover:scale-110 transition-transform duration-300">
               <Activity size={24} />
             </div>
-            {/* Conditional text color based on count */}
-            <span style={{ 
-              fontSize: '0.75rem', 
-              fontWeight: 600, 
-              color: suspendedCount > 0 ? '#EF4444' : '#10B981', 
-              background: suspendedCount > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
-              padding: '0.25rem 0.5rem', 
-              borderRadius: '10px' 
-            }}>
-              {suspendedCount > 0 ? 'Requiere atención' : 'Todo en orden'}
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${suspendedCount > 0 ? 'text-red-400 bg-red-500/10 border-red-500/20' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'}`}>
+              {suspendedCount > 0 ? 'Atención Requerida' : 'Sistema Saludable'}
             </span>
           </div>
-          <div>
-            <h3 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginBottom: '0.25rem' }}>
-              {profilesTableExists ? suspendedCount : '--'}
+          <div className="space-y-1">
+            <h3 className="text-4xl font-bold text-white tracking-tight">
+              {profilesTableExists ? suspendedCount : '-'}
             </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500 }}>Alertas de Seguridad</p>
+            <p className="text-gray-400 font-medium">Alertas de Seguridad</p>
           </div>
         </div>
       </div>
 
-      {/* Users Management Section */}
-      <div style={{
-        background: 'var(--bg-card)',
-        borderRadius: '24px',
-        border: '1px solid var(--border-color)',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-        overflow: 'hidden'
-      }}>
-        <div style={{
-          padding: '1.5rem',
-          borderBottom: '1px solid var(--border-color)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '1rem'
-        }}>
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            Gestión de Usuarios
-            <span style={{ 
-              fontSize: '0.75rem', 
-              background: 'var(--gray-100)', 
-              padding: '0.2rem 0.6rem', 
-              borderRadius: '12px', 
-              color: 'var(--text-secondary)',
-              fontWeight: 500
-            }}>
-              {profilesTableExists ? userCount : 0} total
-            </span>
-          </h3>
+      {/* Main Content Section */}
+      <div className="bg-[#1e293b] rounded-3xl border border-[#334155]/50 shadow-xl overflow-hidden">
+        {/* Table Header */}
+        <div className="p-6 border-b border-[#334155] bg-[#1e293b] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-white mb-1">Gestión de Usuarios</h3>
+            <p className="text-sm text-gray-400">Administra el acceso y estado de las cuentas</p>
+          </div>
           
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <div style={{ position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-none">
+              <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input 
                 type="text" 
                 placeholder="Buscar usuario..." 
-                className="input"
-                style={{ paddingLeft: '36px', height: '40px', minWidth: '240px' }}
+                className="w-full sm:w-64 bg-[#0f172a] border border-[#334155] text-white text-sm rounded-xl pl-10 pr-4 py-2.5 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all placeholder:text-gray-500 shadow-inner"
               />
             </div>
-            <button className="btn btn-secondary icon-only" style={{ height: '40px', width: '40px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <button className="h-[42px] px-3 rounded-xl bg-[#0f172a] border border-[#334155] text-gray-300 hover:text-white hover:border-[#475569] transition-all">
                 <Filter size={18} />
             </button>
           </div>
         </div>
         
-        <div className="p-0">
+        {/* Table Content */}
+        <div className="bg-[#0f172a]/50">
           {!profilesTableExists ? (
-            <div style={{ padding: '3rem', textAlign: 'center' }}>
-              <div style={{
-                background: 'rgba(245, 158, 11, 0.1)',
-                color: '#D97706',
-                padding: '1.5rem',
-                borderRadius: '16px',
-                marginBottom: '1.5rem',
-                maxWidth: '600px',
-                margin: '0 auto 1.5rem'
-              }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontWeight: 700 }}>
-                  <AlertTriangle size={20} />
+            <div className="p-12 flex flex-col items-center justify-center text-center">
+              <div className="p-6 bg-amber-500/10 rounded-2xl border border-amber-500/20 max-w-2xl backdrop-blur-sm">
+                <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4 text-amber-500">
+                  <AlertTriangle size={24} />
+                </div>
+                <h4 className="text-lg font-bold text-amber-200 mb-2">
                   Configuración Pendiente
                 </h4>
-                <p className="text-sm">
-                  Para activar la gestión de usuarios, necesitas ejecutar la migración 
-                  <code style={{ background: 'rgba(0,0,0,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', margin: '0 0.3rem', fontFamily: 'monospace' }}>
-                    MIG_005_profiles_table.sql
-                  </code> 
-                  en tu base de datos Supabase.
+                <p className="text-amber-200/70 mb-4 leading-relaxed">
+                  Para visualizar y gestionar los usuarios, es necesario aplicar la migración de base de datos correspondiente.
                 </p>
+                <div className="bg-[#0f172a] rounded-lg p-3 text-left border border-amber-500/20">
+                   <code className="text-xs font-mono text-amber-300 block">MIG_005_profiles_table.sql</code>
+                </div>
               </div>
             </div>
           ) : loadingUsers ? (
-            <div className="flex justify-center py-12">
-              <div className="spinner"></div>
+            <div className="flex justify-center py-20">
+              <div className="relative">
+                <div className="w-12 h-12 border-4 border-[#334155] border-t-emerald-500 rounded-full animate-spin"></div>
+              </div>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="table w-full" style={{ borderCollapse: 'separate', borderSpacing: '0' }}>
-                <thead style={{ background: 'var(--gray-50)' }}>
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#1e293b] border-b border-[#334155]">
                   <tr>
-                    <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontWeight: 600 }}>Usuario</th>
-                    <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontWeight: 600 }}>Registro</th>
-                    <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontWeight: 600 }}>Estado</th>
-                    <th style={{ padding: '1rem 1.5rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontWeight: 600, textAlign: 'right' }}>Acciones</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider w-[40%]">Usuario</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider w-[20%]">Registro</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider w-[20%]">Estado</th>
+                    <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider w-[20%] text-right">Acciones</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {users.map((user, index) => (
+                <tbody className="divide-y divide-[#334155]">
+                  {users.map((user) => (
                     <tr 
                       key={user.id} 
-                      style={{ 
-                        opacity: user.is_suspended ? 0.6 : 1,
-                        background: index % 2 === 0 ? 'white' : 'var(--gray-50)'
-                      }}
-                      className="hover:bg-gray-50 transition-colors"
+                      className={`group hover:bg-[#1e293b] transition-colors ${user.is_suspended ? 'bg-red-950/5' : ''}`}
                     >
-                      <td style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          <div style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '50%',
-                            background: `linear-gradient(135deg, ${user.is_super_admin ? '#10B981' : '#6366F1'} 0%, ${user.is_super_admin ? '#059669' : '#4F46E5'} 100%)`,
-                            color: 'white',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 700,
-                            fontSize: '1rem'
-                          }}>
-                            {/* SAFE NULL CHECK: If email is null, show ? */}
-                            {(user.email || '?').charAt(0).toUpperCase()}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-lg text-sm border-2 border-[#1e293b] ring-2 ring-transparent group-hover:ring-[#334155] transition-all ${user.is_super_admin ? 'bg-gradient-to-br from-emerald-500 to-emerald-600' : 'bg-gradient-to-br from-indigo-500 to-indigo-600'}`}>
+                            {getInitials(user.email)}
                           </div>
                           <div>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {/* SAFE NULL CHECK: if display_name and email are nullify, show 'Usuario' */}
-                              {user.display_name || (user.email ? user.email.split('@')[0] : 'Usuario')}
+                            <div className="font-semibold text-white text-sm flex items-center gap-2">
+                              {user.display_name || 'Usuario'}
                               {user.is_super_admin && (
-                                <span style={{
-                                  marginLeft: '0.5rem',
-                                  fontSize: '0.65rem',
-                                  padding: '0.15rem 0.5rem',
-                                  borderRadius: '10px',
-                                  background: '#DCFCE7',
-                                  color: '#166534',
-                                  fontWeight: 700,
-                                  textTransform: 'uppercase'
-                                }}>Admin</span>
+                                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">
+                                  Admin
+                                </span>
                               )}
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                              {user.email || 'Sin email registrado'}
+                            <div className="text-xs text-gray-400 mt-0.5 font-medium">
+                              {user.email || <span className="text-gray-600 italic">Sin email registrado</span>}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                      <td className="px-6 py-4 text-sm text-gray-400 font-medium">
                         {formatDate(user.created_at)}
                       </td>
-                      <td style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                      <td className="px-6 py-4">
                         {user.is_suspended ? (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.375rem',
-                            padding: '0.25rem 0.75rem',
-                            borderRadius: '20px',
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            color: '#EF4444',
-                            fontSize: '0.75rem',
-                            fontWeight: 600
-                          }}>
-                            <UserX size={12} /> Suspendido
-                          </span>
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold uppercase tracking-wide">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                            Suspendido
+                          </div>
                         ) : (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.375rem',
-                            padding: '0.25rem 0.75rem',
-                            borderRadius: '20px',
-                            background: 'rgba(34, 197, 94, 0.1)',
-                            color: '#16A34A',
-                            fontSize: '0.75rem',
-                            fontWeight: 600
-                          }}>
-                            <UserCheck size={12} /> Activo
-                          </span>
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wide">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Activo
+                          </div>
                         )}
                       </td>
-                      <td style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border-color)', textAlign: 'right' }}>
+                      <td className="px-6 py-4 text-right">
                         {user.id !== currentUserId && (
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             {user.is_suspended ? (
                               <button 
-                                className="btn btn-sm"
+                                className="h-8 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center gap-2 text-xs font-medium"
                                 onClick={() => handleUnsuspend(user.id)}
-                                style={{ background: '#DCFCE7', color: '#166534', border: 'none' }}
-                                title="Reactivar usuario"
                               >
-                                <UserCheck size={16} />
+                                <UserCheck size={14} /> Reactivar
                               </button>
                             ) : (
                               <button 
-                                className="btn btn-sm"
+                                className="h-8 px-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all flex items-center gap-2 text-xs font-medium"
                                 onClick={() => handleSuspend(user.id)}
-                                style={{ background: '#FEE2E2', color: '#991B1B', border: 'none' }}
-                                title="Suspender usuario"
                               >
-                                <UserX size={16} />
+                                <UserX size={14} /> Suspender
                               </button>
                             )}
-                            <button className="btn btn-sm btn-ghost" style={{ padding: '0.25rem' }}>
-                                <MoreHorizontal size={18} />
-                            </button>
                           </div>
                         )}
                         {user.id === currentUserId && (
-                          <span className="text-gray-400 text-sm italic">Sesión actual</span>
+                          <span className="text-gray-500 text-xs font-semibold px-3 py-1 bg-[#1e293b] rounded-lg border border-[#334155]">TÚ</span>
                         )}
                       </td>
+                    </tr>
+                  ))}
+                  
+                  {users.length > 0 && Array.from({ length: Math.max(0, 5 - users.length) }).map((_, i) => (
+                    <tr key={`empty-${i}`} className="h-[73px]">
+                      <td colSpan={4}></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               {users.length === 0 && (
-                <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  <img src="https://cdni.iconscout.com/illustration/premium/thumb/empty-state-2130362-1800926.png" alt="Empty" style={{ height: '120px', opacity: 0.5, marginBottom: '1rem', mixBlendMode: 'multiply' }} />
-                  <p>No se encontraron usuarios</p>
+                <div className="py-24 flex flex-col items-center justify-center text-center">
+                  <div className="w-16 h-16 rounded-full bg-[#1e293b] flex items-center justify-center mb-4 border border-[#334155]">
+                    <Search size={24} className="text-gray-600" />
+                  </div>
+                  <h3 className="text-white font-medium mb-1">No se encontraron usuarios</h3>
+                  <p className="text-gray-500 text-sm">Prueba ajustando los filtros de búsqueda</p>
                 </div>
               )}
             </div>
