@@ -11,31 +11,41 @@ export interface UserProfile {
 
 // Get all users (only works for super admins due to RLS)
 export async function getAllUsers(): Promise<UserProfile[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false })
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-  if (error) {
-    console.error('Error fetching users:', error)
-    throw error
+    if (error) {
+      console.warn('Error fetching users (safe fallback):', error.message)
+      return []
+    }
+
+    return data as UserProfile[]
+  } catch (err) {
+    console.error('Unexpected error in getAllUsers:', err)
+    return []
   }
-
-  return data as UserProfile[]
 }
 
 // Get user count
 export async function getUserCount(): Promise<number> {
-  const { count, error } = await supabase
-    .from('profiles')
-    .select('*', { count: 'exact', head: true })
+  try {
+    const { count, error } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
 
-  if (error) {
-    console.error('Error counting users:', error)
+    if (error) {
+      console.warn('Error counting users (safe fallback):', error.message)
+      return 0
+    }
+
+    return count || 0
+  } catch (err) {
+    console.error('Unexpected error in getUserCount:', err)
     return 0
   }
-
-  return count || 0
 }
 
 // Suspend a user
@@ -60,36 +70,49 @@ export async function unsuspendUser(userId: string): Promise<void> {
 
 // Get suspended user count
 export async function getSuspendedCount(): Promise<number> {
-  const { count, error } = await supabase
-    .from('profiles')
-    .select('*', { count: 'exact', head: true })
-    .eq('is_suspended', true)
+  try {
+    const { count, error } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_suspended', true)
 
-  if (error) return 0
-  return count || 0
+    if (error) return 0
+    return count || 0
+  } catch (err) {
+    return 0
+  }
 }
 
 // Get organization count (for admin stats)
 export async function getOrganizationCount(): Promise<number> {
-  const { count, error } = await supabase
-    .from('organizations')
-    .select('*', { count: 'exact', head: true })
+  try {
+    const { count, error } = await supabase
+      .from('organizations')
+      .select('*', { count: 'exact', head: true })
 
-  if (error) return 0
-  return count || 0
+    if (error) return 0
+    return count || 0
+  } catch (err) {
+    return 0
+  }
 }
 
 // Check if current user is super admin
 export async function checkIsSuperAdmin(): Promise<boolean> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return false
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return false
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('is_super_admin')
-    .eq('id', user.id)
-    .single()
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('is_super_admin')
+      .eq('id', user.id)
+      .single()
 
-  if (error || !data) return false
-  return data.is_super_admin === true
+    if (error || !data) return false
+    return data.is_super_admin === true
+  } catch (err) {
+    console.warn('Check super admin failed (safe fallback):', err)
+    return false
+  }
 }

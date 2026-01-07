@@ -303,7 +303,8 @@ export async function createTransfer(
   toAccountId: string,
   amount: number,
   date: string,
-  description?: string
+  description?: string,
+  organizationId?: string | null // [NEW] Add org support
 ): Promise<void> {
   // Create two movements: one outgoing, one incoming
   const transferDescription = description || 'Transferencia interna'
@@ -313,6 +314,7 @@ export async function createTransfer(
     .insert([
       {
         user_id: userId,
+        organization_id: organizationId || null, // Include organization_id
         account_id: fromAccountId,
         kind: 'transfer_out',
         amount: amount,
@@ -323,6 +325,7 @@ export async function createTransfer(
       },
       {
         user_id: userId,
+        organization_id: organizationId || null, // Include organization_id
         account_id: toAccountId,
         kind: 'transfer_in',
         amount: amount,
