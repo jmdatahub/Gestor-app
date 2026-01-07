@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { LogOut, Check, Building, User, ChevronUp, ChevronsUpDown, Plus, Settings } from 'lucide-react'
+import { LogOut, Check, Building, User, ChevronsUpDown, Plus, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
@@ -34,126 +34,175 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     navigate('/auth')
   }
 
-  // Get current display info
+  // Visual Helpers
   const displayName = currentWorkspace ? currentWorkspace.name : 'Espacio Personal'
-  const displaySubtext = currentWorkspace ? 'Organización' : 'Usuario Free'
-  const initial = currentWorkspace ? currentWorkspace.name.substring(0, 2).toUpperCase() : 'U'
+  const displaySubtext = currentWorkspace ? 'Organización Pro' : 'Plan Gratuito'
+  
+  // Custom Gradients based on type
+  const avatarGradient = currentWorkspace 
+    ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500' // Org: Vivid
+    : 'bg-gradient-to-br from-gray-700 via-gray-800 to-gray-900'     // Personal: Sleek Dark
 
   return (
     <div className="relative" ref={menuRef}>
-      {/* Menu Popup (Above) */}
+      
+      {/* Menu Popup (Floating with Glassmorphism) */}
       {isOpen && (
         <div 
-          className="absolute bottom-full left-0 mb-2 w-64 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl shadow-xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in z-50"
-          style={{ 
-             left: isCollapsed ? '0' : '0', 
-             width: '260px' // Fixed width for menu even if sidebar is collapsed (it will overlap) (Actually if collapsed, sidebar might clip? Sidebar has overflow-hidden usually? No, sidebar footer usually doesn't clip overflow if we handle it right. We might need portal or fixed positioning if sidebar clips. AppLayout sidebar usually doesn't clip vertical overflow, but explicit width might be strict. Let's try relative first.)
+          className="absolute bottom-full left-0 mb-3 w-[260px] rounded-2xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200 z-50 shadow-2xl ring-1 ring-black/5"
+          style={{
+            backgroundColor: 'rgba(var(--bg-card-rgb), 0.95)', // Assuming vars exist, else fallback
+            backdropFilter: 'blur(12px)',
+            border: '1px solid var(--border-color)',
+            left: isCollapsed ? '-0.5rem' : '0' // Adjust slightly if collapsed
           }}
         >
-           {/* Header */}
-           <div className="p-3 border-b border-[var(--border-color)] bg-[var(--bg-header)] flex items-center justify-between">
-             <span className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Mi Cuenta</span>
+           {/* Header Section */}
+           <div className="p-4 bg-gradient-to-r from-[var(--bg-header)] to-[var(--bg-card)] border-b border-[var(--border-color)]">
+             <h3 className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center justify-between">
+               <span>Cambiar Espacio</span>
+               <span className="bg-[var(--primary)]/10 text-[var(--primary)] text-[10px] px-2 py-0.5 rounded-full">
+                 {workspaces.length + 1} disponibles
+               </span>
+             </h3>
            </div>
 
-           {/* Workspace List */}
-           <div className="p-2 flex flex-col gap-1 max-h-60 overflow-y-auto">
-              <div className="px-2 py-1 text-[10px] font-bold text-[var(--text-secondary)] uppercase">Espacios de Trabajo</div>
+           {/* List */}
+           <div className="p-2 flex flex-col gap-1 max-h-[300px] overflow-y-auto custom-scrollbar">
               
-              {/* Personal */}
+              {/* Personal Option */}
               <button
                 onClick={() => handleSwitch(null)}
-                className={`flex items-center gap-3 w-full p-2 rounded-lg text-sm transition-colors ${
+                className={`group flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 border border-transparent ${
                   !currentWorkspace 
-                    ? 'bg-[var(--primary-light)] text-[var(--primary)]' 
-                    : 'hover:bg-[var(--gray-50)] text-[var(--text-primary)]'
+                    ? 'bg-[var(--primary)]/5 border-[var(--primary)]/10' 
+                    : 'hover:bg-[var(--bg-header)] hover:border-[var(--border-color)]'
                 }`}
               >
-                <div className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 text-gray-500">
-                  <User size={14} />
+                <div className={`
+                  w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition-transform group-hover:scale-105
+                  ${!currentWorkspace ? 'bg-[var(--primary)] text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}
+                `}>
+                  <User size={16} />
                 </div>
-                <div className="flex-1 text-left truncate">
-                  <div className="font-medium">Personal</div>
+                <div className="flex-1 text-left">
+                  <div className={`text-sm font-semibold ${!currentWorkspace ? 'text-[var(--primary)]' : 'text-[var(--text-primary)]'}`}>
+                    Personal
+                  </div>
+                  <div className="text-[10px] text-[var(--text-secondary)]">Tu espacio privado</div>
                 </div>
-                {!currentWorkspace && <Check size={14} />}
+                {!currentWorkspace && (
+                  <div className="bg-[var(--primary)] rounded-full p-1">
+                    <Check size={10} className="text-white" strokeWidth={4} />
+                  </div>
+                )}
               </button>
 
-              {/* Orgs */}
-              {workspaces.map((ws) => (
-                <button
-                  key={ws.org_id}
-                  onClick={() => handleSwitch(ws.org_id)}
-                  className={`flex items-center gap-3 w-full p-2 rounded-lg text-sm transition-colors ${
-                    currentWorkspace?.id === ws.org_id
-                      ? 'bg-[var(--primary-light)] text-[var(--primary)]' 
-                      : 'hover:bg-[var(--gray-50)] text-[var(--text-primary)]'
-                  }`}
-                >
-                  <div className="w-6 h-6 rounded flex items-center justify-center bg-indigo-100 text-indigo-500">
-                    <Building size={14} />
-                  </div>
-                  <div className="flex-1 text-left truncate">
-                    <div className="font-medium">{ws.organization.name}</div>
-                  </div>
-                  {currentWorkspace?.id === ws.org_id && <Check size={14} />}
-                </button>
-              ))}
+              {/* Separator Label */}
+              {workspaces.length > 0 && (
+                <div className="px-3 py-2 mt-1">
+                  <span className="text-[10px] font-bold text-[var(--text-secondary)]/70 uppercase">Organizaciones</span>
+                </div>
+              )}
 
-              <button
-                onClick={() => { setIsOpen(false); navigate('/app/organizations'); }}
-                className="flex items-center gap-3 w-full p-2 rounded-lg text-sm hover:bg-[var(--gray-50)] text-[var(--text-secondary)] mt-1"
-              >
-                 <div className="w-6 h-6 rounded flex items-center justify-center border border-dashed border-gray-300">
-                    <Plus size={14} />
-                 </div>
-                 <span className="text-left font-medium">Crear / Unirse...</span>
-              </button>
+              {/* Organizations */}
+              {workspaces.map((ws) => {
+                const isActive = currentWorkspace?.id === ws.org_id
+                return (
+                  <button
+                    key={ws.org_id}
+                    onClick={() => handleSwitch(ws.org_id)}
+                    className={`group flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 border border-transparent ${
+                      isActive
+                        ? 'bg-[var(--primary)]/5 border-[var(--primary)]/10' 
+                        : 'hover:bg-[var(--bg-header)] hover:border-[var(--border-color)]'
+                    }`}
+                  >
+                    <div className={`
+                      w-8 h-8 rounded-lg flex items-center justify-center shadow-sm transition-transform group-hover:scale-105
+                      ${isActive 
+                        ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' 
+                        : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500'}
+                    `}>
+                      <Building size={16} />
+                    </div>
+                    <div className="flex-1 text-left min-w-0">
+                      <div className={`text-sm font-semibold truncate ${isActive ? 'text-[var(--primary)]' : 'text-[var(--text-primary)]'}`}>
+                        {ws.organization.name}
+                      </div>
+                      <div className="text-[10px] text-[var(--text-secondary)] truncate">
+                        {isActive ? 'Activo ahora' : 'Ver espacio'}
+                      </div>
+                    </div>
+                    {isActive && (
+                      <div className="bg-[var(--primary)] rounded-full p-1">
+                        <Check size={10} className="text-white" strokeWidth={4} />
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
            </div>
 
-           <div className="border-t border-[var(--border-color)] my-1"></div>
-
-           {/* Actions */}
-           <div className="p-2">
-             <button 
+           {/* Footer Actions */}
+           <div className="p-2 border-t border-[var(--border-color)] bg-[var(--bg-header)]/50 backdrop-blur-sm grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { setIsOpen(false); navigate('/app/organizations'); }}
+                className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg hover:bg-[var(--bg-card)] hover:shadow-sm transition-all text-[var(--text-secondary)] hover:text-[var(--primary)]"
+              >
+                 <Plus size={16} />
+                 <span className="text-[10px] font-medium">Crear Org</span>
+              </button>
+              
+              <button 
                onClick={handleSignOut}
-               className="flex items-center gap-3 w-full p-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors"
-             >
+               className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg hover:bg-red-50 hover:text-red-600 transition-all text-[var(--text-secondary)]"
+              >
                <LogOut size={16} />
-               <span className="font-medium">Cerrar Sesión</span>
+               <span className="text-[10px] font-medium">Salir</span>
              </button>
            </div>
         </div>
       )}
 
-      {/* Main Button */}
+      {/* Main Trigger Button */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center gap-3 p-2 rounded-xl transition-all duration-200 ${
-          isOpen ? 'bg-[var(--bg-card)] shadow-sm' : 'hover:bg-[var(--bg-header)]'
-        }`}
+        className={`
+          w-full flex items-center gap-3 p-2 rounded-2xl transition-all duration-200 border
+          ${isOpen 
+            ? 'bg-[var(--bg-card)] border-[var(--border-color)] shadow-lg scale-[1.02]' 
+            : 'border-transparent hover:bg-[var(--bg-header)] hover:border-[var(--border-color)]/50'
+          }
+        `}
       >
-        {/* Avatar */}
+        {/* Avatar with Ring */}
         <div className={`
-          flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold shadow-sm transition-all
-          ${currentWorkspace ? 'bg-gradient-to-br from-indigo-500 to-purple-600' : 'bg-gradient-to-br from-gray-700 to-gray-900'}
+          flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md
+          ${avatarGradient}
+          ring-2 ring-white/10 ring-offset-2 ring-offset-[var(--bg-sidebar)]
         `}>
-          {currentWorkspace ? <Building size={18} /> : <User size={18} />}
+          {currentWorkspace ? <Building size={18} strokeWidth={2.5} /> : <User size={18} strokeWidth={2.5} />}
         </div>
 
-        {/* Info (Hidden if collapsed) */}
+        {/* Info Area */}
         {!isCollapsed && (
-          <div className="flex-1 text-left overflow-hidden">
-            <div className="font-bold text-sm truncate text-[var(--text-primary)]">
-              {displayName}
+          <>
+            <div className="flex-1 text-left min-w-0">
+              <div className="text-sm font-bold text-[var(--text-primary)] truncate flex items-center gap-1.5">
+                {displayName}
+                {currentWorkspace && <Sparkles size={10} className="text-amber-400 fill-amber-400 animate-pulse" />}
+              </div>
+              <div className="text-[11px] font-medium text-[var(--text-secondary)] truncate opacity-80">
+                {displaySubtext}
+              </div>
             </div>
-            <div className="text-[10px] uppercase font-bold text-[var(--text-secondary)] truncate">
-              {displaySubtext}
-            </div>
-          </div>
-        )}
 
-        {/* Chevron (Hidden if collapsed) */}
-        {!isCollapsed && (
-          <ChevronsUpDown size={16} className="text-[var(--text-secondary)]" />
+            {/* Selector Icon */}
+            <div className="text-[var(--text-secondary)] opacity-50 group-hover:opacity-100 transition-opacity">
+              <ChevronsUpDown size={16} />
+            </div>
+          </>
         )}
       </button>
     </div>

@@ -89,7 +89,6 @@ export default function AdminPanel() {
     try {
       const data = await getAllUsers()
       setUsers(data)
-      // We don't set profilesTableExists here anymore, as loadStats determines it authoritatively
     } catch (error) {
       console.error('Error loading users:', error)
     } finally {
@@ -465,11 +464,13 @@ export default function AdminPanel() {
                             fontWeight: 700,
                             fontSize: '1rem'
                           }}>
-                            {user.email.charAt(0).toUpperCase()}
+                            {/* SAFE NULL CHECK: If email is null, show ? */}
+                            {(user.email || '?').charAt(0).toUpperCase()}
                           </div>
                           <div>
                             <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {user.display_name || user.email.split('@')[0]}
+                              {/* SAFE NULL CHECK: if display_name and email are nullify, show 'Usuario' */}
+                              {user.display_name || (user.email ? user.email.split('@')[0] : 'Usuario')}
                               {user.is_super_admin && (
                                 <span style={{
                                   marginLeft: '0.5rem',
@@ -484,7 +485,7 @@ export default function AdminPanel() {
                               )}
                             </div>
                             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                              {user.email}
+                              {user.email || 'Sin email registrado'}
                             </div>
                           </div>
                         </div>
