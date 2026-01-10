@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { LogOut, Check, Building, User, ChevronsUpDown, Plus, Sparkles } from 'lucide-react'
+import { LogOut, Check, Building, User, ChevronsUpDown, Plus } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
@@ -11,18 +12,38 @@ interface SidebarUserMenuProps {
 const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
   const { currentWorkspace, workspaces, switchWorkspace } = useWorkspace()
   const [isOpen, setIsOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
 
+  // Calculate menu position when opening
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      setMenuPosition({
+        top: rect.top - 12, // 12px gap above trigger
+        left: rect.left
+      })
+    }
+  }, [isOpen])
+
+  // Close on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        triggerRef.current && !triggerRef.current.contains(target)
+      ) {
         setIsOpen(false)
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isOpen])
 
   const handleSwitch = (orgId: string | null) => {
     switchWorkspace(orgId)
@@ -34,155 +55,242 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     navigate('/auth')
   }
 
-  // Info
-  const displayName = currentWorkspace ? currentWorkspace.name : 'Espacio Personal'
+  // Display info
+  const displayName = currentWorkspace ? currentWorkspace.name : 'Personal'
   const displaySubtext = currentWorkspace ? 'Organización Pro' : 'Plan Gratuito'
   
-  // Gradients
-  const avatarGradient = currentWorkspace 
-    ? 'bg-gradient-to-br from-indigo-600 via-indigo-500 to-indigo-400' 
-    : 'bg-gradient-to-br from-slate-700 via-slate-600 to-slate-500'
+  // Styles
+  const menuContainerStyle: React.CSSProperties = {
+    position: 'fixed',
+    bottom: `calc(100vh - ${menuPosition.top}px)`,
+    left: menuPosition.left,
+    width: '260px',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    zIndex: 9999,
+    backgroundColor: '#1E293B',
+    border: '1px solid #334155',
+    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+    animation: 'dropdown-in 0.2s ease-out'
+  }
+
+  const sectionHeaderStyle: React.CSSProperties = {
+    padding: '12px',
+    backgroundColor: '#0F172A',
+    borderBottom: '1px solid #334155',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  }
+
+  const itemStyle = (isActive: boolean): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: isActive ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+    color: isActive ? '#818CF8' : '#CBD5E1',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'all 0.15s ease'
+  })
+
+  const avatarStyle = (isActive: boolean): React.CSSProperties => ({
+    width: '32px',
+    height: '32px',
+    borderRadius: '6px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: isActive ? '#4F46E5' : '#334155',
+    color: isActive ? '#FFFFFF' : '#94A3B8',
+    flexShrink: 0
+  })
+
+  const triggerButtonStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    width: '100%',
+    padding: '8px',
+    borderRadius: '12px',
+    border: '1px solid',
+    borderColor: isOpen ? '#334155' : 'transparent',
+    backgroundColor: isOpen ? '#1E293B' : 'transparent',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  }
+
+  const mainAvatarStyle: React.CSSProperties = {
+    width: '36px',
+    height: '36px',
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: currentWorkspace ? 'linear-gradient(135deg, #6366F1 0%, #A855F7 100%)' : '#334155',
+    color: '#FFFFFF',
+    flexShrink: 0,
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
+  }
+
+  const footerActionStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '10px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#94A3B8',
+    fontSize: '11px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    width: '100%'
+  }
+
+  // Menu content as a portal
+  const menuContent = isOpen ? createPortal(
+    <div ref={menuRef} style={menuContainerStyle}>
+       {/* Header */}
+       <div style={sectionHeaderStyle}>
+         <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8', letterSpacing: '0.05em' }}>
+           Cambiar Espacio
+         </span>
+         <span style={{ fontSize: '10px', backgroundColor: 'rgba(99, 102, 241, 0.2)', color: '#818CF8', padding: '2px 8px', borderRadius: '999px', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+           {workspaces.length + 1}
+         </span>
+       </div>
+
+       {/* List */}
+       <div style={{ padding: '6px', maxHeight: '300px', overflowY: 'auto' }}>
+          
+          {/* Personal Option */}
+          <button
+            onClick={() => handleSwitch(null)}
+            style={itemStyle(!currentWorkspace)}
+            onMouseEnter={(e) => { if (currentWorkspace) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)' }}
+            onMouseLeave={(e) => { if (currentWorkspace) e.currentTarget.style.backgroundColor = 'transparent' }}
+          >
+            <div style={avatarStyle(!currentWorkspace)}>
+              <User size={16} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: !currentWorkspace ? '#FFFFFF' : '#CBD5E1' }}>Personal</div>
+              <div style={{ fontSize: '10px', color: '#64748B' }}>Espacio privado</div>
+            </div>
+            {!currentWorkspace && <Check size={14} style={{ color: '#818CF8' }} strokeWidth={3} />}
+          </button>
+
+          {workspaces.length > 0 && (
+            <div style={{ padding: '12px 12px 6px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B' }}>
+              Organizaciones
+            </div>
+          )}
+
+          {/* Organizations */}
+          {workspaces.map((ws) => {
+            const isActive = currentWorkspace?.id === ws.org_id
+            return (
+              <button
+                key={ws.org_id}
+                onClick={() => handleSwitch(ws.org_id)}
+                style={itemStyle(isActive)}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)' }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent' }}
+              >
+                <div style={avatarStyle(isActive)}>
+                  <Building size={16} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: isActive ? '#FFFFFF' : '#CBD5E1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {ws.organization.name}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#64748B' }}>Organización</div>
+                </div>
+                {isActive && <Check size={14} style={{ color: '#818CF8' }} strokeWidth={3} />}
+              </button>
+            )
+          })}
+       </div>
+
+       {/* Footer */}
+       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', padding: '6px', backgroundColor: '#0F172A', borderTop: '1px solid #334155' }}>
+          <button
+            onClick={() => { setIsOpen(false); navigate('/app/profile'); }}
+            style={footerActionStyle}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)'; e.currentTarget.style.color = '#818CF8'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+          >
+             <User size={14} />
+             <span>Perfil</span>
+          </button>
+          <button
+            onClick={() => { setIsOpen(false); navigate('/app/organizations'); }}
+            style={footerActionStyle}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.color = '#FFFFFF'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+          >
+             <Plus size={14} />
+             <span>Crear</span>
+          </button>
+          
+          <button 
+           onClick={handleSignOut}
+           style={footerActionStyle}
+           onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#F87171'; }}
+           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+          >
+           <LogOut size={14} />
+           <span>Salir</span>
+         </button>
+       </div>
+    </div>,
+    document.body
+  ) : null
 
   return (
-    <div className="relative" ref={menuRef}>
-      
-      {/* Menu Popup */}
-      {isOpen && (
-        <div 
-          className="absolute bottom-full left-0 mb-3 w-[260px] rounded-xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200 z-50 shadow-2xl bg-[#1e293b] border border-slate-700 ring-1 ring-black/20"
-          style={{ left: isCollapsed ? '-0.5rem' : '0' }}
-        >
-           {/* Header */}
-           <div className="px-3 py-3 bg-[#0f172a] border-b border-slate-700 flex items-center justify-between">
-             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-               Cambiar Espacio
-             </span>
-             <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-medium border border-indigo-500/20">
-               {workspaces.length + 1} disponibles
-             </span>
-           </div>
-
-           {/* List */}
-           <div className="p-1 flex flex-col gap-1 max-h-[300px] overflow-y-auto custom-scrollbar bg-[#1e293b]">
-              
-              {/* Personal Option */}
-              <button
-                onClick={() => handleSwitch(null)}
-                className={`group flex items-center gap-3 w-full p-2 rounded-lg transition-all text-left ${
-                  !currentWorkspace ? 'bg-slate-700/50' : 'hover:bg-slate-800'
-                }`}
-              >
-                <div className={`
-                  w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0
-                  ${!currentWorkspace ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-700 text-slate-400 group-hover:bg-slate-600 group-hover:text-slate-200'}
-                `}>
-                  <User size={16} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-medium truncate ${!currentWorkspace ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>
-                    Personal
-                  </div>
-                  <div className="text-[10px] text-slate-500 truncate">Tu espacio privado</div>
-                </div>
-                {!currentWorkspace && <Check size={14} className="text-indigo-400" strokeWidth={2.5} />}
-              </button>
-
-              {/* Label */}
-              {workspaces.length > 0 && (
-                <div className="px-2 py-1.5 mt-1 border-t border-slate-700/50">
-                  <span className="text-[10px] font-bold uppercase text-slate-500">Organizaciones</span>
-                </div>
-              )}
-
-              {/* Organizations */}
-              {workspaces.map((ws) => {
-                const isActive = currentWorkspace?.id === ws.org_id
-                return (
-                  <button
-                    key={ws.org_id}
-                    onClick={() => handleSwitch(ws.org_id)}
-                    className={`group flex items-center gap-3 w-full p-2 rounded-lg transition-all text-left ${
-                      isActive ? 'bg-slate-700/50' : 'hover:bg-slate-800'
-                    }`}
-                  >
-                    <div className={`
-                      w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0
-                      ${isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700 group-hover:border-slate-600'}
-                    `}>
-                      <Building size={16} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>
-                        {ws.organization.name}
-                      </div>
-                      <div className="text-[10px] text-slate-500 truncate">
-                        {isActive ? 'Activo' : 'Organización'}
-                      </div>
-                    </div>
-                    {isActive && <Check size={14} className="text-indigo-400" strokeWidth={2.5} />}
-                  </button>
-                )
-              })}
-           </div>
-
-           {/* Footer */}
-           <div className="p-1 border-t border-slate-700 bg-[#0f172a] grid grid-cols-2 gap-1">
-              <button
-                onClick={() => { setIsOpen(false); navigate('/app/organizations'); }}
-                className="flex items-center justify-center gap-2 p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                title="Crear nueva organización"
-              >
-                 <Plus size={14} />
-                 <span className="text-[11px] font-medium">Crear</span>
-              </button>
-              
-              <button 
-               onClick={handleSignOut}
-               className="flex items-center justify-center gap-2 p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-               title="Cerrar sesión"
-              >
-               <LogOut size={14} />
-               <span className="text-[11px] font-medium">Salir</span>
-             </button>
-           </div>
-        </div>
-      )}
-
+    <>
       {/* Trigger Button */}
       <button 
+        ref={triggerRef}
         onClick={() => setIsOpen(!isOpen)}
-        className={`
-          w-full flex items-center gap-3 p-2 rounded-xl transition-all duration-200 border
-          ${isOpen ? 'bg-slate-800 border-slate-700' : 'border-transparent hover:bg-slate-800/50 hover:border-slate-800'}
-        `}
+        style={triggerButtonStyle}
+        onMouseEnter={(e) => { if (!isOpen) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)' }}
+        onMouseLeave={(e) => { if (!isOpen) e.currentTarget.style.backgroundColor = 'transparent' }}
       >
-        <div className={`
-          flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white shadow-md
-          ${avatarGradient} ring-1 ring-white/10
-        `}>
-          {currentWorkspace ? <Building size={16} strokeWidth={2.5} /> : <User size={16} strokeWidth={2.5} />}
+        <div style={mainAvatarStyle}>
+          {currentWorkspace ? <Building size={18} strokeWidth={2.5} /> : <User size={18} strokeWidth={2.5} />}
         </div>
 
         {!isCollapsed && (
           <>
-            <div className="flex-1 text-left min-w-0">
-              <div className="text-sm font-bold text-slate-200 truncate flex items-center gap-1.5">
-                {displayName}
-                {currentWorkspace && <span className="flex h-1.5 w-1.5 rounded-full bg-indigo-500"></span>}
+            <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#F8FAF9', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
+                {currentWorkspace && <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#6366F1' }}></div>}
               </div>
-              <div className="text-[11px] font-medium text-slate-500 truncate">
+              <div style={{ fontSize: '10px', fontWeight: 500, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {displaySubtext}
               </div>
             </div>
 
-            <div className={`text-slate-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+            <div style={{ color: '#475569', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
               <ChevronsUpDown size={14} />
             </div>
           </>
         )}
       </button>
-    </div>
+
+      {menuContent}
+    </>
   )
 }
 
 export default SidebarUserMenu
+

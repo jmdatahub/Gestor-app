@@ -343,6 +343,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  overflow-y: auto;
 }
 
 .app-header {
@@ -3451,7 +3452,7 @@ textarea.input {
   flex-direction: column;
   min-width: 0; /* Prevent flex overflow */
   min-height: 0; /* Allow children to scroll */
-  overflow: hidden; /* Delegate scroll to app-content */
+  overflow-y: auto; /* Enable vertical scroll */
   background: var(--bg-body);
   position: relative;
   z-index: 10;

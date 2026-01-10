@@ -298,7 +298,7 @@ export default function AppLayout() {
         {/* Settings Panel */}
         <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         
-        <div className="p-6">
+        <div className="p-6 flex-1 overflow-y-auto">
           <Outlet />
         </div>
       </main>

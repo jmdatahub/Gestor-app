@@ -97,6 +97,36 @@ export async function getOrganizationCount(): Promise<number> {
   }
 }
 
+// Organization type for admin panel
+export interface AdminOrganization {
+  id: string
+  name: string
+  slug: string | null
+  description: string | null
+  parent_id: string | null
+  created_at: string
+}
+
+// Get all organizations (for super admin)
+export async function getAllOrganizations(): Promise<AdminOrganization[]> {
+  try {
+    const { data, error } = await supabase
+      .from('organizations')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.warn('Error fetching organizations (safe fallback):', error.message)
+      return []
+    }
+
+    return data as AdminOrganization[]
+  } catch (err) {
+    console.error('Unexpected error in getAllOrganizations:', err)
+    return []
+  }
+}
+
 // Check if current user is super admin
 export async function checkIsSuperAdmin(): Promise<boolean> {
   try {

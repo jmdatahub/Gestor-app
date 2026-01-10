@@ -7,6 +7,8 @@ export interface Organization {
   id: string
   name: string
   slug: string | null
+  description: string | null
+  parent_id: string | null
   created_at?: string
 }
 
@@ -14,15 +16,19 @@ export interface OrganizationMember {
   org_id: string
   user_id: string
   role: AppRole
-  user?: {
-    email: string
+  profile?: {
     id: string
-  }
+    email: string | null
+    display_name: string | null
+    avatar_type: string | null
+  } | null
 }
 
 export interface CreateOrganizationInput {
   name: string
   slug?: string
+  description?: string
+  parent_id?: string
 }
 
 // Fetch organizations for the current user
@@ -71,7 +77,9 @@ export async function createOrganization(userId: string, input: CreateOrganizati
     .from('organizations')
     .insert([{
       name: input.name,
-      slug: input.slug || null
+      slug: input.slug || null,
+      description: input.description || null,
+      parent_id: input.parent_id || null
     }])
     .select()
     .single()
@@ -101,29 +109,50 @@ export async function updateOrganization(orgId: string, updates: Partial<Organiz
 
 // Get members of an organization
 export async function getOrganizationMembers(orgId: string): Promise<OrganizationMember[]> {
-  // We need to join with auth.users to get emails. 
-  // NOTE: accessing auth.users directly from client is usually restricted. 
-  // We might depend on a view or public profile table if it exists. 
-  // Checking MIG_001: It creates "profiles" table? No, but maybe "public_profiles"?
-  // If not, we might only get user_id. 
-  // Let's assume for now we might fail getting emails if policies don't allow it. 
-  
-  // Actually, usually one syncs auth.users to a public "users" or "profiles" table.
-  // Let's check if we have a way to get user info. 
-  // If not, we simply return IDs or basic info.
-  
-  const { data, error } = await supabase
+  // Step 1: Get organization members
+  const { data: membersData, error: membersError } = await supabase
     .from('organization_members')
-    .select('*')
+    .select('org_id, user_id, role')
     .eq('org_id', orgId)
 
-  if (error) throw error
+  if (membersError) {
+    console.error('Error fetching organization members:', membersError)
+    throw membersError
+  }
 
-  // IMPORTANT: We cannot join auth.users directly in standard Supabase client queries easily if not exposed.
-  // For this MVF, we might just display User ID or look for a profile table. 
-  // I will check for 'profiles' table existence in next steps.
+  if (!membersData || membersData.length === 0) {
+    return []
+  }
+
+  console.log('[DEBUG] Members data:', membersData)
+
+  // Step 2: Get profiles for all member user_ids
+  const userIds = membersData.map(m => m.user_id)
+  console.log('[DEBUG] Fetching profiles for user IDs:', userIds)
   
-  return data as OrganizationMember[]
+  const { data: profilesData, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, email, display_name, avatar_type')
+    .in('id', userIds)
+
+  console.log('[DEBUG] Profiles data:', profilesData)
+  console.log('[DEBUG] Profiles error:', profilesError)
+
+  if (profilesError) {
+    console.warn('Could not fetch profiles, returning members without profile data:', profilesError)
+    return membersData.map(m => ({ ...m, profile: null }))
+  }
+
+  // Step 3: Map profiles to members
+  const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || [])
+  console.log('[DEBUG] Profiles map size:', profilesMap.size)
+  
+  return membersData.map(m => ({
+    org_id: m.org_id,
+    user_id: m.user_id,
+    role: m.role as AppRole,
+    profile: profilesMap.get(m.user_id) || null
+  }))
 }
 
 // Invite member (Mock implementation for now or direct insert if allowed)

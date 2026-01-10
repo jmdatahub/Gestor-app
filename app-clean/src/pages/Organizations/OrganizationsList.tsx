@@ -33,6 +33,8 @@ export default function OrganizationsList() {
   // Modal State
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newOrgName, setNewOrgName] = useState('')
+  const [newOrgDescription, setNewOrgDescription] = useState('')
+  const [newOrgParentId, setNewOrgParentId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -59,11 +61,12 @@ export default function OrganizationsList() {
       newExpanded.delete(orgId)
     } else {
       newExpanded.add(orgId)
-      // Load members if not already loaded
-      if (!orgMembers[orgId] && !loadingMembers.has(orgId)) {
+      // Always reload members when expanding to ensure fresh data
+      if (!loadingMembers.has(orgId)) {
         setLoadingMembers(prev => new Set(prev).add(orgId))
         try {
           const members = await getOrganizationMembers(orgId)
+          console.log('[DEBUG] OrganizationsList - Members loaded:', members)
           setOrgMembers(prev => ({ ...prev, [orgId]: members }))
         } catch (err) {
           console.error('Error loading members:', err)
@@ -93,10 +96,16 @@ export default function OrganizationsList() {
         return
       }
 
-      await createOrganization(user.id, { name: newOrgName.trim() })
+      await createOrganization(user.id, { 
+        name: newOrgName.trim(),
+        description: newOrgDescription.trim() || undefined,
+        parent_id: newOrgParentId || undefined
+      })
       
       setShowCreateModal(false)
       setNewOrgName('')
+      setNewOrgDescription('')
+      setNewOrgParentId(null)
       
       // Refresh the page to reload workspaces
       window.location.reload()
@@ -373,17 +382,55 @@ export default function OrganizationsList() {
                       alignItems: 'center', 
                       gap: '1rem',
                       color: 'var(--text-secondary)',
-                      fontSize: '0.875rem'
+                      fontSize: '0.875rem',
+                      flexWrap: 'wrap'
                     }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                         <Users size={14} />
                         {members.length > 0 ? `${members.length} miembro${members.length !== 1 ? 's' : ''}` : 'Cargando...'}
                       </span>
+                      
+                      {/* Parent Org Badge */}
+                      {ws.organization?.parent_id && (() => {
+                        const parentOrg = workspaces.find(w => w.org_id === ws.organization.parent_id)
+                        return parentOrg ? (
+                          <span style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.375rem',
+                            padding: '0.125rem 0.5rem',
+                            borderRadius: '12px',
+                            background: 'rgba(139, 92, 246, 0.1)',
+                            border: '1px solid rgba(139, 92, 246, 0.2)',
+                            color: '#8B5CF6',
+                            fontSize: '0.75rem',
+                            fontWeight: 500
+                          }}>
+                            ↳ {parentOrg.organization?.name}
+                          </span>
+                        ) : null
+                      })()}
+                      
                       <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                         <Sparkles size={14} />
                         Espacio colaborativo
                       </span>
                     </div>
+                    
+                    {/* Description */}
+                    {ws.organization?.description && (
+                      <p style={{ 
+                        margin: '0.5rem 0 0 0', 
+                        fontSize: '0.8rem', 
+                        color: 'var(--text-muted)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '400px'
+                      }}>
+                        {ws.organization.description}
+                      </p>
+                    )}
                   </div>
                   
                   {/* Actions */}
@@ -489,7 +536,7 @@ export default function OrganizationsList() {
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap'
                               }}>
-                                {member.user?.email || `Usuario ${member.user_id.slice(0, 8)}...`}
+                                {member.profile?.display_name || member.profile?.email || `Usuario ${member.user_id.slice(0, 8)}...`}
                               </p>
                             </div>
                             
@@ -621,10 +668,84 @@ export default function OrganizationsList() {
               onChange={(e) => setNewOrgName(e.target.value)}
               required
             />
+            
+            {/* Description Field */}
+            <div style={{ marginTop: '1rem' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.375rem', 
+                fontSize: '0.875rem', 
+                fontWeight: 500,
+                color: 'var(--text-primary)'
+              }}>
+                Descripción <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(opcional)</span>
+              </label>
+              <textarea
+                placeholder="Describe brevemente el propósito de esta organización..."
+                value={newOrgDescription}
+                onChange={(e) => setNewOrgDescription(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: '80px',
+                  padding: '0.75rem',
+                  fontSize: '0.9rem',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  resize: 'vertical',
+                  fontFamily: 'inherit'
+                }}
+              />
+            </div>
+            
+            {/* Parent Organization Selector */}
+            {workspaces.length > 0 && (
+              <div style={{ marginTop: '1rem' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '0.375rem', 
+                  fontSize: '0.875rem', 
+                  fontWeight: 500,
+                  color: 'var(--text-primary)'
+                }}>
+                  Pertenece a <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(conglomerado)</span>
+                </label>
+                <select
+                  value={newOrgParentId || ''}
+                  onChange={(e) => setNewOrgParentId(e.target.value || null)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    fontSize: '0.9rem',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '10px',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">— Ninguno (organización independiente) —</option>
+                  {workspaces.map((ws) => (
+                    <option key={ws.org_id} value={ws.org_id}>
+                      {ws.organization?.name || 'Organización'}
+                    </option>
+                  ))}
+                </select>
+                <p style={{ 
+                  fontSize: '0.75rem', 
+                  color: 'var(--text-muted)', 
+                  marginTop: '0.375rem' 
+                }}>
+                  Si esta organización forma parte de un grupo mayor, selecciónalo aquí.
+                </p>
+              </div>
+            )}
+            
             <p style={{ 
               fontSize: '0.8rem', 
               color: 'var(--text-muted)', 
-              marginTop: '0.5rem' 
+              marginTop: '1rem' 
             }}>
               Podrás invitar miembros y configurar permisos después de crear la organización.
             </p>

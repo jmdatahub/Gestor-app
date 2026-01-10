@@ -7,6 +7,8 @@ export interface Organization {
   id: string;
   name: string;
   slug: string | null;
+  description: string | null;
+  parent_id: string | null;
 }
 
 export interface WorkspaceMember {
@@ -52,7 +54,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
           organization:organizations (
             id,
             name,
-            slug
+            slug,
+            description,
+            parent_id
           )
         `)
         .eq('user_id', user.id);

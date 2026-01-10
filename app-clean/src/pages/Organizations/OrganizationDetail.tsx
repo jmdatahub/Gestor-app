@@ -177,18 +177,42 @@ export default function OrganizationDetail() {
                <table className="table w-full">
                   <thead>
                      <tr>
-                        <th>User ID (Email Hidden)</th>
+                        <th>Miembro</th>
                         <th>Rol</th>
                         <th className="text-right">Acciones</th>
                      </tr>
                   </thead>
                   <tbody>
-                     {members.map(m => (
+                     {members.map(m => {
+                       const profile = m.profile
+                       const displayName = profile?.display_name || profile?.email?.split('@')[0] || 'Usuario'
+                       const email = profile?.email || 'Sin email'
+                       const avatarType = profile?.avatar_type || ''
+                       const isEmoji = avatarType.startsWith('emoji:')
+                       const avatarEmoji = isEmoji ? avatarType.split(':')[1] : null
+                       const avatarBg = avatarType.startsWith('bg:') ? avatarType.split(':')[1] : '#6366f1'
+                       
+                       return (
                         <tr key={m.user_id}>
-                           <td className="font-mono text-sm">{m.user_id}</td>
+                           <td>
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                               <div style={{ 
+                                 width: 36, height: 36, borderRadius: 8, 
+                                 background: isEmoji ? '#1e293b' : avatarBg,
+                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                 fontSize: isEmoji ? 18 : 14, fontWeight: 700, color: 'white',
+                                 border: '2px solid #334155'
+                               }}>
+                                 {avatarEmoji || displayName.charAt(0).toUpperCase()}
+                               </div>
+                               <div>
+                                 <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{displayName}</div>
+                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{email}</div>
+                               </div>
+                             </div>
+                           </td>
                            <td><span className="badge badge-gray">{m.role}</span></td>
                            <td className="text-right">
-                              {/* Can't remove yourself usually, but for now simple check */}
                               <button 
                                 className="btn btn-icon btn-ghost text-red-500"
                                 onClick={() => handleRemoveMember(m.user_id)}
@@ -198,7 +222,8 @@ export default function OrganizationDetail() {
                               </button>
                            </td>
                         </tr>
-                     ))}
+                       )
+                     })}
                   </tbody>
                </table>
             </div>

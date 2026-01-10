@@ -27,7 +27,15 @@ export default function Auth() {
         }
         navigate('/app/dashboard')
       } else {
-        const { data, error } = await supabase.auth.signUp({ email, password })
+        // Usa VITE_SITE_URL se está configurada, senón usa o orixe actual
+        const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin
+        const { data, error } = await supabase.auth.signUp({ 
+          email, 
+          password,
+          options: {
+            emailRedirectTo: `${siteUrl}/auth`
+          }
+        })
         if (error) throw error
         if (data.user) {
           await ensureDefaultAccountsForUser(data.user.id)
