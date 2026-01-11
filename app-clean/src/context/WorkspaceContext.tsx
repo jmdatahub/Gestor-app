@@ -22,6 +22,7 @@ interface WorkspaceContextType {
   currentWorkspace: Organization | null; // null means Personal Workspace
   workspaces: WorkspaceMember[];
   isLoading: boolean;
+  isSuspended: boolean;
   switchWorkspace: (orgId: string | null) => void;
   userRole: AppRole | null;
 }
@@ -32,6 +33,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [currentWorkspace, setCurrentWorkspace] = useState<Organization | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSuspended, setIsSuspended] = useState(false);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
 
   const fetchWorkspaces = async () => {
@@ -42,8 +44,29 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       if (!user) {
         setWorkspaces([]);
         setCurrentWorkspace(null);
+        setIsSuspended(false);
         return;
       }
+
+      // Check if user is suspended
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_suspended')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.is_suspended) {
+        console.warn('[WorkspaceContext] User is suspended, signing out...');
+        setIsSuspended(true);
+        // Give time for the suspended state to be shown
+        setTimeout(async () => {
+          await supabase.auth.signOut();
+          window.location.href = '/login?suspended=true';
+        }, 100);
+        return;
+      }
+
+      setIsSuspended(false);
 
       const { data, error } = await supabase
         .from('organization_members')
@@ -125,6 +148,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       currentWorkspace, 
       workspaces, 
       isLoading, 
+      isSuspended,
       switchWorkspace,
       userRole 
     }}>

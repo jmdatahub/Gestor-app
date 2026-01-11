@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { createOrganization, getOrganizationMembers, OrganizationMember } from '../../services/organizationService'
+import { createOrganization, deleteOrganization, getOrganizationMembers, OrganizationMember } from '../../services/organizationService'
 import { useI18n } from '../../hooks/useI18n'
-import { Plus, Building, Users, ArrowRight, Check, Crown, Shield, User, Eye, ChevronDown, ChevronUp, Sparkles, Briefcase } from 'lucide-react'
+import { Plus, Building, Users, ArrowRight, Check, Crown, Shield, User, Eye, ChevronDown, ChevronUp, Sparkles, Briefcase, Mail, X, UserPlus, Trash2, Pencil, MoreVertical } from 'lucide-react'
 import { UiCard } from '../../components/ui/UiCard'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { UiInput } from '../../components/ui/UiInput'
@@ -35,6 +35,8 @@ export default function OrganizationsList() {
   const [newOrgName, setNewOrgName] = useState('')
   const [newOrgDescription, setNewOrgDescription] = useState('')
   const [newOrgParentId, setNewOrgParentId] = useState<string | null>(null)
+  const [inviteEmails, setInviteEmails] = useState<string[]>([])
+  const [currentInviteEmail, setCurrentInviteEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -42,6 +44,28 @@ export default function OrganizationsList() {
   const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set())
   const [orgMembers, setOrgMembers] = useState<Record<string, OrganizationMember[]>>({})
   const [loadingMembers, setLoadingMembers] = useState<Set<string>>(new Set())
+  
+  // Actions menu state
+  const [actionsMenuOpen, setActionsMenuOpen] = useState<string | null>(null)
+
+  const handleDeleteOrg = async (orgId: string, orgName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setActionsMenuOpen(null)
+    
+    if (!confirm(`¿Estás seguro de eliminar "${orgName}"? Esta acción no se puede deshacer.`)) return
+    
+    try {
+      await deleteOrganization(orgId)
+      // If we deleted the current workspace, switch to personal
+      if (currentWorkspace?.id === orgId) {
+        switchWorkspace(null)
+      }
+      window.location.reload()
+    } catch (err: any) {
+      console.error('Error deleting organization:', err)
+      alert(err.message || 'Error al eliminar la organización')
+    }
+  }
 
   const handleSwitchToPersonal = () => {
     switchWorkspace(null)
@@ -82,6 +106,19 @@ export default function OrganizationsList() {
     setExpandedOrgs(newExpanded)
   }
 
+  // Invite email helpers
+  const addInviteEmail = () => {
+    const email = currentInviteEmail.trim().toLowerCase()
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !inviteEmails.includes(email)) {
+      setInviteEmails([...inviteEmails, email])
+      setCurrentInviteEmail('')
+    }
+  }
+
+  const removeInviteEmail = (email: string) => {
+    setInviteEmails(inviteEmails.filter(e => e !== email))
+  }
+
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newOrgName.trim()) return
@@ -96,16 +133,37 @@ export default function OrganizationsList() {
         return
       }
 
-      await createOrganization(user.id, { 
+      const newOrg = await createOrganization(user.id, { 
         name: newOrgName.trim(),
         description: newOrgDescription.trim() || undefined,
         parent_id: newOrgParentId || undefined
       })
       
+      // Log invited emails for future invite system
+      if (inviteEmails.length > 0) {
+        console.log('[INFO] Pending invitations for org', newOrg.id, ':', inviteEmails)
+        // TODO: Implement proper invite system via Edge Function
+        // For now, we save them to organization_invitations table if it exists
+        for (const email of inviteEmails) {
+          try {
+            await supabase.from('organization_invitations').insert({
+              org_id: newOrg.id,
+              email: email,
+              role: 'member',
+              invited_by: user.id
+            })
+          } catch (inviteErr) {
+            console.warn('Could not create invitation for', email, inviteErr)
+          }
+        }
+      }
+      
       setShowCreateModal(false)
       setNewOrgName('')
       setNewOrgDescription('')
       setNewOrgParentId(null)
+      setInviteEmails([])
+      setCurrentInviteEmail('')
       
       // Refresh the page to reload workspaces
       window.location.reload()
@@ -444,7 +502,7 @@ export default function OrganizationsList() {
                         border: '1px solid var(--border-color)'
                       }}
                     >
-                      Ver detalles
+                      <Pencil size={14} style={{ marginRight: '0.25rem' }} /> Editar
                     </button>
                     <button 
                       className="btn btn-sm"
@@ -458,6 +516,23 @@ export default function OrganizationsList() {
                     >
                       {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </button>
+                    
+                    {/* Delete button - only for owners */}
+                    {ws.role === 'owner' && (
+                      <button 
+                        className="btn btn-sm"
+                        onClick={(e) => handleDeleteOrg(ws.org_id, ws.organization?.name || 'Organización', e)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#EF4444',
+                          border: '1px solid rgba(239, 68, 68, 0.2)',
+                          padding: '0.375rem'
+                        }}
+                        title="Eliminar organización"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -742,13 +817,106 @@ export default function OrganizationsList() {
               </div>
             )}
             
-            <p style={{ 
-              fontSize: '0.8rem', 
-              color: 'var(--text-muted)', 
-              marginTop: '1rem' 
-            }}>
-              Podrás invitar miembros y configurar permisos después de crear la organización.
-            </p>
+            {/* Invite Members Section */}
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+              <label style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.5rem', 
+                fontSize: '0.875rem', 
+                fontWeight: 500,
+                color: 'var(--text-primary)'
+              }}>
+                <UserPlus size={16} />
+                Invitar miembros <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(opcional)</span>
+              </label>
+              
+              {/* Email input */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <input
+                  type="email"
+                  placeholder="correo@ejemplo.com"
+                  value={currentInviteEmail}
+                  onChange={(e) => setCurrentInviteEmail(e.target.value)}
+                  onKeyPress={(e) => { if (e.key === 'Enter') { e.preventDefault(); addInviteEmail(); } }}
+                  style={{
+                    flex: 1,
+                    padding: '0.625rem 0.75rem',
+                    fontSize: '0.9rem',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={addInviteEmail}
+                  disabled={!currentInviteEmail.trim()}
+                  style={{
+                    padding: '0.625rem 1rem',
+                    borderRadius: '8px',
+                    background: currentInviteEmail.trim() ? 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)' : 'var(--gray-200)',
+                    color: currentInviteEmail.trim() ? 'white' : 'var(--text-muted)',
+                    border: 'none',
+                    cursor: currentInviteEmail.trim() ? 'pointer' : 'not-allowed',
+                    fontSize: '0.875rem',
+                    fontWeight: 600
+                  }}
+                >
+                  Añadir
+                </button>
+              </div>
+              
+              {/* Added emails list */}
+              {inviteEmails.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                  {inviteEmails.map((email) => (
+                    <span
+                      key={email}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.375rem',
+                        padding: '0.25rem 0.625rem',
+                        borderRadius: '16px',
+                        background: 'rgba(139, 92, 246, 0.1)',
+                        border: '1px solid rgba(139, 92, 246, 0.2)',
+                        color: '#8B5CF6',
+                        fontSize: '0.8rem'
+                      }}
+                    >
+                      <Mail size={12} />
+                      {email}
+                      <button
+                        type="button"
+                        onClick={() => removeInviteEmail(email)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: '2px',
+                          cursor: 'pointer',
+                          color: '#8B5CF6',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              <p style={{ 
+                fontSize: '0.75rem', 
+                color: 'var(--text-muted)', 
+                marginTop: '0.5rem' 
+              }}>
+                Las invitaciones se enviarán después de crear la organización.
+              </p>
+            </div>
           </UiModalBody>
           <UiModalFooter>
             <button 

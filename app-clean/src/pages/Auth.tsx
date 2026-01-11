@@ -1,17 +1,26 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { ensureDefaultAccountsForUser } from '../services/authService'
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, Shield, BarChart3 } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, Shield, BarChart3, AlertTriangle } from 'lucide-react'
 import { UiInput } from '../components/ui/UiInput'
 
 export default function Auth() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showSuspendedMessage, setShowSuspendedMessage] = useState(false)
+
+  // Check if user was redirected due to suspension
+  useEffect(() => {
+    if (searchParams.get('suspended') === 'true') {
+      setShowSuspendedMessage(true)
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,7 +31,21 @@ export default function Auth() {
       if (isLogin) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
+        
+        // Check if user is suspended before proceeding
         if (data.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_suspended')
+            .eq('id', data.user.id)
+            .single()
+          
+          if (profile?.is_suspended) {
+            await supabase.auth.signOut()
+            setError('Tu cuenta ha sido suspendida. Contacta al administrador para más información.')
+            return
+          }
+          
           await ensureDefaultAccountsForUser(data.user.id)
         }
         navigate('/app/dashboard')
@@ -136,6 +159,29 @@ export default function Auth() {
             </div>
 
             <form onSubmit={handleSubmit} className="auth-form">
+              {showSuspendedMessage && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '12px',
+                  color: '#ef4444'
+                }}>
+                  <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div>
+                    <strong style={{ display: 'block', marginBottom: 4 }}>Cuenta Suspendida</strong>
+                    <span style={{ fontSize: '0.875rem', color: 'rgba(239, 68, 68, 0.8)' }}>
+                      Tu cuenta ha sido suspendida por un administrador. 
+                      Si crees que es un error, contacta con soporte.
+                    </span>
+                  </div>
+                </div>
+              )}
+              
               {error && (
                 <div className="auth-error">
                   {error}

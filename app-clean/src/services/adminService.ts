@@ -68,6 +68,28 @@ export async function unsuspendUser(userId: string): Promise<void> {
   if (error) throw error
 }
 
+// Delete a user profile (only super admin can do this)
+export async function deleteUserProfile(userId: string): Promise<void> {
+  // First, remove user from all organizations
+  const { error: memberError } = await supabase
+    .from('organization_members')
+    .delete()
+    .eq('user_id', userId)
+  
+  if (memberError) {
+    console.warn('Error removing user from orgs:', memberError)
+    // Continue anyway - profile might not be in any org
+  }
+
+  // Then delete the profile
+  const { error } = await supabase
+    .from('profiles')
+    .delete()
+    .eq('id', userId)
+
+  if (error) throw error
+}
+
 // Get suspended user count
 export async function getSuspendedCount(): Promise<number> {
   try {

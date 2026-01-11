@@ -79,17 +79,28 @@ export async function createOrganization(userId: string, input: CreateOrganizati
       name: input.name,
       slug: input.slug || null,
       description: input.description || null,
-      parent_id: input.parent_id || null
+      parent_id: input.parent_id || null,
+      owner_id: userId  // Required for RLS policy
     }])
     .select()
     .single()
 
   if (orgError) throw orgError
 
-  // 2. Add Creator as Owner (Should be handled by DB Trigger usually, but let's be safe or check if trigger exists)
-  // Checking MIG_001_v2: "AFTER INSERT ON organizations FOR EACH ROW EXECUTE FUNCTION public.handle_new_organization();"
-  // This trigger adds the creator as owner. So we don't need to manually insert into organization_members IF the trigger works correctly with RLS.
-  // However, the trigger uses auth.uid(). If we are calling this from frontend, auth.uid() is set.
+  // 2. Add Creator as Owner in organization_members
+  // The DB trigger might not be working, so we do it manually
+  const { error: memberError } = await supabase
+    .from('organization_members')
+    .insert([{
+      org_id: org.id,
+      user_id: userId,
+      role: 'owner'
+    }])
+
+  if (memberError) {
+    console.error('Error adding creator as member:', memberError)
+    // Don't throw - org was created, user just won't see it immediately
+  }
   
   return org
 }
@@ -105,6 +116,16 @@ export async function updateOrganization(orgId: string, updates: Partial<Organiz
 
   if (error) throw error
   return data
+}
+
+// Delete organization (only owner can delete)
+export async function deleteOrganization(orgId: string): Promise<void> {
+  const { error } = await supabase
+    .from('organizations')
+    .delete()
+    .eq('id', orgId)
+
+  if (error) throw error
 }
 
 // Get members of an organization
@@ -189,3 +210,41 @@ export async function updateMemberRole(orgId: string, userId: string, role: AppR
 
   if (error) throw error
 }
+
+// Organization Invitation Type
+export interface OrganizationInvitation {
+  id: string
+  org_id: string
+  email: string
+  role: AppRole
+  invited_by: string | null
+  expires_at: string
+  created_at: string
+}
+
+// Get pending invitations for an organization
+export async function getOrganizationInvitations(orgId: string): Promise<OrganizationInvitation[]> {
+  const { data, error } = await supabase
+    .from('organization_invitations')
+    .select('*')
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching invitations:', error)
+    return []
+  }
+
+  return data as OrganizationInvitation[]
+}
+
+// Cancel/delete an invitation
+export async function cancelInvitation(invitationId: string): Promise<void> {
+  const { error } = await supabase
+    .from('organization_invitations')
+    .delete()
+    .eq('id', invitationId)
+
+  if (error) throw error
+}
+

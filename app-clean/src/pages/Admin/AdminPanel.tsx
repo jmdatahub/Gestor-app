@@ -8,12 +8,13 @@ import {
   getAllOrganizations,
   suspendUser,
   unsuspendUser,
+  deleteUserProfile,
   checkDatabaseHealth,
   type UserProfile,
   type AdminOrganization
 } from '../../services/adminService'
 import { useI18n } from '../../hooks/useI18n'
-import { Shield, Users, Building, AlertTriangle, UserX, UserCheck, RefreshCw, Activity, Search, Filter, Download, ExternalLink, Eye } from 'lucide-react'
+import { Shield, Users, Building, AlertTriangle, UserX, UserCheck, RefreshCw, Activity, Search, Filter, Download, ExternalLink, Eye, Trash2 } from 'lucide-react'
 
 const SUPER_ADMIN_EMAIL = 'mp.jorge00@gmail.com'
 
@@ -32,6 +33,18 @@ export default function AdminPanel() {
   const [loadingOrgs, setLoadingOrgs] = useState(false)
   const [profilesTableExists, setProfilesTableExists] = useState(false)
   const [activeTab, setActiveTab] = useState<'users' | 'orgs'>('users')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showFilterMenu, setShowFilterMenu] = useState(false)
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'suspended'>('all')
+  
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean
+    type: 'suspend' | 'unsuspend' | 'delete'
+    userId: string
+    userName: string
+  } | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
     checkAdminAccess()
@@ -105,27 +118,44 @@ export default function AdminPanel() {
       setLoadingOrgs(false)
     }
   }
-
-  const handleSuspend = async (userId: string) => {
-    if (!confirm('¿Estás seguro de suspender este usuario?')) return
-    try {
-      await suspendUser(userId)
-      await loadUsers()
-      await loadStats()
-    } catch (error) {
-      console.error('Error suspending user:', error)
-      alert('Error al suspender usuario')
-    }
+  // Open confirmation modal instead of using window.confirm
+  const openConfirmModal = (type: 'suspend' | 'unsuspend' | 'delete', userId: string, userName: string) => {
+    setConfirmModal({ show: true, type, userId, userName })
   }
 
-  const handleUnsuspend = async (userId: string) => {
+  const closeConfirmModal = () => {
+    setConfirmModal(null)
+  }
+
+  const executeConfirmedAction = async () => {
+    if (!confirmModal) return
+    
+    setActionLoading(true)
+    const { type, userId, userName } = confirmModal
+    
     try {
-      await unsuspendUser(userId)
-      await loadUsers()
-      await loadStats()
-    } catch (error) {
-      console.error('Error unsuspending user:', error)
-      alert('Error al reactivar usuario')
+      if (type === 'suspend') {
+        await suspendUser(userId)
+        await loadUsers()
+        await loadStats()
+        alert('✅ Usuario suspendido correctamente')
+      } else if (type === 'unsuspend') {
+        await unsuspendUser(userId)
+        await loadUsers()
+        await loadStats()
+        alert('✅ Usuario reactivado correctamente')
+      } else if (type === 'delete') {
+        await deleteUserProfile(userId)
+        await loadUsers()
+        await loadStats()
+        alert('✅ Usuario eliminado correctamente')
+      }
+    } catch (error: any) {
+      console.error(`Error ${type}ing user:`, error)
+      alert(`❌ Error: ${error?.message || 'Error desconocido'}`)
+    } finally {
+      setActionLoading(false)
+      closeConfirmModal()
     }
   }
 
@@ -133,6 +163,19 @@ export default function AdminPanel() {
     if (!date) return '-'
     return new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
   }
+
+  // Filter users based on search and filter status
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = !searchTerm || 
+      (user.email?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.display_name?.toLowerCase().includes(searchTerm.toLowerCase()))
+    
+    const matchesFilter = filterStatus === 'all' ||
+      (filterStatus === 'active' && !user.is_suspended) ||
+      (filterStatus === 'suspended' && user.is_suspended)
+    
+    return matchesSearch && matchesFilter
+  })
 
   const getInitials = (text: string | null) => (text || '?').charAt(0).toUpperCase()
 
@@ -264,11 +307,45 @@ export default function AdminPanel() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ position: 'relative' }}>
               <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-              <input type="text" placeholder="Buscar..." style={{ width: 200, padding: '10px 12px 10px 36px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: 'white', fontSize: 13, outline: 'none' }} />
+              <input 
+                type="text" 
+                placeholder="Buscar..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ width: 200, padding: '10px 12px 10px 36px', background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: 'white', fontSize: 13, outline: 'none' }} 
+              />
             </div>
-            <button style={{ width: 40, height: 40, background: '#0f172a', border: '1px solid #334155', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <Filter size={16} color="#64748b" />
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button 
+                onClick={() => setShowFilterMenu(!showFilterMenu)}
+                style={{ 
+                  width: 40, height: 40, 
+                  background: filterStatus !== 'all' ? 'rgba(99,102,241,0.2)' : '#0f172a', 
+                  border: filterStatus !== 'all' ? '1px solid rgba(99,102,241,0.4)' : '1px solid #334155', 
+                  borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' 
+                }}
+              >
+                <Filter size={16} color={filterStatus !== 'all' ? '#818cf8' : '#64748b'} />
+              </button>
+              {showFilterMenu && (
+                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: 8, minWidth: 140, zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.3)' }}>
+                  {(['all', 'active', 'suspended'] as const).map(status => (
+                    <button
+                      key={status}
+                      onClick={() => { setFilterStatus(status); setShowFilterMenu(false); }}
+                      style={{ 
+                        display: 'block', width: '100%', padding: '8px 12px', border: 'none', borderRadius: 6,
+                        background: filterStatus === status ? 'rgba(99,102,241,0.2)' : 'transparent',
+                        color: filterStatus === status ? '#818cf8' : '#94a3b8',
+                        fontSize: 13, fontWeight: 500, textAlign: 'left', cursor: 'pointer'
+                      }}
+                    >
+                      {status === 'all' ? 'Todos' : status === 'active' ? 'Activos' : 'Suspendidos'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -300,7 +377,7 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user, idx) => (
+                  {filteredUsers.map((user, idx) => (
                     <tr key={user.id} style={{ borderTop: '1px solid rgba(51,65,85,0.3)', background: idx % 2 === 0 ? 'transparent' : 'rgba(30,41,59,0.2)' }}>
                       <td style={{ padding: '16px 24px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -332,15 +409,24 @@ export default function AdminPanel() {
                       </td>
                       <td style={{ padding: '16px 24px', textAlign: 'right' }}>
                         {user.id !== currentUserId ? (
-                          user.is_suspended ? (
-                            <button onClick={() => handleUnsuspend(user.id)} style={{ padding: '6px 12px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 8, color: '#22c55e', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <UserCheck size={14} /> Reactivar
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                            {user.is_suspended ? (
+                              <button onClick={() => openConfirmModal('unsuspend', user.id, user.display_name || user.email || 'Sin nombre')} style={{ padding: '6px 12px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 8, color: '#22c55e', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <UserCheck size={14} /> Reactivar
+                              </button>
+                            ) : (
+                              <button onClick={() => openConfirmModal('suspend', user.id, user.display_name || user.email || 'Sin nombre')} style={{ padding: '6px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <UserX size={14} /> Suspender
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => openConfirmModal('delete', user.id, user.display_name || user.email || 'Sin nombre')}
+                              style={{ padding: '6px', background: 'rgba(127,29,29,0.2)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#dc2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              title="Eliminar usuario permanentemente"
+                            >
+                              <Trash2 size={14} />
                             </button>
-                          ) : (
-                            <button onClick={() => handleSuspend(user.id)} style={{ padding: '6px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <UserX size={14} /> Suspender
-                            </button>
-                          )
+                          </div>
                         ) : (
                           <span style={{ color: '#64748b', fontSize: 11, fontWeight: 600, padding: '4px 10px', background: '#0f172a', borderRadius: 6, border: '1px solid #334155' }}>Tú</span>
                         )}
@@ -410,22 +496,115 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {/* Footer Info */}
+      {/* Footer Info - System Info */}
       <div style={{ marginTop: 24, padding: 16, background: 'rgba(30,41,59,0.5)', border: '1px solid #334155', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 32, height: 32, background: 'rgba(59,130,246,0.1)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Shield size={16} color="#3b82f6" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', animation: 'pulse 2s infinite' }}></div>
+            <span style={{ color: '#94a3b8', fontSize: 12 }}>Sistema operativo</span>
           </div>
-          <span style={{ color: '#94a3b8', fontSize: 12 }}>Acciones registradas para auditoría</span>
+          <span style={{ color: '#64748b', fontSize: 11 }}>•</span>
+          <span style={{ color: '#94a3b8', fontSize: 12 }}>
+            <Activity size={12} style={{ display: 'inline', marginRight: 4 }} />
+            {userCount} usuarios · {orgCount} organizaciones
+          </span>
+          <span style={{ color: '#64748b', fontSize: 11 }}>•</span>
+          <span style={{ color: '#94a3b8', fontSize: 12 }}>
+            Sesión: {currentUserEmail?.split('@')[0] || 'Admin'}
+          </span>
         </div>
-        <button style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981', fontSize: 12, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
-          Ver logs <ExternalLink size={12} />
-        </button>
+        <a 
+          href="https://supabase.com/dashboard" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}
+        >
+          Supabase Dashboard <ExternalLink size={12} />
+        </a>
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 400,
+            width: '90%',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.5)'
+          }}>
+            <h3 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: '0 0 12px' }}>
+              {confirmModal.type === 'suspend' && '¿Suspender usuario?'}
+              {confirmModal.type === 'unsuspend' && '¿Reactivar usuario?'}
+              {confirmModal.type === 'delete' && '¿Eliminar usuario permanentemente?'}
+            </h3>
+            <p style={{ color: '#94a3b8', fontSize: 14, margin: '0 0 8px' }}>
+              Usuario: <strong style={{ color: 'white' }}>{confirmModal.userName}</strong>
+            </p>
+            {confirmModal.type === 'delete' && (
+              <p style={{ color: '#ef4444', fontSize: 13, margin: '0 0 16px', padding: 12, background: 'rgba(239,68,68,0.1)', borderRadius: 8, border: '1px solid rgba(239,68,68,0.2)' }}>
+                ⚠️ Esta acción es IRREVERSIBLE. Se eliminarán su perfil y membresías.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+              <button
+                onClick={closeConfirmModal}
+                disabled={actionLoading}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 8,
+                  color: '#94a3b8',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executeConfirmedAction}
+                disabled={actionLoading}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  background: confirmModal.type === 'delete' ? '#dc2626' : confirmModal.type === 'suspend' ? '#ef4444' : '#22c55e',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: actionLoading ? 'wait' : 'pointer',
+                  opacity: actionLoading ? 0.7 : 1
+                }}
+              >
+                {actionLoading ? 'Procesando...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
       `}</style>
     </div>

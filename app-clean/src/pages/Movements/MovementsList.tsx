@@ -402,6 +402,9 @@ export default function MovementsList() {
                   <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🏦 {t('common.account')}</th>
                   <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🏷️ {t('common.category')}</th>
                   <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📝 {t('common.description')}</th>
+                  {currentWorkspace && (
+                    <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>👤 Creado por</th>
+                  )}
                   <th style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>💰 {t('common.amount')}</th>
                   <th style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', borderTopRightRadius: '0.75rem' }}>⚙️</th>
                 </tr>
@@ -452,6 +455,27 @@ export default function MovementsList() {
                         {mov.description || '-'}
                       </div>
                     </td>
+                    {currentWorkspace && (
+                      <td style={{ padding: '0.75rem 1.5rem' }}>
+                        {mov.creator ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div style={{
+                              width: 24, height: 24, borderRadius: '50%',
+                              background: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: 'white', fontSize: '0.65rem', fontWeight: 600
+                            }}>
+                              {(mov.creator.display_name || mov.creator.email || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                              {mov.creator.display_name || mov.creator.email?.split('@')[0] || 'Usuario'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>
+                        )}
+                      </td>
+                    )}
                     <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>
                       <span style={{ fontWeight: 700, color: getTypeColor(mov.kind) }}>
                         {mov.kind === 'income' ? '+' : mov.kind === 'expense' ? '-' : ''}

@@ -18,6 +18,8 @@ export interface Movement {
   // Joined data
   account?: { id: string; name: string }
   category?: { id: string; name: string; color?: string }
+  // Creator profile (for org context)
+  creator?: { id: string; display_name: string | null; email: string | null } | null
 }
 
 export interface Account {
@@ -64,6 +66,24 @@ export async function fetchMovements(userId: string, limit = 50, organizationId?
     console.error('Error fetching movements:', error)
     throw error
   }
+
+  // If in org mode, fetch creator profiles for each unique user_id
+  if (organizationId && data && data.length > 0) {
+    const uniqueUserIds = [...new Set(data.map(m => m.user_id))]
+    
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, display_name, email')
+      .in('id', uniqueUserIds)
+    
+    const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+    
+    return data.map(m => ({
+      ...m,
+      creator: profileMap.get(m.user_id) || null
+    }))
+  }
+
   return data || []
 }
 

@@ -4,15 +4,18 @@ import { supabase } from '../../lib/supabaseClient'
 import { 
   getOrganizationById, 
   getOrganizationMembers, 
+  getOrganizationInvitations,
   updateOrganization, 
   removeMember,
+  cancelInvitation,
   inviteMember,
   type Organization, 
   type OrganizationMember,
+  type OrganizationInvitation,
   type AppRole
 } from '../../services/organizationService'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { ArrowLeft, Users, Settings as SettingsIcon, LogOut, Save, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Users, Settings as SettingsIcon, LogOut, Save, Plus, Trash2, Mail, Clock, X } from 'lucide-react'
 import { UiCard } from '../../components/ui/UiCard'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiSegmented } from '../../components/ui/UiSegmented'
@@ -26,6 +29,7 @@ export default function OrganizationDetail() {
   
   const [org, setOrg] = useState<Organization | null>(null)
   const [members, setMembers] = useState<OrganizationMember[]>([])
+  const [invitations, setInvitations] = useState<OrganizationInvitation[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'general' | 'members'>('general')
   
@@ -47,13 +51,15 @@ export default function OrganizationDetail() {
     if (!id) return
     try {
       setLoading(true)
-      const [orgData, membersData] = await Promise.all([
+      const [orgData, membersData, invitationsData] = await Promise.all([
         getOrganizationById(id),
-        getOrganizationMembers(id)
+        getOrganizationMembers(id),
+        getOrganizationInvitations(id)
       ])
       
       setOrg(orgData)
       setMembers(membersData)
+      setInvitations(invitationsData)
       
       if (orgData) {
         setName(orgData.name)
@@ -112,6 +118,17 @@ export default function OrganizationDetail() {
     }
   }
 
+  const handleCancelInvitation = async (invitationId: string) => {
+    if (!confirm('¿Cancelar esta invitación?')) return
+    try {
+      await cancelInvitation(invitationId)
+      loadData()
+    } catch (error) {
+       console.error('Error canceling invitation:', error)
+       alert('Error al cancelar invitación')
+    }
+  }
+
   if (loading) return <div className="p-8">Cargando...</div>
   if (!org) return <div className="p-8">Organización no encontrada</div>
 
@@ -121,10 +138,32 @@ export default function OrganizationDetail() {
       <div className="mb-6">
         <button 
           onClick={() => navigate('/app/organizations')} 
-          className="flex items-center text-gray-500 hover:text-gray-800 mb-4"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.5rem 1rem',
+            marginBottom: '1rem',
+            borderRadius: '8px',
+            background: 'var(--gray-100)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-secondary)',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = 'var(--gray-200)'
+            e.currentTarget.style.color = 'var(--text-primary)'
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = 'var(--gray-100)'
+            e.currentTarget.style.color = 'var(--text-secondary)'
+          }}
         >
-          <ArrowLeft size={16} className="mr-1" />
-          Volver
+          <ArrowLeft size={16} />
+          Volver a Organizaciones
         </button>
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">{org.name}</h1>
@@ -226,6 +265,82 @@ export default function OrganizationDetail() {
                      })}
                   </tbody>
                </table>
+               
+               {/* Pending Invitations Section */}
+               {invitations.length > 0 && (
+                 <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                     <Mail size={18} style={{ color: '#8B5CF6' }} />
+                     <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                       Invitaciones Pendientes ({invitations.length})
+                     </h4>
+                   </div>
+                   
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                     {invitations.map(inv => (
+                       <div 
+                         key={inv.id}
+                         style={{
+                           display: 'flex',
+                           alignItems: 'center',
+                           justifyContent: 'space-between',
+                           padding: '0.75rem 1rem',
+                           borderRadius: '10px',
+                           background: 'rgba(139, 92, 246, 0.05)',
+                           border: '1px solid rgba(139, 92, 246, 0.15)'
+                         }}
+                       >
+                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                           <div style={{
+                             width: 36, height: 36, borderRadius: 8,
+                             background: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)',
+                             display: 'flex', alignItems: 'center', justifyContent: 'center',
+                             color: 'white'
+                           }}>
+                             <Mail size={16} />
+                           </div>
+                           <div>
+                             <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{inv.email}</div>
+                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                               <Clock size={10} />
+                               Invitado el {new Date(inv.created_at).toLocaleDateString('es-ES')}
+                             </div>
+                           </div>
+                         </div>
+                         
+                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                           <span style={{
+                             padding: '0.25rem 0.625rem',
+                             borderRadius: '12px',
+                             background: 'rgba(139, 92, 246, 0.1)',
+                             color: '#8B5CF6',
+                             fontSize: '0.75rem',
+                             fontWeight: 600
+                           }}>
+                             {inv.role}
+                           </span>
+                           <button
+                             onClick={() => handleCancelInvitation(inv.id)}
+                             style={{
+                               padding: '0.375rem',
+                               borderRadius: '6px',
+                               background: 'rgba(239, 68, 68, 0.1)',
+                               border: '1px solid rgba(239, 68, 68, 0.2)',
+                               color: '#EF4444',
+                               cursor: 'pointer',
+                               display: 'flex',
+                               alignItems: 'center'
+                             }}
+                             title="Cancelar invitación"
+                           >
+                             <X size={14} />
+                           </button>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
             </div>
          </UiCard>
       )}
