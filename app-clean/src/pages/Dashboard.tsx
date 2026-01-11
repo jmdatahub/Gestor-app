@@ -29,7 +29,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { t } = useI18n()
   const { settings } = useSettings()
-  const { currentWorkspace, isLoading: workspaceLoading } = useWorkspace() // [NEW] Get active workspace
+  const { currentWorkspace, workspaces, isLoading: workspaceLoading, userRole, switchWorkspace } = useWorkspace()
   const [loading, setLoading] = useState(true)
   const [accountsSummary, setAccountsSummary] = useState<AccountSummary>({ totalBalance: 0, accountCount: 0 })
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary>({ income: 0, expense: 0, balance: 0 })
@@ -108,12 +108,73 @@ export default function Dashboard() {
 
   return (
     <div className="page-container">
-      {/* Header */}
+      {/* Header with Workspace Indicator */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">{t('dashboard.title')}</h1>
-          <p className="page-subtitle">{t('dashboard.subtitle')}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+            <h1 className="page-title" style={{ margin: 0 }}>
+              {currentWorkspace ? currentWorkspace.name : t('dashboard.title')}
+            </h1>
+            {currentWorkspace && userRole && (
+              <span style={{
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                borderRadius: '20px',
+                background: userRole === 'owner' ? 'rgba(139, 92, 246, 0.2)' : 
+                           userRole === 'admin' ? 'rgba(59, 130, 246, 0.2)' : 
+                           'rgba(100, 116, 139, 0.2)',
+                color: userRole === 'owner' ? '#a78bfa' : 
+                       userRole === 'admin' ? '#60a5fa' : 
+                       '#94a3b8',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>
+                {userRole === 'owner' ? 'Propietario' : 
+                 userRole === 'admin' ? 'Administrador' : 
+                 userRole === 'member' ? 'Miembro' : 'Visor'}
+              </span>
+            )}
+          </div>
+          <p className="page-subtitle">
+            {currentWorkspace 
+              ? `Estadísticas financieras de ${currentWorkspace.name}`
+              : t('dashboard.subtitle')
+            }
+          </p>
         </div>
+        
+        {/* Workspace Switcher */}
+        {workspaces.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <select
+              value={currentWorkspace?.id || 'personal'}
+              onChange={(e) => switchWorkspace(e.target.value === 'personal' ? null : e.target.value)}
+              style={{
+                padding: '8px 12px',
+                paddingRight: '32px',
+                background: 'var(--card-bg)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                appearance: 'none',
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center'
+              }}
+            >
+              <option value="personal">🏠 Personal</option>
+              {workspaces.map(ws => (
+                <option key={ws.org_id} value={ws.org_id}>
+                  🏢 {ws.organization.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* KPI Grid */}

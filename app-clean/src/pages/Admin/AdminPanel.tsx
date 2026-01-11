@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../lib/supabaseClient'
 import { 
   getAllUsers, 
@@ -45,6 +46,35 @@ export default function AdminPanel() {
     userName: string
   } | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  
+  // Organization details modal state
+  const [selectedOrg, setSelectedOrg] = useState<AdminOrganization | null>(null)
+  const [orgMembers, setOrgMembers] = useState<any[]>([])
+  const [loadingOrgDetails, setLoadingOrgDetails] = useState(false)
+  const [showExpandedDetails, setShowExpandedDetails] = useState(false)
+  const [orgStats, setOrgStats] = useState<{
+    totalIncome: number
+    totalExpenses: number
+    totalBalance: number
+    movementCount: number
+    accountCount: number
+    recentMovements: any[]
+    accounts: any[]
+  } | null>(null)
+
+  // User details modal state
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false)
+  const [userStats, setUserStats] = useState<{
+    totalIncome: number
+    totalExpenses: number
+    totalBalance: number
+    movementCount: number
+    accountCount: number
+    recentMovements: any[]
+    accounts: any[]
+    organizations: any[]
+  } | null>(null)
 
   useEffect(() => {
     checkAdminAccess()
@@ -162,6 +192,161 @@ export default function AdminPanel() {
   const formatDate = (date: string) => {
     if (!date) return '-'
     return new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+
+  // Load organization details with members and financial stats
+  const loadOrgDetails = async (org: AdminOrganization) => {
+    setSelectedOrg(org)
+    setLoadingOrgDetails(true)
+    setOrgMembers([])
+    setOrgStats(null)
+    
+    try {
+      // Fetch organization members first
+      const { data: members, error: membersError } = await supabase
+        .from('organization_members')
+        .select('user_id, role, joined_at')
+        .eq('org_id', org.id)
+      
+      if (membersError) {
+        console.error('Error loading org members:', membersError)
+      }
+
+      // Get profiles if we have members
+      let membersWithProfiles: any[] = []
+      if (members && members.length > 0) {
+        const userIds = members.map(m => m.user_id)
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, email, display_name, is_suspended')
+          .in('id', userIds)
+        
+        membersWithProfiles = members.map(member => ({
+          ...member,
+          profile: profiles?.find(p => p.id === member.user_id) || null
+        }))
+      }
+      setOrgMembers(membersWithProfiles)
+
+      // Fetch financial stats for this organization
+      // Get movements with more details for expanded view
+      const { data: movements } = await supabase
+        .from('movements')
+        .select('id, amount, type, description, date, created_at')
+        .eq('organization_id', org.id)
+        .order('date', { ascending: false })
+      
+      // Get accounts with names
+      const { data: accounts } = await supabase
+        .from('accounts')
+        .select('id, name, balance, type')
+        .eq('organization_id', org.id)
+        .order('balance', { ascending: false })
+      
+      // Calculate stats
+      let totalIncome = 0
+      let totalExpenses = 0
+      if (movements) {
+        movements.forEach(m => {
+          if (m.type === 'income') totalIncome += Number(m.amount) || 0
+          else if (m.type === 'expense') totalExpenses += Number(m.amount) || 0
+        })
+      }
+      
+      const totalBalance = accounts?.reduce((sum, a) => sum + (Number(a.balance) || 0), 0) || 0
+      
+      setOrgStats({
+        totalIncome,
+        totalExpenses,
+        totalBalance,
+        movementCount: movements?.length || 0,
+        accountCount: accounts?.length || 0,
+        recentMovements: movements?.slice(0, 10) || [],
+        accounts: accounts || []
+      })
+
+    } catch (err) {
+      console.error('Error loading org details:', err)
+    } finally {
+      setLoadingOrgDetails(false)
+    }
+  }
+
+  const closeOrgDetailsModal = () => {
+    setSelectedOrg(null)
+    setOrgMembers([])
+    setOrgStats(null)
+    setShowExpandedDetails(false)
+  }
+
+  // Load user details with financial info
+  const loadUserDetails = async (user: UserProfile) => {
+    setSelectedUser(user)
+    setLoadingUserDetails(true)
+    setUserStats(null)
+    
+    try {
+      // Get user's personal movements (where organization_id IS NULL)
+      const { data: movements } = await supabase
+        .from('movements')
+        .select('id, amount, type, description, date')
+        .eq('user_id', user.id)
+        .is('organization_id', null)
+        .order('date', { ascending: false })
+      
+      // Get user's personal accounts
+      const { data: accounts } = await supabase
+        .from('accounts')
+        .select('id, name, balance, type')
+        .eq('user_id', user.id)
+        .is('organization_id', null)
+        .order('balance', { ascending: false })
+      
+      // Get user's organization memberships
+      const { data: memberships } = await supabase
+        .from('organization_members')
+        .select(`
+          role,
+          joined_at,
+          organization:organizations (
+            id,
+            name
+          )
+        `)
+        .eq('user_id', user.id)
+      
+      // Calculate stats
+      let totalIncome = 0
+      let totalExpenses = 0
+      if (movements) {
+        movements.forEach(m => {
+          if (m.type === 'income') totalIncome += Number(m.amount) || 0
+          else if (m.type === 'expense') totalExpenses += Number(m.amount) || 0
+        })
+      }
+      
+      const totalBalance = accounts?.reduce((sum, a) => sum + (Number(a.balance) || 0), 0) || 0
+      
+      setUserStats({
+        totalIncome,
+        totalExpenses,
+        totalBalance,
+        movementCount: movements?.length || 0,
+        accountCount: accounts?.length || 0,
+        recentMovements: movements?.slice(0, 10) || [],
+        accounts: accounts || [],
+        organizations: memberships || []
+      })
+    } catch (err) {
+      console.error('Error loading user details:', err)
+    } finally {
+      setLoadingUserDetails(false)
+    }
+  }
+
+  const closeUserDetailsModal = () => {
+    setSelectedUser(null)
+    setUserStats(null)
   }
 
   // Filter users based on search and filter status
@@ -420,6 +605,12 @@ export default function AdminPanel() {
                               </button>
                             )}
                             <button 
+                              onClick={() => loadUserDetails(user)}
+                              style={{ padding: '6px 12px', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8, color: '#8b5cf6', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <Eye size={14} /> Detalles
+                            </button>
+                            <button 
                               onClick={() => openConfirmModal('delete', user.id, user.display_name || user.email || 'Sin nombre')}
                               style={{ padding: '6px', background: 'rgba(127,29,29,0.2)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#dc2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                               title="Eliminar usuario permanentemente"
@@ -473,7 +664,10 @@ export default function AdminPanel() {
                       </td>
                       <td style={{ padding: '16px 24px', color: '#94a3b8', fontSize: 13 }}>{formatDate(org.created_at)}</td>
                       <td style={{ padding: '16px 24px', textAlign: 'right' }}>
-                        <button style={{ padding: '6px 12px', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8, color: '#8b5cf6', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <button 
+                          onClick={() => loadOrgDetails(org)}
+                          style={{ padding: '6px 12px', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8, color: '#8b5cf6', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
                           <Eye size={14} /> Ver detalles
                         </button>
                       </td>
@@ -596,6 +790,498 @@ export default function AdminPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* User Details Modal - Portal to body */}
+      {selectedUser && createPortal(
+        <div 
+          onClick={(e) => { if (e.target === e.currentTarget) closeUserDetailsModal() }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            backdropFilter: 'blur(6px)',
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: 16,
+              padding: '20px',
+              width: 'min(600px, calc(100vw - 32px))',
+              maxHeight: 'calc(100vh - 32px)',
+              overflowY: 'auto',
+              boxShadow: '0 25px 50px rgba(0,0,0,0.6)'
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div>
+                <h3 style={{ color: 'white', fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>
+                  👤 {selectedUser.display_name || 'Sin nombre'}
+                </h3>
+                <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>{selectedUser.email}</p>
+              </div>
+              <button 
+                onClick={closeUserDetailsModal}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 24 }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* User Info */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
+              <div style={{ padding: 12, background: '#0f172a', borderRadius: 8, border: '1px solid #334155' }}>
+                <div style={{ color: '#64748b', fontSize: 11, marginBottom: 4, textTransform: 'uppercase' }}>ID de Usuario</div>
+                <div style={{ color: '#94a3b8', fontSize: 11, fontFamily: 'monospace', wordBreak: 'break-all' }}>{selectedUser.id}</div>
+              </div>
+              <div style={{ padding: 12, background: '#0f172a', borderRadius: 8, border: '1px solid #334155' }}>
+                <div style={{ color: '#64748b', fontSize: 11, marginBottom: 4, textTransform: 'uppercase' }}>Estado</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: selectedUser.is_suspended ? '#ef4444' : '#22c55e' }} />
+                  <span style={{ color: selectedUser.is_suspended ? '#ef4444' : '#22c55e', fontSize: 12, fontWeight: 600 }}>
+                    {selectedUser.is_suspended ? 'Suspendido' : 'Activo'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Loading or Stats */}
+            {loadingUserDetails ? (
+              <div style={{ padding: 24, textAlign: 'center' }}>
+                <div style={{ width: 30, height: 30, margin: '0 auto', border: '3px solid #334155', borderTopColor: '#8b5cf6', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                <p style={{ color: '#64748b', fontSize: 12, marginTop: 12 }}>Cargando información...</p>
+              </div>
+            ) : userStats && (
+              <>
+                {/* Financial Stats */}
+                <h4 style={{ color: 'white', fontSize: 14, fontWeight: 600, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  📊 Finanzas Personales
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
+                  <div style={{ padding: 14, background: 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.05))', borderRadius: 12, border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <div style={{ color: '#22c55e', fontSize: 11, fontWeight: 600, marginBottom: 2, textTransform: 'uppercase' }}>Ingresos</div>
+                    <div style={{ color: '#22c55e', fontSize: 18, fontWeight: 700 }}>
+                      {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(userStats.totalIncome)}
+                    </div>
+                  </div>
+                  <div style={{ padding: 14, background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.05))', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <div style={{ color: '#ef4444', fontSize: 11, fontWeight: 600, marginBottom: 2, textTransform: 'uppercase' }}>Gastos</div>
+                    <div style={{ color: '#ef4444', fontSize: 18, fontWeight: 700 }}>
+                      {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(userStats.totalExpenses)}
+                    </div>
+                  </div>
+                  <div style={{ padding: 14, background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(99,102,241,0.05))', borderRadius: 12, border: '1px solid rgba(99,102,241,0.2)' }}>
+                    <div style={{ color: '#6366f1', fontSize: 11, fontWeight: 600, marginBottom: 2, textTransform: 'uppercase' }}>Balance</div>
+                    <div style={{ color: '#6366f1', fontSize: 18, fontWeight: 700 }}>
+                      {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(userStats.totalBalance)}
+                    </div>
+                  </div>
+                  <div style={{ padding: 14, background: '#0f172a', borderRadius: 12, border: '1px solid #334155' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', fontSize: 10, textTransform: 'uppercase' }}>Movimientos</div>
+                        <div style={{ color: 'white', fontSize: 18, fontWeight: 700 }}>{userStats.movementCount}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#64748b', fontSize: 10, textTransform: 'uppercase' }}>Cuentas</div>
+                        <div style={{ color: 'white', fontSize: 18, fontWeight: 700 }}>{userStats.accountCount}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Organizations */}
+                {userStats.organizations.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ color: 'white', fontSize: 13, fontWeight: 600, margin: '0 0 8px' }}>
+                      🏢 Organizaciones ({userStats.organizations.length})
+                    </h4>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {userStats.organizations.map((mem: any, idx: number) => (
+                        <div key={idx} style={{ padding: '6px 10px', background: '#0f172a', borderRadius: 6, border: '1px solid #334155', fontSize: 12 }}>
+                          <span style={{ color: 'white' }}>{mem.organization?.name || 'Org'}</span>
+                          <span style={{ marginLeft: 6, color: '#8b5cf6', fontSize: 10, textTransform: 'uppercase' }}>{mem.role}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Accounts */}
+                {userStats.accounts.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ color: 'white', fontSize: 13, fontWeight: 600, margin: '0 0 8px' }}>💳 Cuentas</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {userStats.accounts.slice(0, 5).map((acc: any) => (
+                        <div key={acc.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: '#0f172a', borderRadius: 6, border: '1px solid #334155' }}>
+                          <span style={{ color: 'white', fontSize: 12 }}>{acc.name}</span>
+                          <span style={{ color: Number(acc.balance) >= 0 ? '#22c55e' : '#ef4444', fontSize: 12, fontWeight: 600 }}>
+                            {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(acc.balance || 0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Movements */}
+                {userStats.recentMovements.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ color: 'white', fontSize: 13, fontWeight: 600, margin: '0 0 8px' }}>📋 Últimos Movimientos</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
+                      {userStats.recentMovements.map((mov: any) => (
+                        <div key={mov.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: '#0f172a', borderRadius: 6, border: '1px solid #334155' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ color: 'white', fontSize: 11 }}>{mov.description || 'Sin descripción'}</div>
+                            <div style={{ color: '#64748b', fontSize: 10 }}>{mov.date ? new Date(mov.date).toLocaleDateString('es-ES') : '-'}</div>
+                          </div>
+                          <span style={{ color: mov.type === 'income' ? '#22c55e' : '#ef4444', fontSize: 12, fontWeight: 600 }}>
+                            {mov.type === 'income' ? '+' : '-'}{new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(mov.amount || 0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Close Button */}
+            <button
+              onClick={closeUserDetailsModal}
+              style={{ width: '100%', padding: '10px 16px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Organization Details Modal - Portal to body */}
+      {selectedOrg && createPortal(
+        <div 
+          onClick={(e) => { if (e.target === e.currentTarget) closeOrgDetailsModal() }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            backdropFilter: 'blur(6px)',
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: 16,
+              padding: '20px',
+              width: 'min(600px, calc(100vw - 32px))',
+              maxHeight: 'calc(100vh - 32px)',
+              overflowY: 'auto',
+              boxShadow: '0 25px 50px rgba(0,0,0,0.6)'
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div>
+                <h3 style={{ color: 'white', fontSize: 20, fontWeight: 700, margin: '0 0 4px' }}>
+                  {selectedOrg.name}
+                </h3>
+                {selectedOrg.description && (
+                  <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>{selectedOrg.description}</p>
+                )}
+              </div>
+              <button 
+                onClick={closeOrgDetailsModal}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 24 }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Organization Info */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+              <div style={{ padding: 12, background: '#0f172a', borderRadius: 8, border: '1px solid #334155' }}>
+                <div style={{ color: '#64748b', fontSize: 11, marginBottom: 4, textTransform: 'uppercase' }}>ID</div>
+                <div style={{ color: '#94a3b8', fontSize: 12, fontFamily: 'monospace', wordBreak: 'break-all' }}>{selectedOrg.id}</div>
+              </div>
+              <div style={{ padding: 12, background: '#0f172a', borderRadius: 8, border: '1px solid #334155' }}>
+                <div style={{ color: '#64748b', fontSize: 11, marginBottom: 4, textTransform: 'uppercase' }}>Slug</div>
+                <div style={{ color: '#94a3b8', fontSize: 12 }}>{selectedOrg.slug || '-'}</div>
+              </div>
+              <div style={{ padding: 12, background: '#0f172a', borderRadius: 8, border: '1px solid #334155' }}>
+                <div style={{ color: '#64748b', fontSize: 11, marginBottom: 4, textTransform: 'uppercase' }}>Creada</div>
+                <div style={{ color: '#94a3b8', fontSize: 12 }}>{formatDate(selectedOrg.created_at)}</div>
+              </div>
+            </div>
+
+            {/* Financial Statistics */}
+            {orgStats && (
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ color: 'white', fontSize: 14, fontWeight: 600, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  📊 Estadísticas Financieras
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                  {/* Income */}
+                  <div style={{ padding: 16, background: 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.05))', borderRadius: 12, border: '1px solid rgba(34,197,94,0.2)' }}>
+                    <div style={{ color: '#22c55e', fontSize: 11, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>Ingresos Totales</div>
+                    <div style={{ color: '#22c55e', fontSize: 20, fontWeight: 700 }}>
+                      {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(orgStats.totalIncome)}
+                    </div>
+                  </div>
+                  
+                  {/* Expenses */}
+                  <div style={{ padding: 16, background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.05))', borderRadius: 12, border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <div style={{ color: '#ef4444', fontSize: 11, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>Gastos Totales</div>
+                    <div style={{ color: '#ef4444', fontSize: 20, fontWeight: 700 }}>
+                      {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(orgStats.totalExpenses)}
+                    </div>
+                  </div>
+                  
+                  {/* Balance */}
+                  <div style={{ padding: 16, background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(99,102,241,0.05))', borderRadius: 12, border: '1px solid rgba(99,102,241,0.2)' }}>
+                    <div style={{ color: '#6366f1', fontSize: 11, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>Balance Total</div>
+                    <div style={{ color: '#6366f1', fontSize: 20, fontWeight: 700 }}>
+                      {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(orgStats.totalBalance)}
+                    </div>
+                  </div>
+                  
+                  {/* Counts */}
+                  <div style={{ padding: 16, background: '#0f172a', borderRadius: 12, border: '1px solid #334155' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2, textTransform: 'uppercase' }}>Movimientos</div>
+                        <div style={{ color: 'white', fontSize: 20, fontWeight: 700 }}>{orgStats.movementCount}</div>
+                      </div>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: 11, marginBottom: 2, textTransform: 'uppercase' }}>Cuentas</div>
+                        <div style={{ color: 'white', fontSize: 20, fontWeight: 700 }}>{orgStats.accountCount}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Members */}
+            <div style={{ marginBottom: 16 }}>
+              <h4 style={{ color: 'white', fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>
+                Miembros ({orgMembers.length})
+              </h4>
+              
+              {loadingOrgDetails ? (
+                <div style={{ padding: 24, textAlign: 'center' }}>
+                  <div style={{ width: 30, height: 30, margin: '0 auto', border: '3px solid #334155', borderTopColor: '#8b5cf6', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                </div>
+              ) : orgMembers.length === 0 ? (
+                <p style={{ color: '#64748b', fontSize: 13, textAlign: 'center', padding: 16 }}>No hay miembros</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {orgMembers.map((member: any) => (
+                    <div 
+                      key={member.user_id}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        padding: '10px 12px', 
+                        background: '#0f172a', 
+                        borderRadius: 8, 
+                        border: '1px solid #334155' 
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ 
+                          width: 32, height: 32, 
+                          borderRadius: '50%', 
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontSize: 12,
+                          fontWeight: 600
+                        }}>
+                          {(member.profile?.display_name || member.profile?.email || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ color: 'white', fontSize: 13, fontWeight: 500 }}>
+                            {member.profile?.display_name || 'Sin nombre'}
+                            {member.profile?.is_suspended && (
+                              <span style={{ marginLeft: 8, padding: '2px 6px', background: 'rgba(239,68,68,0.2)', color: '#ef4444', fontSize: 10, borderRadius: 4 }}>
+                                SUSPENDIDO
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ color: '#64748b', fontSize: 11 }}>{member.profile?.email || 'Sin email'}</div>
+                        </div>
+                      </div>
+                      <span style={{
+                        padding: '4px 10px',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        borderRadius: 20,
+                        textTransform: 'uppercase',
+                        background: member.role === 'owner' ? 'rgba(139, 92, 246, 0.2)' : 
+                                   member.role === 'admin' ? 'rgba(59, 130, 246, 0.2)' : 
+                                   'rgba(100, 116, 139, 0.2)',
+                        color: member.role === 'owner' ? '#a78bfa' : 
+                               member.role === 'admin' ? '#60a5fa' : 
+                               '#94a3b8'
+                      }}>
+                        {member.role === 'owner' ? 'Propietario' : 
+                         member.role === 'admin' ? 'Admin' : 
+                         member.role === 'member' ? 'Miembro' : 'Visor'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Expand/Collapse Button - Always show to see detailed info */}
+            {orgStats && (
+              <button
+                onClick={() => setShowExpandedDetails(!showExpandedDetails)}
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  marginBottom: 16,
+                  background: 'rgba(139,92,246,0.1)',
+                  border: '1px solid rgba(139,92,246,0.2)',
+                  borderRadius: 8,
+                  color: '#a78bfa',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8
+                }}
+              >
+                {showExpandedDetails ? '🔼 Ocultar detalles' : '🔽 Ver más detalles (cuentas y movimientos)'}
+              </button>
+            )}
+
+            {/* Expanded Details Section */}
+            {showExpandedDetails && orgStats && (
+              <div style={{ marginBottom: 16 }}>
+                {/* Accounts List */}
+                {orgStats.accounts.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <h4 style={{ color: 'white', fontSize: 13, fontWeight: 600, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      💳 Cuentas ({orgStats.accounts.length})
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {orgStats.accounts.map((acc: any) => (
+                        <div key={acc.id} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          padding: '8px 12px', 
+                          background: '#0f172a', 
+                          borderRadius: 6, 
+                          border: '1px solid #334155' 
+                        }}>
+                          <div>
+                            <span style={{ color: 'white', fontSize: 13 }}>{acc.name}</span>
+                            {acc.type && (
+                              <span style={{ marginLeft: 8, color: '#64748b', fontSize: 11 }}>({acc.type})</span>
+                            )}
+                          </div>
+                          <span style={{ 
+                            fontSize: 13, 
+                            fontWeight: 600,
+                            color: Number(acc.balance) >= 0 ? '#22c55e' : '#ef4444' 
+                          }}>
+                            {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(acc.balance || 0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Movements List */}
+                {orgStats.recentMovements.length > 0 && (
+                  <div>
+                    <h4 style={{ color: 'white', fontSize: 13, fontWeight: 600, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      📋 Últimos Movimientos ({Math.min(10, orgStats.movementCount)} de {orgStats.movementCount})
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto' }}>
+                      {orgStats.recentMovements.map((mov: any) => (
+                        <div key={mov.id} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          padding: '8px 12px', 
+                          background: '#0f172a', 
+                          borderRadius: 6, 
+                          border: '1px solid #334155' 
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ color: 'white', fontSize: 12 }}>
+                              {mov.description || 'Sin descripción'}
+                            </div>
+                            <div style={{ color: '#64748b', fontSize: 10 }}>
+                              {mov.date ? new Date(mov.date).toLocaleDateString('es-ES') : '-'}
+                            </div>
+                          </div>
+                          <span style={{ 
+                            fontSize: 13, 
+                            fontWeight: 600,
+                            color: mov.type === 'income' ? '#22c55e' : '#ef4444',
+                            marginLeft: 8
+                          }}>
+                            {mov.type === 'income' ? '+' : '-'}
+                            {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(mov.amount || 0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Close Button */}
+            <button
+              onClick={closeOrgDetailsModal}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                background: '#0f172a',
+                border: '1px solid #334155',
+                borderRadius: 8,
+                color: '#94a3b8',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
 
       <style>{`
