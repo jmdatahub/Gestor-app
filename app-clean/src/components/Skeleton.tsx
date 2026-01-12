@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+
 interface SkeletonProps {
   className?: string
   style?: React.CSSProperties
@@ -19,29 +21,84 @@ export function SkeletonAvatar({ size = 48 }: { size?: number }) {
   return <div className="skeleton skeleton-avatar" style={{ width: size, height: size }} />
 }
 
-// KPI Card skeleton
+// KPI Card skeleton - Premium
 export function SkeletonKPI() {
   return (
-    <div className="skeleton-card skeleton-kpi">
-      <div className="skeleton skeleton-kpi-icon" />
-      <div className="skeleton-kpi-content">
-        <SkeletonText width="50%" />
-        <SkeletonText width="80%" />
+    <div className="skeleton-kpi">
+      <div 
+        className="skeleton" 
+        style={{ 
+          width: 48, 
+          height: 48, 
+          borderRadius: 'var(--radius-md)' 
+        }} 
+      />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="skeleton" style={{ width: '50%', height: 12, borderRadius: 4 }} />
+        <div className="skeleton" style={{ width: '70%', height: 24, borderRadius: 6 }} />
       </div>
     </div>
   )
 }
 
-// List row skeleton
+// List row skeleton - Enhanced
 export function SkeletonRow() {
   return (
-    <div className="skeleton-row">
-      <div className="skeleton skeleton-avatar" style={{ width: 40, height: 40 }} />
-      <div style={{ flex: 1 }}>
-        <SkeletonText width="70%" />
-        <SkeletonText width="40%" />
+    <div 
+      style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '1rem', 
+        padding: '1rem',
+        borderBottom: '1px solid var(--border-color)'
+      }}
+    >
+      <div className="skeleton" style={{ width: 40, height: 40, borderRadius: 'var(--radius-md)' }} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="skeleton" style={{ width: '60%', height: 14, borderRadius: 4 }} />
+        <div className="skeleton" style={{ width: '35%', height: 10, borderRadius: 3 }} />
       </div>
-      <SkeletonText width="80px" />
+      <div className="skeleton" style={{ width: 80, height: 18, borderRadius: 4 }} />
+    </div>
+  )
+}
+
+// Fun loading messages
+const funMessages = [
+  '💰 Contando tus monedas...',
+  '📊 Analizando tendencias...',
+  '🔮 Prediciendo el futuro...',
+  '🚀 Cargando a velocidad luz...',
+  '✨ Preparando la magia...',
+  '🧮 Haciendo cálculos...',
+  '📈 Graficando tu éxito...',
+  '💎 Puliendo los datos...',
+  '🎯 Apuntando a tus metas...',
+  '🌟 Reuniendo información...'
+]
+
+// Premium Loading Component
+export function PremiumLoader({ message }: { message?: string }) {
+  const [funMessage, setFunMessage] = useState(funMessages[0])
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFunMessage(funMessages[Math.floor(Math.random() * funMessages.length)])
+    }, 2500)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <div className="loading-premium">
+      <div className="loading-premium-spinner" />
+      <div className="loading-premium-text">
+        {message || funMessage}
+        <span className="loading-premium-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+      </div>
     </div>
   )
 }
@@ -59,7 +116,7 @@ export function SkeletonDashboard() {
       </div>
 
       {/* KPIs */}
-      <div className="kpi-grid">
+      <div className="skeleton-kpi-grid">
         <SkeletonKPI />
         <SkeletonKPI />
         <SkeletonKPI />
@@ -67,8 +124,7 @@ export function SkeletonDashboard() {
       </div>
 
       {/* Content */}
-      <div className="section-card" style={{ marginTop: '1.5rem' }}>
-        <SkeletonTitle />
+      <div className="card" style={{ marginTop: '1.5rem' }}>
         <SkeletonRow />
         <SkeletonRow />
         <SkeletonRow />
@@ -77,23 +133,112 @@ export function SkeletonDashboard() {
   )
 }
 
-// List page skeleton
+// List page skeleton - Premium Version
 export function SkeletonList({ rows = 5 }: { rows?: number }) {
+  const [funMessage, setFunMessage] = useState(funMessages[0])
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFunMessage(funMessages[Math.floor(Math.random() * funMessages.length)])
+    }, 2500)
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <div className="page-container">
+      {/* Header skeleton */}
       <div className="page-header">
         <div>
-          <SkeletonTitle width="180px" />
-          <SkeletonText width="250px" />
+          <div className="skeleton" style={{ width: 180, height: 28, borderRadius: 6, marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: 250, height: 14, borderRadius: 4 }} />
         </div>
-        <Skeleton className="btn" style={{ width: 140, height: 40 }} />
+        <div className="skeleton" style={{ width: 140, height: 40, borderRadius: 'var(--radius-md)' }} />
       </div>
 
-      <div className="card">
+      {/* Fun loading message */}
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '1.5rem 0',
+        animation: 'skeleton-pulse 2s infinite'
+      }}>
+        <div style={{ 
+          fontSize: 32, 
+          marginBottom: 8,
+          animation: 'spin 3s linear infinite'
+        }}>
+          🌀
+        </div>
+        <div style={{ 
+          color: 'var(--text-secondary)', 
+          fontSize: '0.9rem',
+          fontWeight: 500
+        }}>
+          {funMessage}
+        </div>
+      </div>
+
+      {/* Card with skeleton rows */}
+      <div className="card" style={{ overflow: 'hidden' }}>
         {Array.from({ length: rows }).map((_, i) => (
-          <SkeletonRow key={i} />
+          <div 
+            key={i}
+            style={{ 
+              animation: `stagger-fade-in 0.3s ease-out backwards`,
+              animationDelay: `${i * 0.08}s`
+            }}
+          >
+            <SkeletonRow />
+          </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Table skeleton
+export function SkeletonTable({ rows = 5, cols = 5 }: { rows?: number; cols?: number }) {
+  return (
+    <div style={{ overflow: 'hidden', borderRadius: 'var(--radius-lg)' }}>
+      {/* Header */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: `repeat(${cols}, 1fr)`, 
+        gap: '1rem', 
+        padding: '1rem',
+        background: 'var(--gray-50)',
+        borderBottom: '1px solid var(--border-color)'
+      }}>
+        {Array.from({ length: cols }).map((_, i) => (
+          <div key={i} className="skeleton" style={{ height: 12, width: '60%', borderRadius: 4 }} />
+        ))}
+      </div>
+      {/* Rows */}
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <div 
+          key={rowIndex}
+          style={{ 
+            display: 'grid', 
+            gridTemplateColumns: `repeat(${cols}, 1fr)`, 
+            gap: '1rem', 
+            padding: '1rem',
+            borderBottom: '1px solid var(--border-color)',
+            animation: `stagger-fade-in 0.3s ease-out backwards`,
+            animationDelay: `${rowIndex * 0.05}s`
+          }}
+        >
+          {Array.from({ length: cols }).map((_, colIndex) => (
+            <div 
+              key={colIndex} 
+              className="skeleton" 
+              style={{ 
+                height: 14, 
+                width: colIndex === 0 ? '80%' : '50%', 
+                borderRadius: 4 
+              }} 
+            />
+          ))}
+        </div>
+      ))}
     </div>
   )
 }

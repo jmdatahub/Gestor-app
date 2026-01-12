@@ -1,21 +1,45 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+// import { AdminDashboard } from '../../components/admin/AdminDashboard'
+import { ExportMenu } from '../../components/shared/ExportMenu'
+// import { exportToCSV } from '../../utils/exportUtils'
+// import { downloadFile } from '../../services/exportService'
+// import { UiDropdown, UiDropdownItem } from '../../components/ui/UiDropdown'
 import { supabase } from '../../lib/supabaseClient'
 import { 
   getAllUsers, 
   getUserCount, 
   getSuspendedCount, 
   getOrganizationCount,
-  getAllOrganizations,
-  suspendUser,
+  suspendUser, 
   unsuspendUser,
   deleteUserProfile,
+  checkIsSuperAdmin,
+  getAllOrganizations,
   checkDatabaseHealth,
   type UserProfile,
   type AdminOrganization
 } from '../../services/adminService'
 import { useI18n } from '../../hooks/useI18n'
-import { Shield, Users, Building, AlertTriangle, UserX, UserCheck, RefreshCw, Activity, Search, Filter, Download, ExternalLink, Eye, Trash2 } from 'lucide-react'
+import { 
+  Users, 
+  Shield, 
+  Activity, 
+  Search, 
+  Filter, 
+  MoreVertical, 
+  Trash2, 
+  UserX, 
+  UserCheck,
+  RefreshCw,
+  Building,
+  Download,
+  Eye,
+  FileText,
+  FileJson,
+  ExternalLink,
+  AlertTriangle
+} from 'lucide-react'
 
 const SUPER_ADMIN_EMAIL = 'mp.jorge00@gmail.com'
 
@@ -364,6 +388,45 @@ export default function AdminPanel() {
 
   const getInitials = (text: string | null) => (text || '?').charAt(0).toUpperCase()
 
+  // Prepare Export Data (MUST be before conditional returns to comply with Rules of Hooks)
+  const exportColumns = activeTab === 'users' 
+    ? [
+        { header: 'ID', key: 'id', width: 36 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Nombre', key: 'name', width: 25 },
+        { header: 'Estado', key: 'status', width: 15 },
+        { header: 'Fecha Registro', key: 'date', width: 20 }
+      ]
+    : [
+        { header: 'ID', key: 'id', width: 36 },
+        { header: 'Nombre', key: 'name', width: 25 },
+        { header: 'Slug', key: 'slug', width: 20 },
+        { header: 'Descripción', key: 'description', width: 40 },
+        { header: 'Fecha Creación', key: 'date', width: 20 }
+      ]
+
+  const exportData = useMemo(() => {
+    if (activeTab === 'users') {
+      return filteredUsers.map(user => ({
+        id: user.id,
+        email: user.email,
+        name: user.display_name || 'Sin nombre',
+        status: user.is_suspended ? 'Suspendido' : 'Activo',
+        date: user.created_at ? new Date(user.created_at).toLocaleString('es-ES') : '-'
+      }))
+    } else {
+      return organizations.map(org => ({
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        description: org.description || '',
+        date: org.created_at ? new Date(org.created_at).toLocaleString('es-ES') : '-'
+      }))
+    }
+  }, [activeTab, filteredUsers, organizations])
+
+
+  // Conditional returns (after all hooks)
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
@@ -404,52 +467,22 @@ export default function AdminPanel() {
           <button onClick={() => { loadStats(); loadUsers(); loadOrganizations() }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#1e293b', border: '1px solid #334155', borderRadius: 10, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             <RefreshCw size={16} className={loadingUsers || loadingOrgs ? 'animate-spin' : ''} /> Actualizar
           </button>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#10b981', border: 'none', borderRadius: 10, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <Download size={16} /> Exportar
-          </button>
+          
+          <ExportMenu 
+             data={exportData}
+             columns={exportColumns}
+             filename={`admin_${activeTab}_${new Date().toISOString().split('T')[0]}`}
+             disabled={loadingUsers || loadingOrgs}
+             hideCSV={true}
+          />
         </div>
       </div>
 
-      {/* Metrics Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
-        {/* Card: Users */}
-        <div style={{ background: '#1e293b', borderRadius: 16, padding: 20, border: '1px solid #334155' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ width: 40, height: 40, background: 'rgba(59,130,246,0.1)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={20} color="#3b82f6" />
-            </div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '4px 8px', borderRadius: 20 }}>+12%</span>
-          </div>
-          <p style={{ color: '#64748b', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px' }}>Usuarios</p>
-          <h2 style={{ color: 'white', fontSize: 32, fontWeight: 800, margin: 0 }}>{profilesTableExists ? userCount : '-'}</h2>
-        </div>
-
-        {/* Card: Organizations */}
-        <div style={{ background: '#1e293b', borderRadius: 16, padding: 20, border: '1px solid #334155' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ width: 40, height: 40, background: 'rgba(139,92,246,0.1)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Building size={20} color="#8b5cf6" />
-            </div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '4px 8px', borderRadius: 20 }}>+5%</span>
-          </div>
-          <p style={{ color: '#64748b', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px' }}>Organizaciones</p>
-          <h2 style={{ color: 'white', fontSize: 32, fontWeight: 800, margin: 0 }}>{orgCount}</h2>
-        </div>
-
-        {/* Card: Alerts */}
-        <div style={{ background: suspendedCount > 0 ? 'rgba(239,68,68,0.05)' : '#1e293b', borderRadius: 16, padding: 20, border: `1px solid ${suspendedCount > 0 ? 'rgba(239,68,68,0.2)' : '#334155'}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ width: 40, height: 40, background: suspendedCount > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Activity size={20} color={suspendedCount > 0 ? '#ef4444' : '#22c55e'} />
-            </div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: suspendedCount > 0 ? '#ef4444' : '#22c55e', background: suspendedCount > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', padding: '4px 8px', borderRadius: 20 }}>
-              {suspendedCount > 0 ? 'Atención' : 'OK'}
-            </span>
-          </div>
-          <p style={{ color: '#64748b', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px' }}>Alertas</p>
-          <h2 style={{ color: suspendedCount > 0 ? '#ef4444' : 'white', fontSize: 32, fontWeight: 800, margin: 0 }}>{profilesTableExists ? suspendedCount : '-'}</h2>
-        </div>
-      </div>
+      {/* Dashboard Charts (Disabled per user request)
+      {!loading && (
+        <AdminDashboard users={users} organizations={organizations} />
+      )}
+      */}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>

@@ -22,7 +22,7 @@ export async function getAllUsers(): Promise<UserProfile[]> {
       return []
     }
 
-    return data as UserProfile[]
+    return (data || []) as UserProfile[]
   } catch (err) {
     console.error('Unexpected error in getAllUsers:', err)
     return []
@@ -142,7 +142,7 @@ export async function getAllOrganizations(): Promise<AdminOrganization[]> {
       return []
     }
 
-    return data as AdminOrganization[]
+    return (data || []) as AdminOrganization[]
   } catch (err) {
     console.error('Unexpected error in getAllOrganizations:', err)
     return []

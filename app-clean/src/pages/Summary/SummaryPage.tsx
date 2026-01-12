@@ -1,4 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ExportMenu } from '../../components/shared/ExportMenu'
+import { ExcelColumn } from '../../utils/excelExport'
 import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
@@ -18,15 +21,17 @@ import { downloadFile, exportSummaryToExcel } from '../../services/exportService
 import { type AccountWithBalance } from '../../services/accountService'
 import { useSettings } from '../../context/SettingsContext'
 import { useI18n } from '../../hooks/useI18n'
-import { RefreshCw, TrendingUp, TrendingDown, Wallet, PiggyBank, CreditCard, Download, Calendar, Layers, FileText, FileJson, Printer, Table } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, Wallet, PiggyBank, CreditCard, Download, Calendar, Layers, FileText, FileJson, Printer, Table, BarChart3 } from 'lucide-react'
 import { UiCard, UiCardHeader, UiCardBody } from '../../components/ui/UiCard'
 import { UiSelect } from '../../components/ui/UiSelect'
 import { UiSegmented } from '../../components/ui/UiSegmented'
 import { UiDropdown, UiDropdownItem } from '../../components/ui/UiDropdown'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 type PeriodType = 'monthly' | 'annual'
 
 export default function SummaryPage() {
+  const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings, updateSettings } = useSettings()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
@@ -37,6 +42,7 @@ export default function SummaryPage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [chartGrouping, setChartGrouping] = useState<0.25 | 0.5 | 1 | 2 | 3>(1) // 0.25=bi-weekly, 0.5=weekly, 1=monthly, 2=bi-monthly, 3=quarterly
   const [historyMonths, setHistoryMonths] = useState<number>(12) // 3, 6, 12, or 24 months
+  const [chartViewType, setChartViewType] = useState<'bars' | 'lines'>('bars') // Toggle between bar chart and line chart
   
   // Roll-up state from context
   const rollupEnabled = settings.rollupAccountsByParent
@@ -159,64 +165,82 @@ export default function SummaryPage() {
     downloadFile(blob, `Resumen_${periodStr}.json`, 'application/json')
   }
 
-  const handleExportCSV = () => {
-    if (!summary) return
+  // Export Data Preparation
+  const exportColumns: ExcelColumn[] = [
+    { header: 'SECCIÓN', key: 'section', width: 30 },
+    { header: 'CONCEPTO', key: 'concept', width: 25 },
+    { header: 'VALOR', key: 'value', width: 20 },
+    { header: '% / TASA', key: 'percentage', width: 15 },
+    { header: 'DETALLES / NOTAS', key: 'details', width: 40 }
+  ]
+
+  const exportData = useMemo(() => {
+    if (!summary) return []
     
-    // Simple CSV construction
-    const rows = [
-      ['Concepto', 'Valor'],
-      ['Ingresos', summary.income],
-      ['Gastos', summary.expenses],
-      ['Balance Neto', summary.net],
-      ['Ahorro', summary.savingsChange],
-      [],
-      ['Categoría', 'Total', 'Porcentaje'],
-      ...categories.map(c => [
-        `"${c.categoryName}"`, 
-        c.total, 
-        ((c.total / Math.max(summary.expenses, 1)) * 100).toFixed(2) + '%'
-      ])
-    ]
+    const data: any[] = []
+    const formatMoney = (val: number) => new Intl.NumberFormat(locale === 'en-US' ? 'en-US' : 'es-ES', { style: 'currency', currency: 'EUR' }).format(val)
 
-    const csvContent = rows.map(e => e.join(",")).join("\n")
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const periodStr = periodType === 'monthly' ? `${month}-${year}` : `${year}`
-    downloadFile(blob, `Resumen_${periodStr}.csv`, 'text/csv')
-  }
+    // 1. General Summary
+    data.push({
+      section: 'RESUMEN GENERAL',
+      concept: 'Ingresos Totales',
+      value: formatMoney(summary.income),
+      percentage: '100%',
+      details: 'Ingresos del periodo seleccionado'
+    })
+    data.push({
+      section: 'RESUMEN GENERAL',
+      concept: 'Gastos Totales',
+      value: formatMoney(summary.expenses),
+      percentage: summary.income > 0 ? ((summary.expenses / summary.income) * 100).toFixed(2) + '%' : '-',
+      details: 'Gastos del periodo seleccionado'
+    })
+    data.push({
+      section: 'RESUMEN GENERAL',
+      concept: 'Balance Neto',
+      value: formatMoney(summary.net),
+      percentage: summary.income > 0 ? ((summary.net / summary.income) * 100).toFixed(2) + '%' : '-',
+      details: 'Margen de beneficio'
+    })
+    data.push({
+      section: 'RESUMEN GENERAL',
+      concept: 'Ahorro (Cambio)',
+      value: formatMoney(summary.savingsChange),
+      percentage: '-',
+      details: 'Incremento neto de ahorro en cuentas'
+    })
 
-  const handlePrint = () => {
-    window.print()
-  }
-
-  const handleExportExcel = async () => {
-    if (!summary) return
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    try {
-      await exportSummaryToExcel(
-        user.id,
-        {
-          mode: periodType === 'monthly' ? 'monthly' : 'yearly',
-          year,
-          month: periodType === 'monthly' ? month : undefined
-        },
-        {
-          income: summary.income,
-          expenses: summary.expenses,
-          net: summary.net,
-          savingsChange: summary.savingsChange
-        },
-        categories.map(c => ({
-          categoryName: c.categoryName,
-          total: c.total
-        }))
-      )
-    } catch (error) {
-      console.error('Error exporting:', error)
+    // 2. Categories Breakdown
+    if (categories.length > 0) {
+        categories.forEach(c => {
+            data.push({
+                section: 'DESGLOSE POR CATEGORÍA',
+                concept: c.categoryName,
+                value: formatMoney(c.total),
+                percentage: summary.expenses > 0 ? ((c.total / summary.expenses) * 100).toFixed(2) + '%' : '-',
+                details: 'Gasto por categoría' 
+            })
+        })
     }
-  }
+
+    // 3. Historical Data
+    if (history.length > 0) {
+        history.forEach(h => {
+             const label = h.month || 'Periodo'
+             const val = (h as any).balance !== undefined ? (h as any).balance : (h as any).net
+             
+             data.push({
+                 section: 'HISTORIAL',
+                 concept: label,
+                 value: formatMoney(val),
+                 percentage: h.income > 0 ? ((val / h.income) * 100).toFixed(2) + '%' : '-',
+                 details: `Ing: ${formatMoney(h.income)} | Gas: ${formatMoney(h.expenses)}`
+             })
+        })
+    }
+
+    return data
+  }, [summary, categories, history, locale])
 
   // Helpers for dropdowns
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i)
@@ -254,28 +278,13 @@ export default function SummaryPage() {
           <p className="page-subtitle">{periodLabel}</p>
         </div>
         
-        <UiDropdown 
-          trigger={
-            <button className="btn btn-secondary" disabled={loading}>
-              <Download size={18} />
-              {t('summary.download')}
-            </button>
-          }
-        >
-          <UiDropdownItem onClick={handleExportExcel} icon={<Table size={16} />}>
-            Excel (.xlsx)
-          </UiDropdownItem>
-          <UiDropdownItem onClick={handleExportCSV} icon={<FileText size={16} />}>
-            CSV (.csv)
-          </UiDropdownItem>
-          <UiDropdownItem onClick={handleExportJSON} icon={<FileJson size={16} />}>
-            JSON (.json)
-          </UiDropdownItem>
-          <div className="h-px bg-border my-1" />
-          <UiDropdownItem onClick={handlePrint} icon={<Printer size={16} />}>
-            Imprimir / PDF
-          </UiDropdownItem>
-        </UiDropdown>
+        <ExportMenu 
+           data={exportData}
+           columns={exportColumns}
+           filename={`Resumen_${periodLabel.replace(/ /g, '_')}`}
+           buttonLabel={t('summary.download')}
+           disabled={loading || !summary}
+        />
       </div>
 
        {/* Filters */}
@@ -422,7 +431,13 @@ export default function SummaryPage() {
               </thead>
               <tbody>
                 {accountBalances.map(acc => (
-                  <tr key={acc.id} className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
+                  <tr 
+                    key={acc.id} 
+                    className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-800/50"
+                    onClick={() => navigate(`/app/accounts/${acc.id}`)}
+                    style={{ cursor: 'pointer' }}
+                    title="Ver detalle de cuenta"
+                  >
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-2">
                          {rollupEnabled && (
@@ -510,8 +525,50 @@ export default function SummaryPage() {
                      </button>
                    ))}
                  </div>
-               </div>
-             }
+                  
+                  {/* Chart Type Toggle (Bars/Lines) */}
+                  <div style={{ display: 'flex', gap: '0.125rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '0.5rem', padding: '0.125rem' }}>
+                    <button
+                      onClick={() => setChartViewType('bars')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.7rem',
+                        fontWeight: chartViewType === 'bars' ? 600 : 400,
+                        borderRadius: '0.375rem',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: chartViewType === 'bars' ? '#3b82f6' : 'transparent',
+                        color: chartViewType === 'bars' ? 'white' : 'inherit'
+                      }}
+                    >
+                      <BarChart3 size={12} />
+                      Barras
+                    </button>
+                    <button
+                      onClick={() => setChartViewType('lines')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.7rem',
+                        fontWeight: chartViewType === 'lines' ? 600 : 400,
+                        borderRadius: '0.375rem',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: chartViewType === 'lines' ? '#3b82f6' : 'transparent',
+                        color: chartViewType === 'lines' ? 'white' : 'inherit'
+                      }}
+                    >
+                      <TrendingUp size={12} />
+                      Líneas
+                    </button>
+                  </div>
+                </div>
+              }
            />
            <UiCardBody>
              {loading ? (
@@ -578,14 +635,92 @@ export default function SummaryPage() {
                  }
                }
                
-               const maxValue = Math.max(...chartData.flatMap(d => [d.income, d.expenses]), 1)
-               const formatShort = (n: number) => n >= 1000 ? `${(n/1000).toFixed(0)}k` : n.toFixed(0)
-               
-               return (
-                 <div style={{ height: '220px', display: 'flex', flexDirection: 'column' }}>
-                   {/* Bars area */}
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', justifyContent: chartData.length <= 12 ? 'space-around' : 'space-between', gap: '2px', paddingBottom: '0.5rem', paddingTop: '1.5rem', position: 'relative' }}>
-                     {/* Background grid lines */}
+                const maxValue = Math.max(...chartData.flatMap(d => [d.income, d.expenses]), 1)
+                const formatShort = (n: number) => n >= 1000 ? `${(n/1000).toFixed(0)}k` : n.toFixed(0)
+                
+                // Add profit to data for line chart
+                const lineChartData = chartData.map(d => ({
+                  ...d,
+                  profit: d.income - d.expenses
+                }))
+                
+                // Line Chart View
+                if (chartViewType === 'lines') {
+                  return (
+                    <div style={{ height: '260px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={lineChartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="label" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fill: '#6b7280', fontSize: 11 }}
+                            dy={8}
+                          />
+                          <YAxis 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fill: '#6b7280', fontSize: 11 }}
+                            tickFormatter={formatShort}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                              border: '1px solid #334155',
+                              borderRadius: 8,
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                            }}
+                            labelStyle={{ color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}
+                            itemStyle={{ color: '#e2e8f0' }}
+                            formatter={(value) => [formatCurrency(Number(value) || 0, locale), '']}
+                          />
+                          <Legend 
+                            iconType="circle"
+                            iconSize={8}
+                            wrapperStyle={{ paddingTop: 12 }}
+                            formatter={(value) => <span style={{ color: '#6b7280', fontSize: 12 }}>{value}</span>}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="income" 
+                            name={t('summary.income')} 
+                            stroke="#10b981" 
+                            strokeWidth={3}
+                            dot={{ fill: '#10b981', strokeWidth: 0, r: 4 }}
+                            activeDot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="expenses" 
+                            name={t('summary.expenses')} 
+                            stroke="#ef4444" 
+                            strokeWidth={3}
+                            dot={{ fill: '#ef4444', strokeWidth: 0, r: 4 }}
+                            activeDot={{ r: 6, fill: '#ef4444', stroke: '#fff', strokeWidth: 2 }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="profit" 
+                            name="Beneficio" 
+                            stroke="#3b82f6" 
+                            strokeWidth={3}
+                            strokeDasharray="5 5"
+                            dot={{ fill: '#3b82f6', strokeWidth: 0, r: 4 }}
+                            activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )
+                }
+                
+                // Bar Chart View (existing)
+                return (
+                  <div style={{ height: '220px', display: 'flex', flexDirection: 'column' }}>
+                    {/* Bars area */}
+                     <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', justifyContent: chartData.length <= 12 ? 'space-around' : 'space-between', gap: '2px', paddingBottom: '0.5rem', paddingTop: '1.5rem', position: 'relative' }}>
+                      {/* Background grid lines */}
                      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
                        {[0, 1, 2, 3].map((_, i) => (
                          <div key={i} style={{ borderBottom: '1px solid rgba(156, 163, 175, 0.15)' }} />

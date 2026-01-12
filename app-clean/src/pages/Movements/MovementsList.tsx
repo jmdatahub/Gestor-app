@@ -22,17 +22,34 @@ import {
 import { ensureDefaultAccountsForUser } from '../../services/authService'
 import { getTextColorClass, getCategoryPillStyle } from '../../utils/categoryColors'
 import { useSettings } from '../../context/SettingsContext'
-import { 
-  formatDate as formatDateUtil, 
-  formatEUR 
+import {
+  formatDate as formatDateUtil,
+  formatEUR
 } from '../../utils/format'
 // Added formatISODateString
 import { formatISODateString } from '../../utils/date'
-import { Plus, TrendingUp, TrendingDown, X, ArrowUpDown, CreditCard, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  ArrowUpDown,
+  TrendingUp,
+  TrendingDown,
+  Calendar,
+  Wallet,
+  ChevronRight,
+  Search,
+  Pencil,
+  AlertTriangle,
+  X,
+  CreditCard
+} from 'lucide-react'
 // import { DayPicker } from 'react-day-picker' // Removed
 // import { format } from 'date-fns' // Removed
 // import { es } from 'date-fns/locale' // Removed
 import { formatSupabaseError, type AppError } from '../../utils/errorUtils'
+import { ExportMenu } from '../../components/shared/ExportMenu'
+import { ExcelColumn } from '../../utils/excelExport'
 
 import { useI18n } from '../../hooks/useI18n'
 
@@ -44,6 +61,7 @@ import { UiNumber } from '../../components/ui/UiNumber'
 import { CategoryPicker } from '../../components/domain/CategoryPicker' 
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { SkeletonList } from '../../components/Skeleton'
+import { useToast } from '../../components/Toast'
 
 // Define flattened account type extending Account to include tree metadata
 interface FlatAccount extends Account {
@@ -55,6 +73,7 @@ export default function MovementsList() {
   const { t } = useI18n()
   const { settings } = useSettings()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
+  const toast = useToast() // Toast notifications
   const [movements, setMovements] = useState<Movement[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [flatAccounts, setFlatAccounts] = useState<FlatAccount[]>([]) // Flattened hierarchy for selectors
@@ -62,6 +81,12 @@ export default function MovementsList() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [summary, setSummary] = useState({ income: 0, expense: 0, balance: 0 })
+
+  // Export & Filter State
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [searchTerm, setSearchTerm] = useState('')
+
 
   // Form state
   // Use Date object for react-day-picker
@@ -184,9 +209,11 @@ export default function MovementsList() {
       if (editingMovement) {
         // Update existing movement
         await updateMovement(editingMovement.id, movementData)
+        toast.success('Movimiento actualizado', 'Los cambios se han guardado correctamente')
       } else {
         // Create new movement
         await createMovement(movementData)
+        toast.success('Movimiento registrado', type === 'income' ? '¡Ingreso añadido!' : type === 'expense' ? 'Gasto registrado' : 'Inversión guardada')
       }
 
       setShowModal(false)
@@ -336,6 +363,89 @@ export default function MovementsList() {
     }
   }
 
+  const getExportColumns = (): ExcelColumn[] => [
+    { header: 'Fecha', key: 'date', width: 12 },
+    { header: 'Tipo', key: 'kind', width: 12 },
+    { header: 'Categoría', key: 'category', width: 20 },
+    { header: 'Descripción', key: 'description', width: 40 },
+    { header: 'Importe', key: 'amount', width: 15 },
+    { header: 'Cuenta', key: 'account', width: 20 },
+    { header: 'Creador', key: 'creator', width: 25 },
+    { header: 'Fecha Registro', key: 'created_at', width: 20 }
+  ]
+
+  const fetchExportData = async () => {
+      try {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) return []
+
+          // 1. Base Query
+          let query = supabase
+              .from('movements')
+              .select(`
+                  *,
+                  category:categories(name),
+                  account:accounts(name)
+              `)
+              .eq('user_id', user.id)
+              .order('date', { ascending: false })
+
+          if (currentWorkspace?.id) {
+              query = query.eq('organization_id', currentWorkspace.id)
+          } else {
+              query = query.is('organization_id', null)
+          }
+
+          if (startDate) {
+              query = query.gte('date', formatISODateString(startDate))
+          }
+          if (endDate) {
+               query = query.lte('date', formatISODateString(endDate))
+          }
+
+          const { data, error } = await query
+
+          if (error) throw error
+          if (!data || data.length === 0) {
+              // Alert handled by ExportMenu if empty
+              return []
+          }
+
+          // 2. Fetch Profiles Manually (to avoid FK issues) and merge
+          let movementsToExport = data
+          if (data.length > 0) {
+              const uniqueUserIds = [...new Set(data.map(m => m.user_id))]
+              const { data: profiles } = await supabase
+                  .from('profiles')
+                  .select('id, display_name, email')
+                  .in('id', uniqueUserIds)
+              
+              if (profiles) {
+                  const profileMap = new Map(profiles.map(p => [p.id, p]))
+                  movementsToExport = data.map(m => ({
+                      ...m,
+                      creator: profileMap.get(m.user_id)
+                  }))
+              }
+          }
+
+          return movementsToExport.map(m => ({
+              date: m.date,
+              kind: m.kind === 'income' ? 'Ingreso' : m.kind === 'expense' ? 'Gasto' : 'Inversión',
+              description: m.description || '',
+              amount: m.amount,
+              category: m.category?.name || 'Sin categoría',
+              account: m.account?.name || 'Sin cuenta',
+              creator: m.creator ? (m.creator.display_name || m.creator.email) : '-',
+              created_at: m.created_at ? new Date(m.created_at).toLocaleString('es-ES') : '-'
+          }))
+
+      } catch (err) {
+          console.error("Export error", err)
+          throw err
+      }
+  }
+
   if (loading) {
     return <SkeletonList rows={8} />
   }
@@ -352,6 +462,115 @@ export default function MovementsList() {
           <Plus size={20} />
           {t('movements.new')}
         </button>
+      </div>
+
+      {/* Filter Toolbar */}
+      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
+         {/* Premium Search Input */}
+         <div style={{ 
+           position: 'relative', 
+           flex: '1 1 280px',
+           maxWidth: 360
+         }}>
+           <div style={{
+             position: 'absolute',
+             left: 14,
+             top: '50%',
+             transform: 'translateY(-50%)',
+             width: 18,
+             height: 18,
+             borderRadius: '50%',
+             background: 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(59,130,246,0.2))',
+             display: 'flex',
+             alignItems: 'center',
+             justifyContent: 'center'
+           }}>
+             <Search size={12} style={{ color: '#10b981' }} />
+           </div>
+           <input
+             type="text"
+             placeholder="Buscar por descripción, categoría, cuenta..."
+             value={searchTerm}
+             onChange={(e) => setSearchTerm(e.target.value)}
+             style={{
+               width: '100%',
+               padding: '12px 16px 12px 44px',
+               fontSize: 13,
+               fontWeight: 500,
+               color: '#e2e8f0',
+               background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+               border: '1px solid #334155',
+               borderRadius: 12,
+               outline: 'none',
+               transition: 'all 0.2s ease',
+               boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+             }}
+             onFocus={(e) => {
+               e.currentTarget.style.borderColor = '#10b981'
+               e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.15), inset 0 2px 4px rgba(0,0,0,0.1)'
+             }}
+             onBlur={(e) => {
+               e.currentTarget.style.borderColor = '#334155'
+               e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.1)'
+             }}
+           />
+           {searchTerm && (
+             <button
+               onClick={() => setSearchTerm('')}
+               style={{
+                 position: 'absolute',
+                 right: 12,
+                 top: '50%',
+                 transform: 'translateY(-50%)',
+                 width: 20,
+                 height: 20,
+                 borderRadius: '50%',
+                 background: 'rgba(239,68,68,0.15)',
+                 border: 'none',
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 cursor: 'pointer',
+                 transition: 'all 0.15s'
+               }}
+               onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.25)'}
+               onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.15)'}
+             >
+               <X size={12} style={{ color: '#ef4444' }} />
+             </button>
+           )}
+         </div>
+         
+         <div style={{ height: 28, width: 1, background: '#334155' }} />
+         
+         <div className="flex items-center gap-2">
+             <Calendar size={16} className="text-gray-400" />
+             <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Exportar:</span>
+         </div>
+         <div className="w-40">
+             <UiDatePicker 
+                label=""
+                value={startDate || null} 
+                onChange={(d) => setStartDate(d || undefined)} 
+                placeholder="Desde"
+             />
+         </div>
+         <div className="w-40">
+             <UiDatePicker 
+                label=""
+                value={endDate || null} 
+                onChange={(d) => setEndDate(d || undefined)}
+                placeholder="Hasta" 
+             />
+         </div>
+         <div className="ml-auto">
+             <ExportMenu 
+                 fetchData={fetchExportData}
+                 columns={getExportColumns()}
+                 filename={`movimientos_${new Date().toISOString().split('T')[0]}`}
+                 buttonLabel="Exportar"
+             />
+         </div>
       </div>
 
       {/* Monthly Summary */}
@@ -383,7 +602,20 @@ export default function MovementsList() {
       </div>
 
       {/* Movements List */}
-      {movements.length === 0 ? (
+      {(() => {
+        // Filter movements by search term
+        const filteredMovements = movements.filter(mov => {
+          if (!searchTerm.trim()) return true
+          const term = searchTerm.toLowerCase()
+          return (
+            (mov.description?.toLowerCase().includes(term)) ||
+            (mov.category?.name?.toLowerCase().includes(term)) ||
+            (mov.account?.name?.toLowerCase().includes(term)) ||
+            (String(mov.amount).includes(term))
+          )
+        })
+        
+        return filteredMovements.length === 0 ? (
         <div className="section-card flex flex-col items-center justify-center p-12 text-center">
           <ArrowUpDown size={48} className="text-gray-300 mb-4" />
           <p className="text-gray-500 mb-4">{t('movements.empty')}</p>
@@ -410,7 +642,7 @@ export default function MovementsList() {
                 </tr>
               </thead>
               <tbody>
-                {movements.map((mov) => (
+                {filteredMovements.map((mov) => (
                   <tr key={mov.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-slate-800/30 transition-colors">
                     <td style={{ padding: '0.75rem 1.5rem' }}>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatDate(mov.date)}</div>
@@ -513,7 +745,8 @@ export default function MovementsList() {
             </table>
           </div>
         </div>
-      )}
+      )
+      })()}
 
       {/* Movement Modal */}
       {showModal && (

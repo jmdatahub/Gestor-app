@@ -18,11 +18,13 @@ import { formatISODateString } from '../../utils/date'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { UiField } from '../../components/ui/UiField'
 import { UiTextarea } from '../../components/ui/UiTextarea'
+import { useToast } from '../../components/Toast'
 
 export default function SavingsList() {
   const navigate = useNavigate()
   const { t } = useI18n()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
+  const toast = useToast()
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [loading, setLoading] = useState(true)
   const [showGoalModal, setShowGoalModal] = useState(false)
@@ -231,16 +233,44 @@ export default function SavingsList() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className="flex-1 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  {/* Progress Bar - Enhanced */}
+                  <div className="mb-4">
+                    <div 
+                      style={{ 
+                        height: 10, 
+                        background: 'rgba(0,0,0,0.08)', 
+                        borderRadius: 8, 
+                        overflow: 'hidden',
+                        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
+                      }}
+                    >
                       <div 
-                        className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${getProgress(goal)}%` }} 
+                        style={{ 
+                          height: '100%', 
+                          width: `${getProgress(goal)}%`,
+                          background: getProgress(goal) >= 90 
+                            ? 'linear-gradient(90deg, #10b981, #34d399, #6ee7b7)' 
+                            : getProgress(goal) >= 50 
+                              ? 'linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd)'
+                              : 'linear-gradient(90deg, #8b5cf6, #a78bfa, #c4b5fd)',
+                          borderRadius: 8,
+                          transition: 'all 0.5s ease',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                        }}
                       />
                     </div>
-                    <span className="text-sm font-semibold text-gray-600 dark:text-gray-400 min-w-[3rem] text-right">
-                      {getProgress(goal).toFixed(0)}%
-                    </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                      <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                        {getProgress(goal) >= 90 ? '🎉 ¡Casi lo logras!' : getProgress(goal) >= 50 ? '💪 ¡Vas bien!' : '🚀 ¡Sigue así!'}
+                      </span>
+                      <span style={{ 
+                        fontSize: 13, 
+                        fontWeight: 700, 
+                        color: getProgress(goal) >= 90 ? '#10b981' : getProgress(goal) >= 50 ? '#3b82f6' : '#8b5cf6'
+                      }}>
+                        {getProgress(goal).toFixed(0)}%
+                      </span>
+                    </div>
                   </div>
 
                   {/* Mostrar descripción si existe */}

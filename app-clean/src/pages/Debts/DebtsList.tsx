@@ -15,11 +15,13 @@ import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiTextarea } from '../../components/ui/UiTextarea'
 import { UiModal, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { useToast } from '../../components/Toast'
 
 export default function DebtsList() {
   const { t, language } = useI18n()
   const navigate = useNavigate()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
+  const toast = useToast()
   const [debts, setDebts] = useState<Debt[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'i_owe' | 'they_owe_me'>('i_owe')
@@ -235,12 +237,12 @@ export default function DebtsList() {
                             <div>
                                 <h3 className="text-lg font-bold">{debt.counterparty_name}</h3>
                                 {debt.description && (
-                                    <p className="text-sm text-muted mt-1">{debt.description}</p>
+                                    <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{debt.description}</p>
                                 )}
                             </div>
                             <div className="text-right">
                                 <div className="text-xl font-bold">{formatCurrency(debt.remaining_amount)}</div>
-                                <div className="text-xs text-muted">
+                                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
                                     {t('debts.ofTotal')} {formatCurrency(debt.total_amount)}
                                 </div>
                             </div>
@@ -249,8 +251,12 @@ export default function DebtsList() {
                     <div className="card-footer bg-transparent border-t border-gray-100 pt-3 flex justify-between items-center">
                         <div className="d-flex items-center gap-2 text-sm">
                             {debt.due_date && (
-                                <span className={isOverdue(debt) ? 'text-danger' : 'text-muted'}>
-                                {t('debts.dueDate')}: {formatDate(debt.due_date)}
+                                <span style={{ 
+                                    color: isOverdue(debt) ? '#ef4444' : '#475569',
+                                    fontWeight: 500,
+                                    fontSize: 13
+                                }}>
+                                    📅 {t('debts.dueDate')}: {formatDate(debt.due_date)}
                                 </span>
                             )}
                         </div>
@@ -266,7 +272,18 @@ export default function DebtsList() {
                                 {t('debts.overdue')}
                                 </span>
                             ) : (
-                                <span className="badge badge-gray">{t('debts.pending')}</span>
+                                <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    padding: '4px 10px',
+                                    borderRadius: 6,
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+                                    color: '#92400e',
+                                    border: '1px solid #fcd34d'
+                                }}>⏳ {t('debts.pending')}</span>
                             )}
                         </div>
                     </div>
