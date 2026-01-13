@@ -785,7 +785,7 @@ export default function AdminPanel() {
                 </tbody>
               </table>
             )
-          )}
+          ) : null}
           {activeTab === 'orgs' && (
             /* ORGANIZATIONS TABLE */
             loadingOrgs ? (
