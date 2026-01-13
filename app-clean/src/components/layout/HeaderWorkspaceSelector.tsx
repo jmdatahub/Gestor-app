@@ -29,7 +29,6 @@ export function HeaderWorkspaceSelector({ onBeforeSwitch }: HeaderWorkspaceSelec
   }, [isOpen])
 
   const handleSwitch = async (orgId: string | null) => {
-    // If selecting current, just close
     if (
       (orgId === null && currentWorkspace === null) ||
       (currentWorkspace && orgId === currentWorkspace.id)
@@ -40,7 +39,6 @@ export function HeaderWorkspaceSelector({ onBeforeSwitch }: HeaderWorkspaceSelec
 
     setIsOpen(false)
     
-    // Play transition animation if callback provided
     if (onBeforeSwitch) {
       await onBeforeSwitch()
     }
@@ -48,105 +46,185 @@ export function HeaderWorkspaceSelector({ onBeforeSwitch }: HeaderWorkspaceSelec
     switchWorkspace(orgId)
   }
 
+  // Styles using CSS variables from index.css
+  const itemStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+    padding: '8px 12px', // Reduced padding
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--text-primary)',
+    borderRadius: 'var(--radius-sm)',
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+    gap: '10px',
+    fontSize: '0.85rem', // Slightly smaller text
+    transition: 'background var(--transition-fast)'
+  }
+
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div style={{ position: 'relative' }} ref={dropdownRef}>
+      {/* Trigger Button - Mimic .select-trigger from index.css */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`
-          flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-200
-          ${isOpen 
-            ? 'bg-slate-800 border-slate-600 text-white' 
-            : 'bg-slate-900/50 border-slate-700/50 text-slate-200 hover:bg-slate-800 hover:border-slate-600'}
-        `}
-        style={{ minWidth: 160 }}
+        className="select-trigger"
+        style={{
+          minWidth: '180px', // Reduced width
+          height: '36px', // Slightly shorter
+          padding: '0 10px',
+          background: 'var(--bg-card)',
+          borderColor: isOpen ? 'var(--primary)' : 'var(--border-color)',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px'
+        }}
       >
-        <div className={`p-1 rounded-md ${currentWorkspace ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-          {currentWorkspace ? <Building size={14} /> : <User size={14} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+          <div style={{ 
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '20px', height: '20px', // Smaller icon box
+            borderRadius: '5px',
+            background: currentWorkspace ? 'var(--primary-soft)' : 'var(--success-soft)',
+            color: currentWorkspace ? 'var(--primary)' : 'var(--success)'
+          }}>
+            {currentWorkspace ? <Building size={13} /> : <User size={13} />}
+          </div>
+          <span style={{ fontSize: '0.85rem', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {currentWorkspace ? currentWorkspace.name : 'Personal'}
+          </span>
         </div>
         
-        <div className="flex-1 text-left min-w-0">
-          <div className="text-xs font-medium truncate">
-            {currentWorkspace ? currentWorkspace.name : 'Personal'}
-          </div>
-        </div>
-
-        <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown 
+          size={14} 
+          style={{ 
+             color: 'var(--text-secondary)',
+             transform: isOpen ? 'rotate(180deg)' : 'none',
+             transition: 'transform 0.2s'
+          }} 
+        />
       </button>
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="p-1 space-y-0.5">
-            <div className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Cambiar Espacio
-            </div>
-            
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 6px)',
+          left: 0,
+          width: '200px',
+          background: 'var(--dropdown-bg)',
+          border: '1px solid var(--dropdown-border)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--dropdown-shadow)',
+          zIndex: 1000,
+          padding: '4px',
+          animation: 'dropdown-in 0.2s ease-out'
+        }}>
+          {/* Header */}
+          <div style={{ 
+            padding: '6px 10px', 
+            fontSize: '0.7rem', // Smaller header text
+            fontWeight: 600, 
+            textTransform: 'uppercase', 
+            color: 'var(--text-muted)',
+            letterSpacing: '0.05em'
+          }}>
+            Cambiar Espacio
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {/* Personal Workspace */}
             <button
               onClick={() => handleSwitch(null)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                !currentWorkspace 
-                  ? 'bg-emerald-500/10 text-emerald-400' 
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
+              // Using inline hover via onMouseEnter/Leave would be messy in React without styled-components/classes
+              // So relying on simple inline styles and standard css hover if possible, 
+              // or just using a class if we can. 
+              // Let's use a class "dropdown-item" defined locally or reuse .sidebar-item logic?
+              // I'll add a hover effect via style tag injection or just keep it simple with a known class.
+              // Reusing 'sidebar-item' class might work but it's fixed width.
+              // I will use standard styles and rely on 'className="btn-ghost w-full"' if available, 
+              // but let's manual style to be safe.
+              className="dropdown-item"
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-sidebar-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              style={{...itemStyle, gap: '8px', padding: '6px 10px', fontSize: '0.8rem', background: !currentWorkspace ? 'var(--primary-soft)' : 'transparent'}}
             >
-              <div className={`p-1.5 rounded-md ${!currentWorkspace ? 'bg-emerald-500/20' : 'bg-slate-800'}`}>
-                <User size={16} />
-              </div>
-              <span className="flex-1 text-left">Personal</span>
-              {!currentWorkspace && <Check size={16} />}
+               <div style={{ 
+                 width: '24px', height: '24px', borderRadius: '5px',
+                 background: 'var(--success-soft)', color: 'var(--success)',
+                 display: 'flex', alignItems: 'center', justifyContent: 'center'
+               }}>
+                 <User size={14} />
+               </div>
+               <span style={{ flex: 1 }}>Personal</span>
+               {!currentWorkspace && <Check size={14} color="var(--primary)" />}
             </button>
 
-            {/* Organizations Divider */}
+            {workspaces.length > 0 && <div style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />}
+
             {workspaces.length > 0 && (
-              <div className="my-1 border-t border-slate-800 mx-2" />
-            )}
-            
-            {workspaces.length > 0 && (
-              <div className="px-3 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <div style={{ 
+                padding: '4px 10px', 
+                fontSize: '0.7rem', 
+                fontWeight: 600, 
+                textTransform: 'uppercase', 
+                color: 'var(--text-muted)',
+                letterSpacing: '0.05em'
+              }}>
                 Organizaciones
               </div>
             )}
 
-            {/* Organization List */}
-            <div className="max-h-60 overflow-y-auto custom-scrollbar">
+            <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
               {workspaces.map(ws => {
                 const isActive = currentWorkspace?.id === ws.org_id
                 return (
                   <button
                     key={ws.org_id}
                     onClick={() => handleSwitch(ws.org_id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                      isActive 
-                        ? 'bg-indigo-500/10 text-indigo-400' 
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
+                    onMouseEnter={(e) => e.currentTarget.style.background = isActive ? 'var(--primary-soft)' : 'var(--bg-sidebar-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = isActive ? 'var(--primary-soft)' : 'transparent'}
+                    style={{...itemStyle, gap: '8px', padding: '6px 10px', fontSize: '0.8rem', background: isActive ? 'var(--primary-soft)' : 'transparent'}}
                   >
-                    <div className={`p-1.5 rounded-md ${isActive ? 'bg-indigo-500/20' : 'bg-slate-800'}`}>
-                      <Building size={16} />
+                    <div style={{ 
+                      width: '24px', height: '24px', borderRadius: '5px', 
+                      background: 'var(--primary-soft)', color: 'var(--primary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <Building size={14} />
                     </div>
-                    <span className="flex-1 text-left truncate">{ws.organization.name}</span>
-                    {isActive && <Check size={16} />}
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ws.organization.name}
+                    </span>
+                    {isActive && <Check size={14} color="var(--primary)" />}
                   </button>
                 )
               })}
             </div>
 
-            {/* Create New Org Action */}
-            <div className="border-t border-slate-800 mt-1 pt-1">
-              <button
-                onClick={() => {
-                  setIsOpen(false)
-                  navigate('/app/organizations')
-                }}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <div className="p-1.5 rounded-md bg-slate-800">
-                  <Plus size={16} />
-                </div>
-                Create Organization
-              </button>
-            </div>
+            <div style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
+
+            {/* Create New */}
+            <button
+               onClick={() => {
+                 setIsOpen(false)
+                 navigate('/app/organizations')
+               }}
+               onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-sidebar-hover)'}
+               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+               style={{...itemStyle, gap: '8px', padding: '6px 10px', fontSize: '0.8rem', color: 'var(--text-secondary)'}}
+            >
+              <div style={{ 
+                width: '24px', height: '24px', borderRadius: '5px', 
+                background: 'var(--gray-100)', color: 'var(--gray-500)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Plus size={14} />
+              </div>
+              Create Organization
+            </button>
           </div>
         </div>
       )}

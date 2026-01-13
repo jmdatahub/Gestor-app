@@ -271,7 +271,7 @@ export async function getMyPendingInvitations(userEmail: string): Promise<Pendin
         name
       )
     `)
-    .eq('email', userEmail.toLowerCase().trim())
+    .ilike('email', userEmail.trim())
     .order('created_at', { ascending: false })
 
   if (error) {

@@ -21,6 +21,7 @@ import {
   deleteOrganization,
   restoreOrganization,
   permanentDeleteOrganization,
+  purgeExpiredOrganizations,
   checkDatabaseHealth,
   type UserProfile,
   type AdminOrganization
@@ -874,6 +875,30 @@ export default function AdminPanel() {
                 <p style={{ color: '#64748b', fontSize: 13 }}>La papelera está vacía</p>
               </div>
             ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 8px' }}>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('¿Estás seguro? Esto eliminará DEFINITIVAMENTE todas las organizaciones que llevan más de 7 días en la papelera.')) return
+                      setLoadingTrash(true)
+                      try {
+                        const count = await purgeExpiredOrganizations()
+                        alert(`Limpieza completada. Se eliminaron ${count} organizaciones permanentemente.`)
+                        await loadTrash()
+                        await loadStats()
+                      } catch (error: any) {
+                        alert('Error al limpiar: ' + error.message)
+                      } finally {
+                        setLoadingTrash(false)
+                      }
+                    }}
+                    className="btn btn-secondary"
+                    style={{ fontSize: 13, display: 'flex', gap: 8 }}
+                  >
+                    <Trash2 size={16} /> Limpiar Expirados (7+ días)
+                  </button>
+                </div>
+
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'rgba(30,41,59,0.5)' }}>
@@ -964,6 +989,7 @@ export default function AdminPanel() {
                   })}
                 </tbody>
               </table>
+            </div>
             )
           )}
         </div>

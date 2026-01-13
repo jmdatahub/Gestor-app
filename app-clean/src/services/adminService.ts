@@ -153,7 +153,7 @@ export async function getAllOrganizations(): Promise<AdminOrganization[]> {
 // Update organization (super admin only)
 export async function updateOrganization(
   orgId: string, 
-  updates: { name?: string; description?: string }
+  updates: { name?: string; description?: string | null }
 ): Promise<void> {
   const { error } = await supabase
     .from('organizations')

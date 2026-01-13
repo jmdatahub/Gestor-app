@@ -200,7 +200,7 @@ export default function AppLayout() {
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.6)',
+          background: 'rgba(15, 23, 42, 0.8)',
           backdropFilter: 'blur(12px)',
           zIndex: 99999,
           display: 'flex',
@@ -212,10 +212,10 @@ export default function AppLayout() {
           <div style={{
             width: 80, height: 80,
             borderRadius: 24,
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             marginBottom: 24,
-            boxShadow: '0 0 40px rgba(99, 102, 241, 0.5)',
+            boxShadow: '0 0 40px var(--primary-soft)',
             animation: 'pulse 1.5s infinite'
           }}>
             <Building size={40} color="white" />
@@ -230,7 +230,7 @@ export default function AppLayout() {
             Cambiando Espacio de Trabajo...
           </h2>
           <p style={{ 
-            color: '#94a3b8', 
+            color: 'var(--text-secondary)', 
             marginTop: 8,
             animation: 'slideUp 0.6s ease-out'
           }}>
@@ -394,7 +394,7 @@ export default function AppLayout() {
           <div className="header-brand flex items-center gap-4">
             <h1 className="header-title">{t('app.name')}</h1>
             {/* Workspace Selector in Header */}
-            <div style={{ marginLeft: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginLeft: 8 }}>
               <span style={{ color: 'var(--text-secondary)', fontSize: 14, marginRight: 16 }}>|</span>
               <HeaderWorkspaceSelector onBeforeSwitch={handleWorkspaceSwitch} />
             </div>
