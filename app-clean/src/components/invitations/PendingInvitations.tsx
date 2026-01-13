@@ -46,6 +46,8 @@ export function PendingInvitations({ userEmail, userId, onInvitationAccepted }: 
       // Reload invitations
       await loadInvitations()
       onInvitationAccepted?.()
+      // Trigger global refresh (AppLayout)
+      window.dispatchEvent(new Event('refreshInvitations'))
     } catch (error: any) {
       console.error('Error accepting invitation:', error)
       alert(error.message || 'Error al aceptar la invitación')
@@ -60,6 +62,7 @@ export function PendingInvitations({ userEmail, userId, onInvitationAccepted }: 
     try {
       await declineInvitation(invitationId)
       await loadInvitations()
+      window.dispatchEvent(new Event('refreshInvitations'))
     } catch (error: any) {
       console.error('Error declining invitation:', error)
       alert(error.message || 'Error al rechazar la invitación')

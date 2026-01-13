@@ -62,18 +62,46 @@ export default function AppLayout() {
 
   useEffect(() => {
     checkAuth()
+
+    // Listen for auth changes to keep invitations in sync
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user?.email) {
+        updateInvitations(session.user.email)
+      } else if (event === 'SIGNED_OUT') {
+        setPendingInvitations(0)
+      }
+    })
+
+    // Listen for custom event to refresh invitations (e.g. after accept/decline)
+    const handleRefresh = () => {
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user?.email) updateInvitations(data.user.email)
+      })
+    }
+    window.addEventListener('refreshInvitations', handleRefresh)
+
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener('refreshInvitations', handleRefresh)
+    }
   }, [])
+
+  const updateInvitations = async (email: string) => {
+    try {
+      const invitations = await getMyPendingInvitations(email)
+      setPendingInvitations(invitations.length)
+    } catch (err) {
+      console.error('Error updating invitations:', err)
+    }
+  }
 
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       navigate('/auth')
     } else {
-      // Fetch pending invitations count
-      const email = session.user?.email
-      if (email) {
-        const invitations = await getMyPendingInvitations(email)
-        setPendingInvitations(invitations.length)
+      if (session.user?.email) {
+        updateInvitations(session.user.email)
       }
     }
     setLoading(false)
