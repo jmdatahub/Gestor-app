@@ -5,6 +5,7 @@ import SettingsPanel from '../components/SettingsPanel'
 import { useI18n } from '../hooks/useI18n'
 import { useOffline } from '../context/OfflineContext'
 import SidebarUserMenu from '../components/layout/SidebarUserMenu' // [NEW] Import
+import { getMyPendingInvitations } from '../services/organizationService'
 
 import { 
   LayoutDashboard, 
@@ -27,7 +28,8 @@ import {
   BarChart3,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Mail
 } from 'lucide-react'
 
 // Constants
@@ -43,6 +45,7 @@ export default function AppLayout() {
   const [loading, setLoading] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [pendingInvitations, setPendingInvitations] = useState(0)
   
   // Sidebar State
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -63,6 +66,13 @@ export default function AppLayout() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       navigate('/auth')
+    } else {
+      // Fetch pending invitations count
+      const email = session.user?.email
+      if (email) {
+        const invitations = await getMyPendingInvitations(email)
+        setPendingInvitations(invitations.length)
+      }
     }
     setLoading(false)
   }
@@ -177,12 +187,49 @@ export default function AppLayout() {
               }
               title={isCollapsed ? t(item.key) : ''}
             >
-              <div className="nav-item-icon">
+              <div className="nav-item-icon" style={{ position: 'relative' }}>
                 <item.icon size={20} />
+                {/* Red badge for pending invitations on Dashboard */}
+                {item.path === '/app/dashboard' && pendingInvitations > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    minWidth: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    color: 'white',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(239,68,68,0.5)',
+                    animation: 'pulse 2s infinite'
+                  }}>
+                    {pendingInvitations}
+                  </span>
+                )}
               </div>
               <span className="nav-item-text transition-opacity duration-200 whitespace-nowrap">
                 {t(item.key)}
               </span>
+              {/* Text badge when not collapsed */}
+              {item.path === '/app/dashboard' && pendingInvitations > 0 && !isCollapsed && (
+                <span style={{
+                  marginLeft: 'auto',
+                  padding: '2px 8px',
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  color: 'white',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  boxShadow: '0 2px 6px rgba(239,68,68,0.4)'
+                }}>
+                  {pendingInvitations} 📩
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
