@@ -365,10 +365,49 @@ export default function AppLayout() {
             </div>
           </div>
             {/* Right Side Actions */}
-            {/* ... (existing right side actions) ... */}
+            <div className="flex items-center gap-3">
+              {!isOnline && (
+                <div className="badge badge-warning flex items-center gap-1" title="Modo sin conexión">
+                  <WifiOff size={14} />
+                  <span className="hidden sm:inline">Offline</span>
+                </div>
+              )}
+              
+              {pendingChanges > 0 && (
+                <div className="badge badge-info flex items-center gap-1" title={`${pendingChanges} cambios pendientes`}>
+                  <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+                  <span className="hidden sm:inline">{pendingChanges} cambios</span>
+                </div>
+              )}
+
+              {isOnline && pendingChanges > 0 && (
+                <button 
+                  onClick={() => syncNow()} 
+                  className="icon-button text-primary"
+                  disabled={isSyncing}
+                  title="Sincronizar ahora"
+                >
+                  <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+                </button>
+              )}
+
+            <button 
+              className="icon-button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label={t('settings.title')}
+            >
+              <Settings size={20} />
+            </button>
+           </div>
         </header>
 
-        {/* ... (existing main content) ... */}
+        
+        {/* Settings Panel */}
+        <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        
+        <div className="p-6 flex-1 overflow-y-auto">
+          <Outlet />
+        </div>
       </main>
 
     </div>
