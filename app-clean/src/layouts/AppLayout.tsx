@@ -7,6 +7,7 @@ import { useOffline } from '../context/OfflineContext'
 import SidebarUserMenu from '../components/layout/SidebarUserMenu'
 import { getMyPendingInvitations } from '../services/organizationService'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { HeaderWorkspaceSelector } from '../components/layout/HeaderWorkspaceSelector'
 
 import { 
   LayoutDashboard, 
@@ -49,6 +50,9 @@ export default function AppLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pendingInvitations, setPendingInvitations] = useState(0)
   
+  // Workspace Switch Transition State
+  const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false)
+
   // Sidebar State
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('sidebarWidth')
@@ -177,8 +181,64 @@ export default function AppLayout() {
     )
   }
 
+  const handleWorkspaceSwitch = async () => {
+    setIsSwitchingWorkspace(true)
+    // Artificial delay for animation
+    return new Promise<void>(resolve => {
+      setTimeout(() => {
+        setIsSwitchingWorkspace(false)
+        resolve()
+      }, 800)
+    })
+  }
+
   return (
     <div className="app-container">
+      
+      {/* Workspace Switch Transition Overlay */}
+      {isSwitchingWorkspace && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(12px)',
+          zIndex: 99999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          animation: 'fadeIn 0.3s ease-out'
+        }}>
+          <div style={{
+            width: 80, height: 80,
+            borderRadius: 24,
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            marginBottom: 24,
+            boxShadow: '0 0 40px rgba(99, 102, 241, 0.5)',
+            animation: 'pulse 1.5s infinite'
+          }}>
+            <Building size={40} color="white" />
+          </div>
+          <h2 style={{ 
+            color: 'white', 
+            fontSize: 24, 
+            fontWeight: 700, 
+            letterSpacing: '-0.5px',
+            animation: 'slideUp 0.5s ease-out'
+          }}>
+            Cambiando Espacio de Trabajo...
+          </h2>
+          <p style={{ 
+            color: '#94a3b8', 
+            marginTop: 8,
+            animation: 'slideUp 0.6s ease-out'
+          }}>
+             Un momento por favor
+          </p>
+        </div>
+      )}
+
       {/* Sidebar - Desktop */}
       <aside 
         ref={sidebarRef}
@@ -334,34 +394,9 @@ export default function AppLayout() {
           <div className="header-brand flex items-center gap-4">
             <h1 className="header-title">{t('app.name')}</h1>
             {/* Workspace Selector in Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>|</span>
-              <select
-                value={currentWorkspace?.id || 'personal'}
-                onChange={(e) => switchWorkspace(e.target.value === 'personal' ? null : e.target.value)}
-                style={{
-                  padding: '6px 32px 6px 12px',
-                  background: 'var(--card-bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 8px center',
-                  minWidth: 140
-                }}
-              >
-                <option value="personal">🏠 Personal</option>
-                {workspaces.map(ws => (
-                  <option key={ws.org_id} value={ws.org_id}>
-                    🏢 {ws.organization.name}
-                  </option>
-                ))}
-              </select>
+            <div style={{ marginLeft: 8 }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 14, marginRight: 16 }}>|</span>
+              <HeaderWorkspaceSelector onBeforeSwitch={handleWorkspaceSwitch} />
             </div>
           </div>
             {/* Right Side Actions */}
