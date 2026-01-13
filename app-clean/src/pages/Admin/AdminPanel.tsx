@@ -785,7 +785,8 @@ export default function AdminPanel() {
                 </tbody>
               </table>
             )
-          ) : (
+          )}
+          {activeTab === 'orgs' && (
             /* ORGANIZATIONS TABLE */
             loadingOrgs ? (
               <div style={{ padding: 64, textAlign: 'center' }}>
