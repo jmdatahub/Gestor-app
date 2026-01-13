@@ -618,6 +618,17 @@ export default function AdminPanel() {
         >
           <Building size={16} /> Organizaciones <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.7 }}>({orgCount})</span>
         </button>
+        <button
+          onClick={() => setActiveTab('trash')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px',
+            background: activeTab === 'trash' ? '#ef4444' : '#1e293b',
+            border: `1px solid ${activeTab === 'trash' ? '#ef4444' : '#334155'}`,
+            borderRadius: 10, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+          }}
+        >
+          <Trash2 size={16} /> Papelera <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.7 }}>({deletedOrgs.length})</span>
+        </button>
       </div>
 
       {/* Data Table Section */}
@@ -626,10 +637,14 @@ export default function AdminPanel() {
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <h3 style={{ color: 'white', fontSize: 16, fontWeight: 700, margin: 0 }}>
-              {activeTab === 'users' ? 'Gestión de Usuarios' : 'Gestión de Organizaciones'}
+              {activeTab === 'users' && 'Gestión de Usuarios'}
+              {activeTab === 'orgs' && 'Gestión de Organizaciones'}
+              {activeTab === 'trash' && '🗑️ Papelera'}
             </h3>
             <p style={{ color: '#64748b', fontSize: 13, margin: '4px 0 0' }}>
-              {activeTab === 'users' ? 'Administra permisos y estados' : 'Visualiza todas las organizaciones del sistema'}
+              {activeTab === 'users' && 'Administra permisos y estados'}
+              {activeTab === 'orgs' && 'Visualiza todas las organizaciones del sistema'}
+              {activeTab === 'trash' && 'Organizaciones eliminadas (se borran permanentemente después de 7 días)'}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -844,6 +859,112 @@ export default function AdminPanel() {
               <p style={{ color: '#64748b', fontSize: 13 }}>No hay organizaciones registradas</p>
             </div>
           )}
+
+          {/* Trash Tab Content */}
+          {activeTab === 'trash' && (
+            loadingTrash ? (
+              <div style={{ padding: 48, textAlign: 'center' }}>
+                <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', color: '#94a3b8' }} />
+                <p style={{ color: '#64748b', fontSize: 13, marginTop: 12 }}>Cargando papelera...</p>
+              </div>
+            ) : deletedOrgs.length === 0 ? (
+              <div style={{ padding: 48, textAlign: 'center' }}>
+                <Trash2 size={40} style={{ color: '#334155', marginBottom: 12 }} />
+                <p style={{ color: '#64748b', fontSize: 13 }}>La papelera está vacía</p>
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'rgba(30,41,59,0.5)' }}>
+                    <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Organización</th>
+                    <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Eliminada</th>
+                    <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Días restantes</th>
+                    <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deletedOrgs.map((org: any, idx: number) => {
+                    const deletedAt = new Date(org.deleted_at)
+                    const expiresAt = new Date(deletedAt.getTime() + 7 * 24 * 60 * 60 * 1000)
+                    const daysRemaining = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+                    
+                    return (
+                      <tr key={org.id} style={{ borderTop: '1px solid rgba(51,65,85,0.3)', background: idx % 2 === 0 ? 'transparent' : 'rgba(30,41,59,0.2)' }}>
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg, #ef4444, #dc2626)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14, opacity: 0.7 }}>
+                              🗑️
+                            </div>
+                            <div>
+                              <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: 14, display: 'block', textDecoration: 'line-through' }}>{org.name}</span>
+                              {org.description && <span style={{ color: '#64748b', fontSize: 12 }}>{org.description.substring(0, 50)}</span>}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '16px 24px', color: '#94a3b8', fontSize: 13 }}>
+                          {deletedAt.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td style={{ padding: '16px 24px' }}>
+                          <span style={{ 
+                            padding: '4px 10px', 
+                            borderRadius: 20, 
+                            fontSize: 12, 
+                            fontWeight: 600,
+                            background: daysRemaining <= 1 ? 'rgba(239,68,68,0.2)' : daysRemaining <= 3 ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)',
+                            color: daysRemaining <= 1 ? '#ef4444' : daysRemaining <= 3 ? '#f59e0b' : '#22c55e'
+                          }}>
+                            {daysRemaining} días
+                          </span>
+                        </td>
+                        <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                            <button 
+                              onClick={() => handleRestoreOrg(org.id)}
+                              disabled={restoringOrg === org.id}
+                              style={{ 
+                                padding: '6px 12px', 
+                                background: 'rgba(34,197,94,0.1)', 
+                                border: '1px solid rgba(34,197,94,0.2)', 
+                                borderRadius: 8, 
+                                color: '#22c55e', 
+                                fontSize: 12, 
+                                fontWeight: 600, 
+                                cursor: 'pointer', 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: 4,
+                                opacity: restoringOrg === org.id ? 0.6 : 1
+                              }}
+                            >
+                              <Undo2 size={14} /> {restoringOrg === org.id ? 'Restaurando...' : 'Restaurar'}
+                            </button>
+                            <button 
+                              onClick={() => setPermanentDeleteConfirm(org)}
+                              style={{ 
+                                padding: '6px 12px', 
+                                background: 'rgba(239,68,68,0.1)', 
+                                border: '1px solid rgba(239,68,68,0.2)', 
+                                borderRadius: 8, 
+                                color: '#ef4444', 
+                                fontSize: 12, 
+                                fontWeight: 600, 
+                                cursor: 'pointer', 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: 4
+                              }}
+                            >
+                              <Trash2 size={14} /> Eliminar definitivo
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )
+          )}
         </div>
       </div>
 
@@ -1054,6 +1175,93 @@ export default function AdminPanel() {
                 }}
               >
                 {deletingOrg ? 'Eliminando...' : 'Sí, Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PERMANENT Delete Organization Confirmation Modal */}
+      {permanentDeleteConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div style={{
+            background: 'linear-gradient(180deg, #1e293b, #0f172a)',
+            border: '2px solid #ef4444',
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 450,
+            width: '90%',
+            boxShadow: '0 25px 50px rgba(239,68,68,0.3)'
+          }}>
+            <h3 style={{ color: '#ef4444', fontSize: 20, fontWeight: 700, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              ⚠️ ELIMINACIÓN PERMANENTE
+            </h3>
+            <p style={{ color: '#94a3b8', fontSize: 14, margin: '0 0 8px' }}>
+              Organización: <strong style={{ color: 'white' }}>{permanentDeleteConfirm.name}</strong>
+            </p>
+            <div style={{ 
+              color: '#ef4444', 
+              fontSize: 14, 
+              margin: '0 0 20px', 
+              padding: 16, 
+              background: 'rgba(239,68,68,0.15)', 
+              borderRadius: 8, 
+              border: '1px solid rgba(239,68,68,0.4)',
+              fontWeight: 500
+            }}>
+              🚨 <strong>ESTA ACCIÓN NO SE PUEDE DESHACER</strong>
+              <br /><br />
+              Se eliminarán PERMANENTEMENTE:
+              <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+                <li>Todos los miembros de la organización</li>
+                <li>Todas las invitaciones pendientes</li>
+                <li>La organización y todos sus datos</li>
+              </ul>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setPermanentDeleteConfirm(null)}
+                disabled={permanentDeleting}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  background: '#22c55e',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                ← Cancelar (mantener)
+              </button>
+              <button
+                onClick={handlePermanentDelete}
+                disabled={permanentDeleting}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #dc2626, #991b1b)',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  opacity: permanentDeleting ? 0.7 : 1
+                }}
+              >
+                {permanentDeleting ? 'Eliminando...' : '🗑️ ELIMINAR PARA SIEMPRE'}
               </button>
             </div>
           </div>
