@@ -6,6 +6,7 @@ import { useI18n } from '../hooks/useI18n'
 import { useOffline } from '../context/OfflineContext'
 import SidebarUserMenu from '../components/layout/SidebarUserMenu' // [NEW] Import
 import { getMyPendingInvitations } from '../services/organizationService'
+import { useWorkspace } from '../context/WorkspaceContext'
 
 import { 
   LayoutDashboard, 
@@ -42,6 +43,7 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const { t } = useI18n()
   const { isOnline, pendingChanges, isSyncing, syncNow } = useOffline()
+  const { currentWorkspace, workspaces, switchWorkspace } = useWorkspace()
   const [loading, setLoading] = useState(true)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -303,6 +305,36 @@ export default function AppLayout() {
         <header className="app-header flex justify-between items-center px-6 h-[80px] border-b border-[var(--border-color)] bg-[var(--bg-header)]">
           <div className="header-brand flex items-center gap-4">
             <h1 className="header-title">{t('app.name')}</h1>
+            {/* Workspace Selector in Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>|</span>
+              <select
+                value={currentWorkspace?.id || 'personal'}
+                onChange={(e) => switchWorkspace(e.target.value === 'personal' ? null : e.target.value)}
+                style={{
+                  padding: '6px 32px 6px 12px',
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 8px center',
+                  minWidth: 140
+                }}
+              >
+                <option value="personal">🏠 Personal</option>
+                {workspaces.map(ws => (
+                  <option key={ws.org_id} value={ws.org_id}>
+                    🏢 {ws.organization.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
             {/* Right Side Actions */}
             <div className="flex items-center gap-3">
