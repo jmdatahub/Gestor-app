@@ -7,7 +7,6 @@ import { useOffline } from '../context/OfflineContext'
 import SidebarUserMenu from '../components/layout/SidebarUserMenu'
 import { getMyPendingInvitations } from '../services/organizationService'
 import { useWorkspace } from '../context/WorkspaceContext'
-import { HeaderWorkspaceSelector } from '../components/layout/HeaderWorkspaceSelector'
 
 import { 
   LayoutDashboard, 
@@ -50,73 +49,284 @@ export default function AppLayout() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pendingInvitations, setPendingInvitations] = useState(0)
   
-  // Workspace Switch Transition State
-  const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false)
+  // Sidebar State
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebarWidth')
+    return saved ? parseInt(saved) : DEFAULT_WIDTH
+  })
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    return localStorage.getItem('sidebarCollapsed') === 'true'
+  })
+  const [isResizing, setIsResizing] = useState(false)
+  const sidebarRef = useRef<HTMLElement>(null)
 
-  // ... (existing code) ...
+  useEffect(() => {
+    checkAuth()
 
-  const handleWorkspaceSwitch = async () => {
-    setIsSwitchingWorkspace(true)
-    // Artificial delay for animation
-    return new Promise<void>(resolve => {
-      setTimeout(() => {
-        setIsSwitchingWorkspace(false)
-        resolve()
-      }, 800)
+    // Listen for auth changes to keep invitations in sync
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user?.email) {
+        updateInvitations(session.user.email)
+      } else if (event === 'SIGNED_OUT') {
+        setPendingInvitations(0)
+      }
     })
+
+    // Listen for custom event to refresh invitations (e.g. after accept/decline)
+    const handleRefresh = () => {
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user?.email) updateInvitations(data.user.email)
+      })
+    }
+    window.addEventListener('refreshInvitations', handleRefresh)
+
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener('refreshInvitations', handleRefresh)
+    }
+  }, [])
+
+  const updateInvitations = async (email: string) => {
+    try {
+      const invitations = await getMyPendingInvitations(email)
+      setPendingInvitations(invitations.length)
+    } catch (err) {
+      console.error('Error updating invitations:', err)
+    }
   }
 
-  // ... (existing helper functions) ...
+  const checkAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      navigate('/auth')
+    } else {
+      if (session.user?.email) {
+        updateInvitations(session.user.email)
+      }
+    }
+    setLoading(false)
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    navigate('/auth')
+  }
+
+  // Persist Sidebar State
+  useEffect(() => {
+    localStorage.setItem('sidebarWidth', sidebarWidth.toString())
+  }, [sidebarWidth])
+
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', isCollapsed.toString())
+  }, [isCollapsed])
+
+  // Resize Handler
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.max(MIN_SIDEBAR_WIDTH, Math.min(e.clientX, MAX_SIDEBAR_WIDTH))
+      setSidebarWidth(newWidth)
+      if (isCollapsed && newWidth > MIN_SIDEBAR_WIDTH) {
+         setIsCollapsed(false) // Auto expand if dragged
+      }
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [isCollapsed])
+
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed)
+  }
+
+  const navItems = [
+    { key: 'nav.dashboard', path: '/app/dashboard', icon: LayoutDashboard },
+    { key: 'nav.organizations', path: '/app/organizations', icon: Building },
+    { key: 'nav.summary', path: '/app/summary', icon: BarChart3 },
+    { key: 'nav.movements', path: '/app/movements', icon: ArrowUpDown },
+    { key: 'nav.categories', path: '/app/categories', icon: Tag },
+    { key: 'nav.accounts', path: '/app/accounts', icon: CreditCard },
+    { key: 'nav.savings', path: '/app/savings', icon: PiggyBank },
+    { key: 'nav.investments', path: '/app/investments', icon: TrendingUp },
+    { key: 'nav.recurring', path: '/app/recurring', icon: RefreshCw },
+    { key: 'nav.debts', path: '/app/debts', icon: Wallet },
+    { key: 'nav.insights', path: '/app/insights', icon: Lightbulb },
+    { key: 'nav.alerts', path: '/app/alerts', icon: Bell },
+    { key: 'nav.export', path: '/app/export', icon: Download },
+    { key: 'nav.admin', path: '/app/admin', icon: Shield },
+  ]
+
+  if (loading) {
+    return (
+      <div className="loading-container" style={{ minHeight: '100vh' }}>
+        <div className="spinner"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="app-container">
-      
-      {/* Workspace Switch Transition Overlay */}
-      {isSwitchingWorkspace && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.6)',
-          backdropFilter: 'blur(12px)',
-          zIndex: 99999,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          animation: 'fadeIn 0.3s ease-out'
-        }}>
-          <div style={{
-            width: 80, height: 80,
-            borderRadius: 24,
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 24,
-            boxShadow: '0 0 40px rgba(99, 102, 241, 0.5)',
-            animation: 'pulse 1.5s infinite'
-          }}>
-            <Building size={40} color="white" />
+      {/* Sidebar - Desktop */}
+      <aside 
+        ref={sidebarRef}
+        className={`app-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isResizing ? 'is-resizing' : ''}`}
+        style={{ width: isCollapsed ? COLLAPSED_WIDTH : sidebarWidth }}
+      >
+        <div 
+           className={`sidebar-resize-handle ${isResizing ? 'is-resizing' : ''}`}
+           onMouseDown={startResizing}
+           title="Drag to resize"
+        />
+
+        <div className="sidebar-header">
+          <div className="sidebar-logo flex items-center gap-3 overflow-hidden">
+            <div className="sidebar-logo-badge">MP</div>
+            <span className="sidebar-logo-text font-bold text-lg whitespace-nowrap transition-opacity duration-200">
+               Mi Panel
+            </span>
           </div>
-          <h2 style={{ 
-            color: 'white', 
-            fontSize: 24, 
-            fontWeight: 700, 
-            letterSpacing: '-0.5px',
-            animation: 'slideUp 0.5s ease-out'
-          }}>
-            Cambiando Espacio de Trabajo...
-          </h2>
-          <p style={{ 
-            color: '#94a3b8', 
-            marginTop: 8,
-            animation: 'slideUp 0.6s ease-out'
-          }}>
-             Un momento por favor
-          </p>
+          <button 
+            className="sidebar-collapse-btn" 
+            onClick={toggleCollapse}
+            title={isCollapsed ? "Expandir" : "Colapsar"}
+          >
+            {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
+        </div>
+        
+        <nav className="nav-section">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) => 
+                `nav-item ${isActive ? 'active' : ''}`
+              }
+              title={isCollapsed ? t(item.key) : ''}
+            >
+              <div className="nav-item-icon" style={{ position: 'relative' }}>
+                <item.icon size={20} />
+                {/* Red badge for pending invitations on Dashboard */}
+                {item.path === '/app/dashboard' && pendingInvitations > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    minWidth: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    color: 'white',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 6px rgba(239,68,68,0.5)',
+                    animation: 'pulse 2s infinite'
+                  }}>
+                    {pendingInvitations}
+                  </span>
+                )}
+              </div>
+              <span className="nav-item-text transition-opacity duration-200 whitespace-nowrap">
+                {t(item.key)}
+              </span>
+              {/* Text badge when not collapsed */}
+              {item.path === '/app/dashboard' && pendingInvitations > 0 && !isCollapsed && (
+                <span style={{
+                  marginLeft: 'auto',
+                  padding: '2px 8px',
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  color: 'white',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  boxShadow: '0 2px 6px rgba(239,68,68,0.4)'
+                }}>
+                  {pendingInvitations} 📩
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+        
+        <div className="sidebar-footer">
+           <SidebarUserMenu isCollapsed={isCollapsed} />
+        </div>
+      </aside>
+
+      {/* Mobile Header */}
+      <div className="mobile-header">
+        <div className="mobile-brand">
+          <div className="header-logo-badge">MP</div>
+          <span className="mobile-logo">Mi Panel</span>
+        </div>
+        <button 
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="mobile-menu-btn"
+        >
+          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      </div>
+
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="mobile-sidebar">
+          <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="sidebar-logo flex items-center gap-3">
+              <div className="sidebar-logo-badge">MP</div>
+              <span className="text-white font-bold text-lg">Mi Panel</span>
+            </div>
+            <button 
+              onClick={() => setMobileMenuOpen(false)}
+              className="mobile-menu-btn"
+            >
+              <X size={24} />
+            </button>
+          </div>
+          
+          <nav className="nav-section">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) => 
+                  `nav-item ${isActive ? 'active' : ''}`
+                }
+              >
+                <div className="nav-item-icon">
+                  <item.icon size={20} />
+                </div>
+                <span className="nav-item-text">{t(item.key)}</span>
+              </NavLink>
+            ))}
+          </nav>
+          
+          <div className="sidebar-footer">
+            <button onClick={handleSignOut} className="nav-item w-full text-red-400">
+              <div className="nav-item-icon">
+                <LogOut size={20} />
+              </div>
+              <span>{t('nav.logout')}</span>
+            </button>
+          </div>
         </div>
       )}
-
-      {/* Sidebar - Desktop */}
-      {/* ... (existing sidebar code) ... */}
 
       {/* Main Content */}
       <main className="app-main">
@@ -124,9 +334,34 @@ export default function AppLayout() {
           <div className="header-brand flex items-center gap-4">
             <h1 className="header-title">{t('app.name')}</h1>
             {/* Workspace Selector in Header */}
-            <div style={{ marginLeft: 8 }}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: 14, marginRight: 16 }}>|</span>
-              <HeaderWorkspaceSelector onBeforeSwitch={handleWorkspaceSwitch} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>|</span>
+              <select
+                value={currentWorkspace?.id || 'personal'}
+                onChange={(e) => switchWorkspace(e.target.value === 'personal' ? null : e.target.value)}
+                style={{
+                  padding: '6px 32px 6px 12px',
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 8px center',
+                  minWidth: 140
+                }}
+              >
+                <option value="personal">🏠 Personal</option>
+                {workspaces.map(ws => (
+                  <option key={ws.org_id} value={ws.org_id}>
+                    🏢 {ws.organization.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
             {/* Right Side Actions */}
