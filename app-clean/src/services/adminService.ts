@@ -129,12 +129,13 @@ export interface AdminOrganization {
   created_at: string
 }
 
-// Get all organizations (for super admin)
+// Get all organizations (for super admin) - excludes deleted
 export async function getAllOrganizations(): Promise<AdminOrganization[]> {
   try {
     const { data, error } = await supabase
       .from('organizations')
       .select('*')
+      .is('deleted_at', null) // Exclude deleted orgs
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -162,9 +163,59 @@ export async function updateOrganization(
   if (error) throw error
 }
 
-// Delete organization (super admin only)
+// Soft-delete organization (moves to trash for 7 days)
 export async function deleteOrganization(orgId: string): Promise<void> {
-  // First delete all members
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  // Soft delete - just set deleted_at timestamp
+  const { error } = await supabase
+    .from('organizations')
+    .update({ 
+      deleted_at: new Date().toISOString(),
+      deleted_by: user?.id || null
+    })
+    .eq('id', orgId)
+
+  if (error) throw error
+}
+
+// Restore organization from trash
+export async function restoreOrganization(orgId: string): Promise<void> {
+  const { error } = await supabase
+    .from('organizations')
+    .update({ 
+      deleted_at: null,
+      deleted_by: null
+    })
+    .eq('id', orgId)
+
+  if (error) throw error
+}
+
+// Get organizations in trash (deleted)
+export async function getDeletedOrganizations(): Promise<AdminOrganization[]> {
+  try {
+    const { data, error } = await supabase
+      .from('organizations')
+      .select('*')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false })
+
+    if (error) {
+      console.warn('Error fetching deleted organizations:', error.message)
+      return []
+    }
+
+    return (data || []) as AdminOrganization[]
+  } catch (err) {
+    console.error('Unexpected error in getDeletedOrganizations:', err)
+    return []
+  }
+}
+
+// Permanently delete organization (no recovery)
+export async function permanentDeleteOrganization(orgId: string): Promise<void> {
+  // Delete all members
   const { error: membersError } = await supabase
     .from('organization_members')
     .delete()
@@ -184,7 +235,7 @@ export async function deleteOrganization(orgId: string): Promise<void> {
     console.warn('Error deleting org invitations:', invitationsError)
   }
 
-  // Finally delete the organization
+  // Finally permanently delete the organization
   const { error } = await supabase
     .from('organizations')
     .delete()

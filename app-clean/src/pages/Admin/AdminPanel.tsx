@@ -16,8 +16,11 @@ import {
   deleteUserProfile,
   checkIsSuperAdmin,
   getAllOrganizations,
+  getDeletedOrganizations,
   updateOrganization,
   deleteOrganization,
+  restoreOrganization,
+  permanentDeleteOrganization,
   checkDatabaseHealth,
   type UserProfile,
   type AdminOrganization
@@ -41,7 +44,8 @@ import {
   FileJson,
   ExternalLink,
   AlertTriangle,
-  Edit2
+  Edit2,
+  Undo2
 } from 'lucide-react'
 
 const SUPER_ADMIN_EMAIL = 'mp.jorge00@gmail.com'
@@ -60,7 +64,7 @@ export default function AdminPanel() {
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [loadingOrgs, setLoadingOrgs] = useState(false)
   const [profilesTableExists, setProfilesTableExists] = useState(false)
-  const [activeTab, setActiveTab] = useState<'users' | 'orgs'>('users')
+  const [activeTab, setActiveTab] = useState<'users' | 'orgs' | 'trash'>('users')
   const [searchTerm, setSearchTerm] = useState('')
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'suspended'>('all')
@@ -111,6 +115,13 @@ export default function AdminPanel() {
   const [deleteOrgConfirm, setDeleteOrgConfirm] = useState<AdminOrganization | null>(null)
   const [deletingOrg, setDeletingOrg] = useState(false)
 
+  // Trash (papelera) state
+  const [deletedOrgs, setDeletedOrgs] = useState<AdminOrganization[]>([])
+  const [loadingTrash, setLoadingTrash] = useState(false)
+  const [restoringOrg, setRestoringOrg] = useState<string | null>(null)
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState<AdminOrganization | null>(null)
+  const [permanentDeleting, setPermanentDeleting] = useState(false)
+
   useEffect(() => {
     checkAdminAccess()
   }, [])
@@ -127,6 +138,7 @@ export default function AdminPanel() {
           if (isHealthy) {
             await loadUsers()
             await loadOrganizations()
+            await loadTrash() // Load deleted organizations
           }
         }
       }
@@ -217,11 +229,56 @@ export default function AdminPanel() {
       await deleteOrganization(deleteOrgConfirm.id)
       setDeleteOrgConfirm(null)
       await loadOrganizations()
+      await loadTrash() // Reload trash after soft-delete
       await loadStats()
     } catch (error: any) {
       alert('Error al eliminar: ' + (error.message || 'Error desconocido'))
     } finally {
       setDeletingOrg(false)
+    }
+  }
+
+  // Load deleted organizations (trash/papelera)
+  const loadTrash = async () => {
+    setLoadingTrash(true)
+    try {
+      const data = await getDeletedOrganizations()
+      setDeletedOrgs(data)
+    } catch (error) {
+      console.error('Error loading trash:', error)
+    } finally {
+      setLoadingTrash(false)
+    }
+  }
+
+  // Restore organization from trash
+  const handleRestoreOrg = async (orgId: string) => {
+    setRestoringOrg(orgId)
+    try {
+      await restoreOrganization(orgId)
+      await loadOrganizations()
+      await loadTrash()
+      await loadStats()
+    } catch (error: any) {
+      alert('Error al restaurar: ' + (error.message || 'Error desconocido'))
+    } finally {
+      setRestoringOrg(null)
+    }
+  }
+
+  // Permanently delete organization (no recovery)
+  const handlePermanentDelete = async () => {
+    if (!permanentDeleteConfirm) return
+    setPermanentDeleting(true)
+    try {
+      await permanentDeleteOrganization(permanentDeleteConfirm.id)
+      setPermanentDeleteConfirm(null)
+      await loadTrash()
+      await loadStats()
+    } catch (error: any) {
+      alert('Error al eliminar permanentemente: ' + (error.message || 'Error desconocido'))
+    } finally {
+      setPermanentDeleting(false)
     }
   }
 
