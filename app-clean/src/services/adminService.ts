@@ -149,6 +149,50 @@ export async function getAllOrganizations(): Promise<AdminOrganization[]> {
   }
 }
 
+// Update organization (super admin only)
+export async function updateOrganization(
+  orgId: string, 
+  updates: { name?: string; description?: string }
+): Promise<void> {
+  const { error } = await supabase
+    .from('organizations')
+    .update(updates)
+    .eq('id', orgId)
+
+  if (error) throw error
+}
+
+// Delete organization (super admin only)
+export async function deleteOrganization(orgId: string): Promise<void> {
+  // First delete all members
+  const { error: membersError } = await supabase
+    .from('organization_members')
+    .delete()
+    .eq('org_id', orgId)
+
+  if (membersError) {
+    console.warn('Error deleting org members:', membersError)
+  }
+
+  // Delete all invitations
+  const { error: invitationsError } = await supabase
+    .from('organization_invitations')
+    .delete()
+    .eq('org_id', orgId)
+
+  if (invitationsError) {
+    console.warn('Error deleting org invitations:', invitationsError)
+  }
+
+  // Finally delete the organization
+  const { error } = await supabase
+    .from('organizations')
+    .delete()
+    .eq('id', orgId)
+
+  if (error) throw error
+}
+
 // Check if current user is super admin
 export async function checkIsSuperAdmin(): Promise<boolean> {
   try {
@@ -188,3 +232,4 @@ export async function checkDatabaseHealth(): Promise<{ profilesExists: boolean }
     return { profilesExists: false }
   }
 }
+

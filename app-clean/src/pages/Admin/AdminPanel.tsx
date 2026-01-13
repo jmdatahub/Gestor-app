@@ -16,6 +16,8 @@ import {
   deleteUserProfile,
   checkIsSuperAdmin,
   getAllOrganizations,
+  updateOrganization,
+  deleteOrganization,
   checkDatabaseHealth,
   type UserProfile,
   type AdminOrganization
@@ -38,7 +40,8 @@ import {
   FileText,
   FileJson,
   ExternalLink,
-  AlertTriangle
+  AlertTriangle,
+  Edit2
 } from 'lucide-react'
 
 const SUPER_ADMIN_EMAIL = 'mp.jorge00@gmail.com'
@@ -99,6 +102,14 @@ export default function AdminPanel() {
     accounts: any[]
     organizations: any[]
   } | null>(null)
+
+  // Organization edit/delete state
+  const [editingOrg, setEditingOrg] = useState<AdminOrganization | null>(null)
+  const [editOrgName, setEditOrgName] = useState('')
+  const [editOrgDescription, setEditOrgDescription] = useState('')
+  const [savingOrg, setSavingOrg] = useState(false)
+  const [deleteOrgConfirm, setDeleteOrgConfirm] = useState<AdminOrganization | null>(null)
+  const [deletingOrg, setDeletingOrg] = useState(false)
 
   useEffect(() => {
     checkAdminAccess()
@@ -172,6 +183,48 @@ export default function AdminPanel() {
       setLoadingOrgs(false)
     }
   }
+
+  // Handle organization edit
+  const handleEditOrg = (org: AdminOrganization) => {
+    setEditingOrg(org)
+    setEditOrgName(org.name)
+    setEditOrgDescription(org.description || '')
+  }
+
+  const handleSaveOrg = async () => {
+    if (!editingOrg || !editOrgName.trim()) return
+    setSavingOrg(true)
+    try {
+      await updateOrganization(editingOrg.id, {
+        name: editOrgName.trim(),
+        description: editOrgDescription.trim() || null
+      })
+      setEditingOrg(null)
+      await loadOrganizations()
+      await loadStats()
+    } catch (error: any) {
+      alert('Error al guardar: ' + (error.message || 'Error desconocido'))
+    } finally {
+      setSavingOrg(false)
+    }
+  }
+
+  // Handle organization delete
+  const handleDeleteOrg = async () => {
+    if (!deleteOrgConfirm) return
+    setDeletingOrg(true)
+    try {
+      await deleteOrganization(deleteOrgConfirm.id)
+      setDeleteOrgConfirm(null)
+      await loadOrganizations()
+      await loadStats()
+    } catch (error: any) {
+      alert('Error al eliminar: ' + (error.message || 'Error desconocido'))
+    } finally {
+      setDeletingOrg(false)
+    }
+  }
+
   // Open confirmation modal instead of using window.confirm
   const openConfirmModal = (type: 'suspend' | 'unsuspend' | 'delete', userId: string, userName: string) => {
     setConfirmModal({ show: true, type, userId, userName })
@@ -697,12 +750,26 @@ export default function AdminPanel() {
                       </td>
                       <td style={{ padding: '16px 24px', color: '#94a3b8', fontSize: 13 }}>{formatDate(org.created_at)}</td>
                       <td style={{ padding: '16px 24px', textAlign: 'right' }}>
-                        <button 
-                          onClick={() => loadOrgDetails(org)}
-                          style={{ padding: '6px 12px', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8, color: '#8b5cf6', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <Eye size={14} /> Ver detalles
-                        </button>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          <button 
+                            onClick={() => loadOrgDetails(org)}
+                            style={{ padding: '6px 12px', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8, color: '#8b5cf6', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Eye size={14} /> Ver
+                          </button>
+                          <button 
+                            onClick={() => handleEditOrg(org)}
+                            style={{ padding: '6px 12px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 8, color: '#3b82f6', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Edit2 size={14} /> Editar
+                          </button>
+                          <button 
+                            onClick={() => setDeleteOrgConfirm(org)}
+                            style={{ padding: '6px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <Trash2 size={14} /> Eliminar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -749,6 +816,192 @@ export default function AdminPanel() {
           Supabase Dashboard <ExternalLink size={12} />
         </a>
       </div>
+
+      {/* Edit Organization Modal */}
+      {editingOrg && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 450,
+            width: '90%',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.5)'
+          }}>
+            <h3 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Edit2 size={20} style={{ color: '#3b82f6' }} />
+              Editar Organización
+            </h3>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Nombre</label>
+              <input
+                type="text"
+                value={editOrgName}
+                onChange={(e) => setEditOrgName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, marginBottom: 6 }}>Descripción</label>
+              <textarea
+                value={editOrgDescription}
+                onChange={(e) => setEditOrgDescription(e.target.value)}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14,
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setEditingOrg(null)}
+                disabled={savingOrg}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 8,
+                  color: '#94a3b8',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveOrg}
+                disabled={savingOrg || !editOrgName.trim()}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  opacity: savingOrg ? 0.7 : 1
+                }}
+              >
+                {savingOrg ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Organization Confirmation Modal */}
+      {deleteOrgConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            background: '#1e293b',
+            border: '1px solid #334155',
+            borderRadius: 16,
+            padding: 24,
+            maxWidth: 420,
+            width: '90%',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.5)'
+          }}>
+            <h3 style={{ color: '#ef4444', fontSize: 18, fontWeight: 700, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={20} />
+              ¿Eliminar organización?
+            </h3>
+            <p style={{ color: '#94a3b8', fontSize: 14, margin: '0 0 8px' }}>
+              Organización: <strong style={{ color: 'white' }}>{deleteOrgConfirm.name}</strong>
+            </p>
+            <div style={{ 
+              color: '#ef4444', 
+              fontSize: 13, 
+              margin: '0 0 20px', 
+              padding: 12, 
+              background: 'rgba(239,68,68,0.1)', 
+              borderRadius: 8, 
+              border: '1px solid rgba(239,68,68,0.2)' 
+            }}>
+              ⚠️ Esta acción es <strong>IRREVERSIBLE</strong>. Se eliminarán:
+              <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+                <li>Todos los miembros</li>
+                <li>Todas las invitaciones pendientes</li>
+                <li>La organización completa</li>
+              </ul>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setDeleteOrgConfirm(null)}
+                disabled={deletingOrg}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: 8,
+                  color: '#94a3b8',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteOrg}
+                disabled={deletingOrg}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  opacity: deletingOrg ? 0.7 : 1
+                }}
+              >
+                {deletingOrg ? 'Eliminando...' : 'Sí, Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       {confirmModal && (
