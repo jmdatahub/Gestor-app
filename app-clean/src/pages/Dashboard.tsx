@@ -13,6 +13,7 @@ import { SkeletonDashboard } from '../components/Skeleton'
 import { NetWorthInfo, NetWorthChart, useNetWorth } from '../components/ChartSection'
 
 import { useWorkspace } from '../context/WorkspaceContext'
+import { PendingInvitations } from '../components/invitations/PendingInvitations'
 
 interface AccountSummary {
   totalBalance: number
@@ -31,6 +32,8 @@ export default function Dashboard() {
   const { settings } = useSettings()
   const { currentWorkspace, workspaces, isLoading: workspaceLoading, userRole, switchWorkspace } = useWorkspace()
   const [loading, setLoading] = useState(true)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const [accountsSummary, setAccountsSummary] = useState<AccountSummary>({ totalBalance: 0, accountCount: 0 })
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary>({ income: 0, expense: 0, balance: 0 })
   const [financialOverview, setFinancialOverview] = useState<FinancialDistribution | null>(null)
@@ -49,6 +52,10 @@ export default function Dashboard() {
     
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
+    
+    // Set user info for invitations
+    setUserEmail(user.email || null)
+    setUserId(user.id)
 
     try {
       // Warmup catalog cache for faster subsequent loads (invalidate if workspace changed?)
@@ -176,6 +183,13 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Pending Invitations Banner */}
+      <PendingInvitations 
+        userEmail={userEmail} 
+        userId={userId}
+        onInvitationAccepted={loadDashboardData}
+      />
 
       {/* KPI Grid */}
       <div className="kpi-grid mb-6">

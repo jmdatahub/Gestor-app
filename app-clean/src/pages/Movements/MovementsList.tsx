@@ -306,6 +306,7 @@ export default function MovementsList() {
     try {
       const newAccount = await createAccount({
         user_id: user.id,
+        organization_id: currentWorkspace?.id || null, // Include workspace!
         name: newAccountName.trim(),
         type: newAccountType as 'general' | 'savings' | 'cash' | 'bank' | 'broker' | 'other',
         parent_account_id: newAccountParentId || null

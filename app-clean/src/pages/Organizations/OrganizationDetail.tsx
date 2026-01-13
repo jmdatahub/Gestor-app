@@ -98,9 +98,11 @@ export default function OrganizationDetail() {
     
     try {
       await inviteMember(id, inviteEmail, inviteRole)
-      alert('Invitación enviada (Simulación)')
+      alert('✅ Invitación enviada correctamente')
       setShowInviteModal(false)
       setInviteEmail('')
+      // Reload data to show the new invitation
+      loadData()
     } catch (error: any) {
       console.error('Invite error:', error)
       alert(error.message || 'Error al invitar')
@@ -350,11 +352,11 @@ export default function OrganizationDetail() {
          <UiModalHeader>Invitar Miembro</UiModalHeader>
          <form onSubmit={handleInvite}>
            <UiModalBody>
-              <div className="bg-yellow-50 p-3 rounded mb-4 text-sm text-yellow-800">
-                 ⚠️ Nota: Las invitaciones por email requieren un backend serverless. 
-                 Esta funcionalidad es una simulación visual por ahora.
-              </div>
-              <UiInput 
+               <div className="bg-blue-50 p-3 rounded mb-4 text-sm text-blue-800">
+                  ℹ️ La invitación se guardará en el sistema. El usuario invitado podrá verla
+                  y aceptarla cuando inicie sesión en la aplicación.
+               </div>
+               <UiInput 
                 label="Email" 
                 type="email" 
                 value={inviteEmail} 

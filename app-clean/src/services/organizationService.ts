@@ -176,19 +176,21 @@ export async function getOrganizationMembers(orgId: string): Promise<Organizatio
   }))
 }
 
-// Invite member (Mock implementation for now or direct insert if allowed)
+// Invite member using database RPC
 export async function inviteMember(orgId: string, email: string, role: AppRole): Promise<void> {
-  // In a real app, this would verify email exists in auth.users (via Edge Function) or send an invite.
-  // For this "Hard Tenant" / "Shadow" pivot, we might just want to Add Member by ID if we know it, 
-  // or simple visual simulation if we lack the backend for email lookup.
-  
-  // For now, let's just log it. Real implementation requires backend function to lookup user_id by email.
-  console.log('Inviting member:', { orgId, email, role })
-  
-  // TODO: Call an Edge Function `invite-user`
-  // await supabase.functions.invoke('invite-user', { body: { orgId, email, role } })
-  
-  throw new Error("Invitation system requires backend function (not implemented yet).")
+  // Call the database RPC to create the invitation
+  const { data, error } = await supabase.rpc('invite_to_organization', {
+    p_org_id: orgId,
+    p_target_email: email.toLowerCase().trim(),
+    p_role: role
+  })
+
+  if (error) {
+    console.error('Error inviting member:', error)
+    throw error
+  }
+
+  console.log('Invitation created:', data)
 }
 
 // Remove member
@@ -248,3 +250,82 @@ export async function cancelInvitation(invitationId: string): Promise<void> {
   if (error) throw error
 }
 
+// Extended invitation type with organization name
+export interface PendingInvitation extends OrganizationInvitation {
+  organization?: {
+    id: string
+    name: string
+  } | null
+}
+
+// Get pending invitations for the current user (by their email)
+export async function getMyPendingInvitations(userEmail: string): Promise<PendingInvitation[]> {
+  if (!userEmail) return []
+  
+  const { data, error } = await supabase
+    .from('organization_invitations')
+    .select(`
+      *,
+      organization:organizations (
+        id,
+        name
+      )
+    `)
+    .eq('email', userEmail.toLowerCase().trim())
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching my invitations:', error)
+    return []
+  }
+
+  return data as PendingInvitation[]
+}
+
+// Accept an invitation - adds user as member and deletes invitation
+export async function acceptInvitation(invitationId: string, userId: string): Promise<void> {
+  // 1. Get the invitation details
+  const { data: invitation, error: fetchError } = await supabase
+    .from('organization_invitations')
+    .select('org_id, role')
+    .eq('id', invitationId)
+    .single()
+
+  if (fetchError || !invitation) {
+    throw new Error('Invitación no encontrada')
+  }
+
+  // 2. Add user to organization_members
+  const { error: memberError } = await supabase
+    .from('organization_members')
+    .insert([{
+      org_id: invitation.org_id,
+      user_id: userId,
+      role: invitation.role
+    }])
+
+  if (memberError) {
+    console.error('Error adding member:', memberError)
+    throw memberError
+  }
+
+  // 3. Delete the invitation
+  const { error: deleteError } = await supabase
+    .from('organization_invitations')
+    .delete()
+    .eq('id', invitationId)
+
+  if (deleteError) {
+    console.warn('Could not delete invitation, but user was added:', deleteError)
+  }
+}
+
+// Decline an invitation - just deletes it
+export async function declineInvitation(invitationId: string): Promise<void> {
+  const { error } = await supabase
+    .from('organization_invitations')
+    .delete()
+    .eq('id', invitationId)
+
+  if (error) throw error
+}
