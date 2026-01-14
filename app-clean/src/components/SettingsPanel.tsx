@@ -1,12 +1,12 @@
 import { useSettings, type Theme } from '../context/SettingsContext';
 import { useI18n } from '../hooks/useI18n';
-import { Sun, Moon, Monitor, X } from 'lucide-react';
-import type { Density, NotificationSettings } from '../context/SettingsContext';
+import { Sun, Moon, Monitor, X, HelpCircle } from 'lucide-react';
+import type { Density } from '../context/SettingsContext';
 import { UiSelect } from './ui/UiSelect';
 import { UiSegmented } from './ui/UiSegmented';
-import { PaymentMethodsSettings } from './domain/PaymentMethodsSettings';
 import { ApiTokensSettings } from './domain/ApiTokensSettings';
-import { ApiDocsPanel } from './domain/ApiDocsPanel';
+import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from './ui/UiModal';
+import { useState } from 'react';
 
 type Props = {
   open: boolean;
@@ -16,6 +16,7 @@ type Props = {
 export default function SettingsPanel({ open, onClose }: Props) {
   const { settings, updateSettings } = useSettings();
   const { t } = useI18n();
+  const [showApiHelp, setShowApiHelp] = useState(false);
 
   if (!open) return null;
 
@@ -49,7 +50,6 @@ export default function SettingsPanel({ open, onClose }: Props) {
               />
             </div>
 
-            {/* Density */}
             <div className="settings-field">
               <div className="settings-label">{t('settings.density')}</div>
               <UiSegmented
@@ -65,60 +65,50 @@ export default function SettingsPanel({ open, onClose }: Props) {
             </div>
           </div>
 
-          {/* Language Section */}
+          {/* Language & Format Section */}
           <div className="settings-section">
-            <div className="settings-section-title">{t('settings.language')}</div>
-            <div className="settings-field">
-              <UiSelect
-                value={settings.language}
-                onChange={(val) => updateSettings({ language: val as 'es' | 'en' })}
-                options={[
-                  { value: 'es', label: '🇪🇸 Español' },
-                  { value: 'en', label: '🇬🇧 English' }
-                ]}
-              />
-            </div>
-          </div>
-
-          {/* Format Section */}
-          <div className="settings-section">
-            <div className="settings-section-title">{t('settings.format')}</div>
-
-            <div className="settings-field">
-              <div className="settings-label">{t('settings.dateFormat')}</div>
-              <UiSegmented
+            <div className="settings-section-title">{t('settings.language')} y Formato</div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="settings-label text-xs mb-1">{t('settings.language')}</div>
+                <UiSelect
+                  value={settings.language}
+                  onChange={(val) => updateSettings({ language: val as 'es' | 'en' })}
+                  options={[
+                    { value: 'es', label: '🇪🇸 ES' },
+                    { value: 'en', label: '🇬🇧 EN' }
+                  ]}
+                />
+              </div>
+              <div>
+                <div className="settings-label text-xs mb-1">{t('settings.dateFormat')}</div>
+                <UiSelect
                   value={settings.dateFormat}
                   onChange={(val) => updateSettings({ dateFormat: val as any })}
                   options={[
-                      { value: 'dd/MM/yyyy', label: '31/12/2025' },
-                      { value: 'MM/dd/yyyy', label: '12/31/2025' }
+                    { value: 'dd/MM/yyyy', label: '31/12' },
+                    { value: 'MM/dd/yyyy', label: '12/31' }
                   ]}
-                  block
-              />
+                />
+              </div>
             </div>
-
-            {/* Separador Decimal */}
-            <div className="settings-field">
-              <div className="settings-label">{t('settings.decimalSeparator')}</div>
+            
+            <div className="mt-3">
+              <div className="settings-label text-xs mb-1">{t('settings.decimalSeparator')}</div>
               <UiSegmented
                   value={settings.decimalSeparator}
                   onChange={(val) => updateSettings({ decimalSeparator: val as any })}
                   options={[
-                      { value: 'comma', label: '1.234,56' },
-                      { value: 'dot', label: '1,234.56' }
+                      { value: 'comma', label: '1.234,56 €' },
+                      { value: 'dot', label: '1,234.56 €' }
                   ]}
                   block
               />
             </div>
           </div>
 
-          {/* Payment Methods Section */}
-          <div className="settings-section">
-            <div className="settings-section-title">Métodos de Pago</div>
-             <PaymentMethodsSettings />
-          </div>
-
-          {/* Alerts Section (Updated to Notifications) */}
+          {/* Notifications Section */}
           <div className="settings-section">
             <div className="settings-section-title">{t('settings.alerts')}</div>
 
@@ -145,13 +135,26 @@ export default function SettingsPanel({ open, onClose }: Props) {
             </label>
           </div>
 
-          {/* API & Developers Section */}
+          {/* API Section */}
           <div className="settings-section">
-            <div className="settings-section-title">API & Desarrolladores</div>
-             <ApiTokensSettings />
-             <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
-               <ApiDocsPanel />
-             </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div className="settings-section-title" style={{ marginBottom: 0 }}>Tokens API</div>
+              <button 
+                onClick={() => setShowApiHelp(true)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-muted)',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-sm)'
+                }}
+              >
+                Más info
+              </button>
+            </div>
+            <ApiTokensSettings />
           </div>
         </div>
 
@@ -161,6 +164,74 @@ export default function SettingsPanel({ open, onClose }: Props) {
           </button>
         </div>
       </div>
+
+      {/* API Help Modal */}
+      <UiModal isOpen={showApiHelp} onClose={() => setShowApiHelp(false)}>
+        <UiModalHeader>Documentación API</UiModalHeader>
+        <UiModalBody>
+          <div className="space-y-4 text-sm">
+            <div>
+              <h4 className="font-semibold mb-1">¿Qué es esto?</h4>
+              <p className="text-gray-600 dark:text-gray-400">
+                Los tokens API te permiten conectar programas externos (scripts de Python, Excel con macros, etc.) 
+                para importar o exportar datos automáticamente.
+              </p>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-1">¿Cómo funciona?</h4>
+              <ol className="text-gray-600 dark:text-gray-400 list-decimal list-inside space-y-1">
+                <li>Genera un token con el botón "+ Nuevo token"</li>
+                <li>Copia el token (solo se muestra una vez)</li>
+                <li>Úsalo en tus scripts para autenticarte</li>
+              </ol>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-1">Endpoints disponibles</h4>
+              <div className="space-y-2 font-mono text-xs">
+                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded">
+                  <span className="text-green-600">GET</span> /api/v1/movements
+                  <div className="text-gray-500 mt-1">Obtener lista de movimientos</div>
+                </div>
+                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded">
+                  <span className="text-blue-600">POST</span> /api/v1/movements
+                  <div className="text-gray-500 mt-1">Crear movimientos (individual o masivo)</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold mb-1">Ejemplo de uso</h4>
+              <pre className="p-2 bg-gray-900 text-gray-100 rounded text-xs overflow-x-auto">
+{`curl -H "Authorization: Bearer TU_TOKEN" \\
+  https://tu-app.vercel.app/api/v1/movements`}
+              </pre>
+            </div>
+
+            <a 
+              href="/api/v1" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                padding: '8px 12px',
+                background: 'var(--primary-soft)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.8rem',
+                color: 'var(--primary)',
+                textAlign: 'center',
+                textDecoration: 'none'
+              }}
+            >
+              📄 Ver documentación completa
+            </a>
+          </div>
+        </UiModalBody>
+        <UiModalFooter>
+          <button className="btn btn-primary" onClick={() => setShowApiHelp(false)}>Entendido</button>
+        </UiModalFooter>
+      </UiModal>
     </div>
   );
 }

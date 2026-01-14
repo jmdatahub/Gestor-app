@@ -92,6 +92,17 @@ export default function AppLayout() {
     }
   }, [])
 
+  // Refresh debt count when workspace changes
+  useEffect(() => {
+    const refreshDebts = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        updatePendingDebts(user.id)
+      }
+    }
+    refreshDebts()
+  }, [currentWorkspace])
+
   const updateInvitations = async (email: string) => {
     try {
       const invitations = await getMyPendingInvitations(email)

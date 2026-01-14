@@ -170,7 +170,7 @@ export async function countPendingDebts(userId: string, organizationId: string |
   if (organizationId) {
     query = query.eq('organization_id', organizationId)
   } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
+    query = query.is('organization_id', null)
   }
 
   const { count, error } = await query
