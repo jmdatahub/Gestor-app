@@ -27,12 +27,14 @@ import { UiCard, UiCardBody } from '../../components/ui/UiCard'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { useToast } from '../../components/Toast'
 
 export default function InvestmentsList() {
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
+  const toast = useToast()
   const locale = language === 'es' ? 'es-ES' : 'en-US'
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,6 +55,7 @@ export default function InvestmentsList() {
   const [fundFromId, setFundFromId] = useState('') // Funding Account
   const [submitting, setSubmitting] = useState(false)
   const [updatingPrices, setUpdatingPrices] = useState(false)
+  const [lastPriceUpdate, setLastPriceUpdate] = useState<Date | null>(null)
 
   // Update price form
   const [newPrice, setNewPrice] = useState('')
@@ -102,6 +105,7 @@ export default function InvestmentsList() {
         }
       }
       
+      setLastPriceUpdate(new Date())
       await loadData()
     } catch (error) {
       console.error('Error auto-updating prices:', error)
@@ -256,22 +260,36 @@ export default function InvestmentsList() {
       for (const inv of cryptoInvestments) {
         const newPriceValue = await fetchExternalPrice(inv)
         if (newPriceValue !== null && newPriceValue !== inv.current_price) {
+          // Calculate percentage change
+          const changePercent = ((newPriceValue - inv.current_price) / inv.current_price) * 100
+          
           await updatePrice(inv.id, user.id, newPriceValue, new Date().toISOString().split('T')[0])
           updatedCount++
+          
+          // Notify if significant change (>5%)
+          if (Math.abs(changePercent) >= 5) {
+            const direction = changePercent > 0 ? '📈' : '📉'
+            const color = changePercent > 0 ? 'success' : 'warning'
+            toast[color](
+              `${direction} ${inv.name}: ${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}%`,
+              `Precio: €${newPriceValue.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`
+            )
+          }
         }
       }
       
       // Reload data to show updated prices
+      setLastPriceUpdate(new Date())
       await loadData()
       
       if (updatedCount > 0) {
-        alert(`✅ ${updatedCount} precio(s) actualizado(s)`)
+        toast.success(`${updatedCount} precio(s) actualizado(s)`)
       } else {
-        alert('Los precios ya están actualizados')
+        toast.info('Los precios ya están actualizados')
       }
     } catch (error) {
       console.error('Error updating prices:', error)
-      alert('Error al actualizar precios')
+      toast.error('Error al actualizar precios')
     } finally {
       setUpdatingPrices(false)
     }
@@ -293,7 +311,14 @@ export default function InvestmentsList() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{t('investments.title')}</h1>
-          <p className="page-subtitle">{t('investments.subtitle')}</p>
+          <p className="page-subtitle">
+            {t('investments.subtitle')}
+            {lastPriceUpdate && investments.some(inv => inv.type === 'crypto') && (
+              <span className="text-xs text-muted ml-2">
+                · Última actualización: {lastPriceUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
           {investments.some(inv => inv.type === 'crypto') && (

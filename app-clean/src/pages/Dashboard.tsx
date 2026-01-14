@@ -15,6 +15,7 @@ import { NetWorthInfo, NetWorthChart, useNetWorth } from '../components/ChartSec
 
 import { useWorkspace } from '../context/WorkspaceContext'
 import { PendingInvitations } from '../components/invitations/PendingInvitations'
+import { BudgetWidget } from '../components/BudgetWidget'
 
 interface AccountSummary {
   totalBalance: number
@@ -284,7 +285,7 @@ export default function Dashboard() {
             <TrendingUp size={24} />
           </div>
           <div className="kpi-content">
-            <div className="kpi-label">{t('dashboard.income')} ({new Date().toLocaleString('es-ES', { month: 'long' })})</div>
+            <div className="kpi-label">{t('dashboard.income')} ({(() => { const m = new Date().toLocaleString('es-ES', { month: 'long' }); return m.charAt(0).toUpperCase() + m.slice(1); })()})</div>
             <div className="kpi-value" style={{ color: 'var(--success)' }}>{formatCurrency(monthlySummary.income)}</div>
           </div>
         </div>
@@ -294,7 +295,7 @@ export default function Dashboard() {
             <ArrowUpDown size={24} />
           </div>
           <div className="kpi-content">
-            <div className="kpi-label">{t('dashboard.expenses')} ({new Date().toLocaleString('es-ES', { month: 'long' })})</div>
+            <div className="kpi-label">{t('dashboard.expenses')} ({(() => { const m = new Date().toLocaleString('es-ES', { month: 'long' }); return m.charAt(0).toUpperCase() + m.slice(1); })()})</div>
             <div className="kpi-value" style={{ color: 'var(--danger)' }}>{formatCurrency(monthlySummary.expense)}</div>
           </div>
         </div>
@@ -364,6 +365,11 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+        
+        {/* Budget Progress Section */}
+        {userId && (
+          <BudgetWidget userId={userId} />
+        )}
       </div>
 
       {/* 
