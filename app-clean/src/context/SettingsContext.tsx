@@ -26,6 +26,7 @@ export interface AppSettings {
   decimalSeparator: DecimalSeparator
   notifications: NotificationSettings
   rollupAccountsByParent: boolean
+  soundEnabled: boolean
 }
 
 // ==============================================
@@ -47,7 +48,8 @@ const defaultSettings: AppSettings = {
   dateFormat: 'dd/MM/yyyy',
   decimalSeparator: 'comma',
   notifications: defaultNotifications,
-  rollupAccountsByParent: false 
+  rollupAccountsByParent: false,
+  soundEnabled: true
 }
 
 const STORAGE_KEY = 'app_settings'

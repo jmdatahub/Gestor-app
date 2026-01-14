@@ -3,27 +3,65 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import { 
   getAccountById,
+  getAccountsWithBalances,
+  updateAccount,
   toggleAccountActive,
   deleteAccount,
-  type AccountWithBalance 
+  validateParentAssignment,
+  buildAccountTree,
+  flattenAccountTree,
+  type AccountWithBalance,
+  type CreateAccountInput,
+  type AccountNode
 } from '../../services/accountService'
 import { fetchMovements, type Movement } from '../../services/movementService'
 import { getUserInvestments, calculateTotals, type Investment } from '../../services/investmentService'
-import { Edit2, Power, PowerOff, Trash2, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
+import { Edit2, Power, PowerOff, Trash2, ArrowUpRight, ArrowDownLeft, AlertTriangle } from 'lucide-react'
 import { UiCard } from '../../components/ui/UiCard'
+import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { UiInput } from '../../components/ui/UiInput'
+import { UiSelect } from '../../components/ui/UiSelect'
+import { UiField } from '../../components/ui/UiField'
+import { UiTextarea } from '../../components/ui/UiTextarea'
 import { Breadcrumbs } from '../../components/Breadcrumbs'
+import { useI18n } from '../../hooks/useI18n'
+import { useWorkspace } from '../../context/WorkspaceContext'
+import { useToast } from '../../components/Toast'
 
 export default function AccountDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { t } = useI18n()
+  const { currentWorkspace } = useWorkspace()
+  
   const [account, setAccount] = useState<AccountWithBalance | null>(null)
   const [movements, setMovements] = useState<Movement[]>([])
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [allAccounts, setAllAccounts] = useState<AccountWithBalance[]>([])
+  const [flatAccounts, setFlatAccounts] = useState<AccountNode[]>([])
+  
+  // Form state
+  const [name, setName] = useState('')
+  const [type, setType] = useState<CreateAccountInput['type']>('general')
+  const [description, setDescription] = useState('')
+  const [parentId, setParentId] = useState<string>('')
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  
+  const toast = useToast()
 
   useEffect(() => {
     if (id) loadData()
-  }, [id])
+  }, [id, currentWorkspace])
 
   const loadData = async () => {
     if (!id) return
@@ -31,23 +69,72 @@ export default function AccountDetail() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
+      const orgId = currentWorkspace?.id || null
+
       // Get account
       const accountData = await getAccountById(id)
       setAccount(accountData)
 
+      // Get all accounts for parent selector
+      const accountsData = await getAccountsWithBalances(user.id, orgId)
+      setAllAccounts(accountsData)
+      const tree = buildAccountTree(accountsData)
+      const flat = flattenAccountTree(tree)
+      setFlatAccounts(flat)
+
       // Get movements for this account
-      const movementsData = await fetchMovements(user.id)
+      const movementsData = await fetchMovements(user.id, 50, orgId)
       const accountMovements = movementsData.filter(m => m.account_id === id)
       setMovements(accountMovements.slice(0, 20)) // Last 20 movements
 
       // Get investments for this account
-      const allInvestments = await getUserInvestments(user.id)
+      const allInvestments = await getUserInvestments(user.id, orgId)
       const accountInvestments = allInvestments.filter(i => i.account_id === id)
       setInvestments(accountInvestments)
     } catch (error) {
       console.error('Error loading account:', error)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  const openEditModal = () => {
+    if (!account) return
+    setName(account.name)
+    setType(account.type)
+    setDescription(account.description || '')
+    setParentId(account.parent_account_id || '')
+    setErrorMsg(null)
+    setShowEditModal(true)
+  }
+  
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!account) return
+    setErrorMsg(null)
+
+    const validationError = validateParentAssignment(allAccounts, account.id, parentId || null)
+    if (validationError) {
+      setErrorMsg(validationError)
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      await updateAccount(account.id, { 
+        name, 
+        type, 
+        description: description || null,
+        parent_account_id: parentId || null
+      })
+      setShowEditModal(false)
+      loadData()
+    } catch (error: any) {
+      console.error('Error updating account:', error)
+      setErrorMsg('No se pudo actualizar la cuenta. ' + (error.message || ''))
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -63,14 +150,20 @@ export default function AccountDetail() {
 
   const handleDelete = async () => {
     if (!account) return
-    if (!confirm('¿Estás seguro de que quieres eliminar esta cuenta? Esta acción no se puede deshacer.')) return
+    setDeleting(true)
+    setDeleteError(null)
     
     try {
+      const accountName = account.name
       await deleteAccount(account.id)
+      setShowDeleteModal(false)
+      toast.success('Cuenta eliminada', `La cuenta "${accountName}" se ha eliminado correctamente`)
       navigate('/app/accounts')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting account:', error)
-      alert('Error al eliminar la cuenta. Es posible que tenga movimientos asociados.')
+      setDeleteError('Error al eliminar la cuenta. Es posible que tenga movimientos asociados.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -149,7 +242,7 @@ export default function AccountDetail() {
           <div className="d-flex gap-2">
             <button 
               className="btn btn-secondary btn-sm p-2"
-              onClick={() => navigate(`/app/accounts`)}
+              onClick={openEditModal}
               title="Editar Cuenta"
               style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
@@ -165,7 +258,7 @@ export default function AccountDetail() {
             </button>
             <button 
               className="btn btn-danger btn-sm p-2"
-              onClick={handleDelete}
+              onClick={() => { setDeleteError(null); setShowDeleteModal(true); }}
               title="Eliminar Cuenta"
               style={{ width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
@@ -277,6 +370,132 @@ export default function AccountDetail() {
           Ver todos los movimientos
         </button>
       </UiCard>
+
+      {/* Edit Modal */}
+      <UiModal 
+        isOpen={showEditModal} 
+        onClose={() => setShowEditModal(false)}
+        width="500px"
+      >
+        <form onSubmit={handleEdit}>
+          <UiModalHeader>{t('accounts.edit')}</UiModalHeader>
+          <UiModalBody>
+            {errorMsg && (
+              <div className="d-flex items-center gap-2 mb-4 p-2 bg-gray-50 border border-danger text-danger rounded">
+                <AlertTriangle size={16} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <div className="form-group">
+              <UiInput
+                label={t('accounts.name')}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <UiField label={t('accounts.type')}>
+                <UiSelect
+                  value={type}
+                  onChange={(val: string) => setType(val as CreateAccountInput['type'])}
+                  options={[
+                    { value: 'general', label: 'General' },
+                    { value: 'savings', label: 'Ahorro' },
+                    { value: 'cash', label: 'Efectivo' },
+                    { value: 'bank', label: 'Cuenta Bancaria' },
+                    { value: 'broker', label: 'Broker / Inversión' },
+                    { value: 'other', label: 'Otra' }
+                  ]}
+                />
+              </UiField>
+            </div>
+
+            <div className="form-group">
+              <UiField label={t('accounts.parent')}>
+                <UiSelect
+                  value={parentId}
+                  onChange={(val: string) => setParentId(val)}
+                  options={[
+                    { value: '', label: 'Sin cuenta padre (Principal)' },
+                    ...flatAccounts
+                      .filter(acc => acc.id !== account?.id) // Exclude self
+                      .map(acc => ({
+                        value: acc.id,
+                        label: `${'-- '.repeat(acc.level)}${acc.name}`
+                      }))
+                  ]}
+                />
+              </UiField>
+            </div>
+
+            <div className="form-group">
+              <UiTextarea
+                label="Descripción (opcional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Añade un comentario sobre esta cuenta..."
+                rows={3}
+              />
+            </div>
+          </UiModalBody>
+          <UiModalFooter>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+              {t('common.cancel')}
+            </button>
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              disabled={submitting}
+            >
+              {submitting ? t('common.loading') : t('common.save')}
+            </button>
+          </UiModalFooter>
+        </form>
+      </UiModal>
+
+      {/* Delete Confirmation Modal */}
+      <UiModal 
+        isOpen={showDeleteModal} 
+        onClose={() => setShowDeleteModal(false)}
+        width="400px"
+      >
+        <UiModalHeader>⚠️ Eliminar Cuenta</UiModalHeader>
+        <UiModalBody>
+          {deleteError && (
+            <div className="d-flex items-center gap-2 mb-4 p-2 bg-gray-50 border border-danger text-danger rounded">
+              <AlertTriangle size={16} />
+              <span>{deleteError}</span>
+            </div>
+          )}
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
+            ¿Estás seguro de que quieres eliminar la cuenta <strong>"{account?.name}"</strong>?
+          </p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            Esta acción no se puede deshacer. Si la cuenta tiene movimientos asociados, no podrá ser eliminada.
+          </p>
+        </UiModalBody>
+        <UiModalFooter>
+          <button 
+            type="button" 
+            className="btn btn-secondary" 
+            onClick={() => setShowDeleteModal(false)}
+            disabled={deleting}
+          >
+            Cancelar
+          </button>
+          <button 
+            type="button" 
+            className="btn btn-danger" 
+            onClick={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+          </button>
+        </UiModalFooter>
+      </UiModal>
     </div>
   )
 }

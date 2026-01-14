@@ -264,6 +264,16 @@ export async function checkIsSuperAdmin(): Promise<boolean> {
   }
 }
 
+// Purge expired organizations (older than 7 days in trash)
+export async function purgeExpiredOrganizations(): Promise<number> {
+  // RPC returns the count of deleted organizations
+  const { data, error } = await supabase
+    .rpc('cleanup_deleted_organizations')
+
+  if (error) throw error
+  return typeof data === 'number' ? data : 0
+}
+
 // Check if the profiles table exists and is accessible with correct schema
 export async function checkDatabaseHealth(): Promise<{ profilesExists: boolean }> {
   try {

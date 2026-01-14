@@ -6,7 +6,8 @@ import { getAccountBalancesSummary, getFinancialDistribution, type FinancialDist
 import { fetchMonthlyMovements, calculateMonthlySummary } from '../services/movementService'
 
 import { warmup as warmupCache } from '../services/catalogCache'
-import { ArrowUpDown, PiggyBank, TrendingUp, Wallet, Plus, ArrowRight, Layers } from 'lucide-react'
+import { generatePendingMovementsForUser, getPendingMovementsCount } from '../services/recurringService'
+import { ArrowUpDown, PiggyBank, TrendingUp, Wallet, Plus, ArrowRight, Layers, Bell, Clock } from 'lucide-react'
 import { useI18n } from '../hooks/useI18n'
 import { useSettings } from '../context/SettingsContext'
 import { SkeletonDashboard } from '../components/Skeleton'
@@ -30,7 +31,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { t } = useI18n()
   const { settings } = useSettings()
-  const { currentWorkspace, workspaces, isLoading: workspaceLoading, userRole, switchWorkspace } = useWorkspace()
+  const { currentWorkspace, workspaces, isLoading: workspaceLoading, userRole, switchWorkspace, refreshWorkspaces } = useWorkspace()
   const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -38,12 +39,31 @@ export default function Dashboard() {
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummary>({ income: 0, expense: 0, balance: 0 })
   const [financialOverview, setFinancialOverview] = useState<FinancialDistribution | null>(null)
   const [topAccounts, setTopAccounts] = useState<AccountWithBalance[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
 
+  // Initial load when workspace changes
   useEffect(() => {
     if (!workspaceLoading) {
       loadDashboardData()
     }
   }, [settings.rollupAccountsByParent, currentWorkspace?.id, workspaceLoading])
+  
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!loading) {
+        loadDashboardData()
+      }
+    }, 5 * 60 * 1000) // 5 minutes
+    
+    return () => clearInterval(interval)
+  }, [loading])
+  
+  // Handler for when invitation is accepted - refresh workspaces and dashboard
+  const handleInvitationAccepted = async () => {
+    await refreshWorkspaces()
+    await loadDashboardData()
+  }
 
   const loadDashboardData = async () => {
     // Only set loading if it's an initial fetch or workspace switch, to avoid flicker on minor updates if possible
@@ -69,6 +89,15 @@ export default function Dashboard() {
         getAccountBalancesSummary(user.id, { includeChildrenRollup: settings.rollupAccountsByParent }, workspaceId),
         getFinancialDistribution(user.id, workspaceId)
       ])
+      
+      // Generate pending movements from recurring rules (runs in background)
+      generatePendingMovementsForUser(user.id).then(generated => {
+        if (generated > 0) {
+          console.log(`Generated ${generated} pending movements from recurring rules`)
+        }
+        // Update pending count
+        getPendingMovementsCount(user.id).then(count => setPendingCount(count))
+      }).catch(err => console.error('Error generating recurring:', err))
 
       if (accounts) {
         setAccountsSummary(accounts)
@@ -188,8 +217,55 @@ export default function Dashboard() {
       <PendingInvitations 
         userEmail={userEmail} 
         userId={userId}
-        onInvitationAccepted={loadDashboardData}
+        onInvitationAccepted={handleInvitationAccepted}
       />
+
+      {/* Pending Recurring Movements Banner */}
+      {pendingCount > 0 && (
+        <div 
+          style={{
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.1) 100%)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            borderRadius: '12px',
+            padding: '16px 20px',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              background: 'rgba(245, 158, 11, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Clock size={20} style={{ color: '#f59e0b' }} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {pendingCount} {pendingCount === 1 ? 'movimiento pendiente' : 'movimientos pendientes'}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Generados automáticamente por tus reglas recurrentes
+              </div>
+            </div>
+          </div>
+          <button 
+            className="btn btn-warning"
+            onClick={() => navigate('/app/recurring/pending')}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            <Bell size={16} />
+            Revisar
+          </button>
+        </div>
+      )}
 
       {/* KPI Grid */}
       <div className="kpi-grid mb-6">
@@ -208,7 +284,7 @@ export default function Dashboard() {
             <TrendingUp size={24} />
           </div>
           <div className="kpi-content">
-            <div className="kpi-label">{t('dashboard.income')}</div>
+            <div className="kpi-label">{t('dashboard.income')} ({new Date().toLocaleString('es-ES', { month: 'long' })})</div>
             <div className="kpi-value" style={{ color: 'var(--success)' }}>{formatCurrency(monthlySummary.income)}</div>
           </div>
         </div>
@@ -218,7 +294,7 @@ export default function Dashboard() {
             <ArrowUpDown size={24} />
           </div>
           <div className="kpi-content">
-            <div className="kpi-label">{t('dashboard.expenses')}</div>
+            <div className="kpi-label">{t('dashboard.expenses')} ({new Date().toLocaleString('es-ES', { month: 'long' })})</div>
             <div className="kpi-value" style={{ color: 'var(--danger)' }}>{formatCurrency(monthlySummary.expense)}</div>
           </div>
         </div>

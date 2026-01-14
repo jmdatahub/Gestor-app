@@ -26,6 +26,7 @@ import { useI18n } from '../../hooks/useI18n'
 
 export default function ExportPage() {
   const { settings } = useSettings()
+  const { t } = useI18n()
   const [loading, setLoading] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   
@@ -51,9 +52,9 @@ export default function ExportPage() {
 
       const count = await exportFn(user.id, filters)
       if (typeof count === 'number') {
-        setMessage({ type: 'success', text: `Exportados ${count} registros` })
+        setMessage({ type: 'success', text: t('export.message.count').replace('{count}', String(count)) })
       } else {
-        setMessage({ type: 'success', text: 'Exportación completada' })
+        setMessage({ type: 'success', text: t('export.message.success') })
       }
     } catch (error) {
       console.error('Export error:', error)
@@ -85,8 +86,8 @@ export default function ExportPage() {
     <div className="page-container">
       <div className="page-header">
         <div>
-            <h1 className="page-title">Exportar Datos</h1>
-            <p className="page-subtitle">Descarga tus datos en CSV o Excel</p>
+            <h1 className="page-title">{t('export.title')}</h1>
+            <p className="page-subtitle">{t('export.subtitle')}</p>
         </div>
       </div>
 
@@ -111,9 +112,9 @@ export default function ExportPage() {
             <div className="d-flex items-center gap-4">
             <Package size={40} className="text-white" />
             <div>
-                <h3 className="text-lg font-bold text-white mb-1">Exportar TODO</h3>
+                <h3 className="text-lg font-bold text-white mb-1">{t('export.all.title')}</h3>
                 <p className="text-sm text-white opacity-90 mb-2">
-                Descarga todos tus datos en un único archivo Excel con múltiples pestañas
+                {t('export.all.desc')}
                 </p>
                 <label className="d-flex items-center gap-2 cursor-pointer text-sm">
                 <input 
@@ -140,10 +141,10 @@ export default function ExportPage() {
                 fontWeight: 600
             }}
             >
-            {loading === 'all' ? 'Exportando...' : (
+            {loading === 'all' ? t('common.loading') : (
                 <div className="d-flex items-center gap-2">
                 <Download size={20} />
-                Descargar Excel
+                {t('export.all.button')}
                 </div>
             )}
             </button>
@@ -153,33 +154,33 @@ export default function ExportPage() {
       <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         {/* Movements */}
         <UiCard className="p-6">
-          <h3 className="text-base font-bold text-gray-700 mb-2">Movimientos</h3>
+          <h3 className="text-base font-bold text-gray-700 mb-2">{t('export.section.movements')}</h3>
           
           <div className="mb-4 d-grid gap-3" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
             <div className="form-group mb-0">
-              <label className="label">Desde</label>
+              <label className="label">{t('export.filters.from')}</label>
               <UiDatePicker
                 value={startDate}
                 onChange={(d) => setStartDate(d ? formatISODateString(d) : '')}
               />
             </div>
             <div className="form-group mb-0">
-              <label className="label">Hasta</label>
+              <label className="label">{t('export.filters.to')}</label>
               <UiDatePicker
                 value={endDate}
                 onChange={(d) => setEndDate(d ? formatISODateString(d) : '')}
               />
             </div>
             <div className="form-group mb-0">
-              <label className="label">Tipo</label>
+              <label className="label">{t('export.filters.type')}</label>
               <UiSelect
                 value={movementType}
                 onChange={setMovementType}
                 options={[
-                    { value: 'all', label: 'Todos' },
-                    { value: 'income', label: 'Ingresos' },
-                    { value: 'expense', label: 'Gastos' },
-                    { value: 'investment', label: 'Inversiones' }
+                    { value: 'all', label: t('export.filters.all') },
+                    { value: 'income', label: t('movements.type.income') },
+                    { value: 'expense', label: t('movements.type.expense') },
+                    { value: 'investment', label: t('movements.type.investment') }
                 ]}
               />
             </div>
@@ -227,8 +228,8 @@ export default function ExportPage() {
 
         {/* Accounts */}
         <UiCard className="p-6">
-          <h3 className="text-base font-bold text-gray-700 mb-1">Cuentas</h3>
-          <p className="text-sm text-secondary mb-4">Exporta todas tus cuentas</p>
+          <h3 className="text-base font-bold text-gray-700 mb-1">{t('export.section.accounts')}</h3>
+          <p className="text-sm text-secondary mb-4">{t('accounts.subtitle')}</p>
           <div className="d-flex gap-2">
             <button
               className="btn btn-secondary flex-1"
@@ -256,8 +257,8 @@ export default function ExportPage() {
 
         {/* Categories */}
         <UiCard className="p-6">
-          <h3 className="text-base font-bold text-gray-700 mb-1">Categorías</h3>
-          <p className="text-sm text-secondary mb-4">Exporta tus categorías</p>
+          <h3 className="text-base font-bold text-gray-700 mb-1">{t('export.section.categories')}</h3>
+          <p className="text-sm text-secondary mb-4">{t('categories.subtitle')}</p>
           <div className="d-flex gap-2">
             <button
               className="btn btn-secondary flex-1"
@@ -285,36 +286,36 @@ export default function ExportPage() {
 
         {/* Savings */}
         <UiCard className="p-6">
-          <h3 className="text-base font-bold text-gray-700 mb-1">Ahorro</h3>
-          <p className="text-sm text-secondary mb-4">Objetivos y aportaciones</p>
+          <h3 className="text-base font-bold text-gray-700 mb-1">{t('export.section.savings')}</h3>
+          <p className="text-sm text-secondary mb-4">{t('savings.subtitle')}</p>
           <button
             className="btn btn-primary w-full"
             onClick={() => handleExport(exportSavingsToExcel, 'savings')}
             disabled={loading !== null}
           >
             <FileSpreadsheet size={18} />
-            Exportar Excel
+            {t('export.all.button')}
           </button>
         </UiCard>
 
         {/* Debts */}
         <UiCard className="p-6">
-          <h3 className="text-base font-bold text-gray-700 mb-1">Deudas</h3>
-          <p className="text-sm text-secondary mb-4">Deudas y movimientos</p>
+          <h3 className="text-base font-bold text-gray-700 mb-1">{t('export.section.debts')}</h3>
+          <p className="text-sm text-secondary mb-4">{t('debts.subtitle')}</p>
           <button
             className="btn btn-primary w-full"
             onClick={() => handleExport(exportDebtsToExcel, 'debts')}
             disabled={loading !== null}
           >
             <FileSpreadsheet size={18} />
-            Exportar Excel
+            {t('export.all.button')}
           </button>
         </UiCard>
 
         {/* Recurring */}
         <UiCard className="p-6">
-          <h3 className="text-base font-bold text-gray-700 mb-1">Reglas Recurrentes</h3>
-          <p className="text-sm text-secondary mb-4">Exporta tus reglas automáticas</p>
+          <h3 className="text-base font-bold text-gray-700 mb-1">{t('export.section.recurring')}</h3>
+          <p className="text-sm text-secondary mb-4">{t('recurring.subtitle')}</p>
           <div className="d-flex gap-2">
              <button
               className="btn btn-secondary flex-1"
@@ -335,7 +336,7 @@ export default function ExportPage() {
       </div>
 
       <p className="text-secondary text-center text-sm mt-6">
-        Los datos exportados corresponden únicamente a tu usuario actual.
+        {t('export.disclaimer')}
       </p>
     </div>
   )

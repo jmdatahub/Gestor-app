@@ -171,12 +171,13 @@ export async function generatePendingMovementsForUser(userId: string): Promise<n
         .from('movements')
         .insert([{
           user_id: userId,
+          organization_id: rule.organization_id || null,
           account_id: rule.account_id,
-          type: rule.kind,
+          kind: rule.kind,
           amount: rule.amount,
           date: rule.next_occurrence,
-          description: rule.description ? `(REGLA) ${rule.description}` : '(REGLA) Movimiento recurrente',
-          category: rule.category,
+          description: rule.description ? `(Recurrente) ${rule.description}` : '(Recurrente) Movimiento automático',
+          category_id: rule.category,
           status: 'pending',
           recurring_rule_id: rule.id
         }])

@@ -24,6 +24,7 @@ interface WorkspaceContextType {
   isLoading: boolean;
   isSuspended: boolean;
   switchWorkspace: (orgId: string | null) => void;
+  refreshWorkspaces: () => Promise<void>;
   userRole: AppRole | null;
 }
 
@@ -150,6 +151,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       isLoading, 
       isSuspended,
       switchWorkspace,
+      refreshWorkspaces: fetchWorkspaces,
       userRole 
     }}>
       {children}

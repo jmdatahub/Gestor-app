@@ -64,7 +64,9 @@ const SOUND_FREQUENCIES: Record<ToastType, number[]> = {
   info: [392, 494],    // G4, B4 - neutral ascending
 }
 
-function playToastSound(type: ToastType) {
+function playToastSound(type: ToastType, soundEnabled: boolean = true) {
+  if (!soundEnabled) return
+  
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
     const frequencies = SOUND_FREQUENCIES[type]
@@ -110,7 +112,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const toast: Toast = { id, title, message, type, duration }
     
     setToasts(prev => [...prev, toast])
-    playToastSound(type)
+    
+    // Check sound setting from localStorage (avoid circular dependency with SettingsContext)
+    let soundEnabled = true
+    try {
+      const settings = localStorage.getItem('app_settings')
+      if (settings) {
+        const parsed = JSON.parse(settings)
+        soundEnabled = parsed.soundEnabled !== false // default to true
+      }
+    } catch { /* ignore parsing errors */ }
+    
+    playToastSound(type, soundEnabled)
 
     if (duration > 0) {
       const timeout = setTimeout(() => removeToast(id), duration)

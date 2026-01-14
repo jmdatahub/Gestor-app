@@ -6,6 +6,7 @@ import {
   getAccountsWithBalances,
   createAccount,
   updateAccount,
+  createTransfer,
   toggleAccountActive,
   calculateTotalsByType,
   getAccountTypeLabel,
@@ -22,18 +23,22 @@ import { UiSelect } from '../../components/ui/UiSelect'
 import { UiCard, UiCardBody } from '../../components/ui/UiCard'
 import { UiField } from '../../components/ui/UiField'
 import { UiInput } from '../../components/ui/UiInput'
+import { UiNumber } from '../../components/ui/UiNumber'
 import { UiTextarea } from '../../components/ui/UiTextarea'
+import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
-import { Plus, Edit2, Power, PowerOff, X, CreditCard, Wallet, PiggyBank, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Plus, Edit2, Power, PowerOff, ArrowRightLeft, CreditCard, Wallet, PiggyBank, TrendingUp, AlertTriangle } from 'lucide-react'
 import { Breadcrumbs } from '../../components/Breadcrumbs'
 import { SkeletonList } from '../../components/Skeleton'
 import { formatISODateString } from '../../utils/date'
+import { useToast } from '../../components/Toast'
 
 export default function AccountsList() {
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
+  const toast = useToast()
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
   const [flatAccounts, setFlatAccounts] = useState<AccountNode[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,6 +53,15 @@ export default function AccountsList() {
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  
+  // Transfer modal state
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [fromAccountId, setFromAccountId] = useState('')
+  const [toAccountId, setToAccountId] = useState('')
+  const [transferAmount, setTransferAmount] = useState('')
+  const [transferDate, setTransferDate] = useState(formatISODateString(new Date()))
+  const [transferDescription, setTransferDescription] = useState('')
+  const [transferError, setTransferError] = useState<string | null>(null)
 
   // Reload when workspace changes
   useEffect(() => {
@@ -95,6 +109,7 @@ export default function AccountsList() {
       setShowCreateModal(false)
       resetForm()
       loadData()
+      toast.success('Cuenta creada', `La cuenta "${name}" se ha creado correctamente`)
     } catch (error: any) {
       console.error('Error creating account:', error)
       setErrorMsg('No se pudo crear la cuenta. Inténtalo de nuevo.')
@@ -125,6 +140,7 @@ export default function AccountsList() {
       setShowEditModal(false)
       setSelectedAccount(null)
       loadData()
+      toast.success('Cuenta actualizada', `Los cambios en "${name}" se han guardado`)
     } catch (error: any) {
       console.error('Error updating account:', error)
       setErrorMsg('No se pudo actualizar la cuenta. ' + (error.message || ''))
@@ -159,6 +175,76 @@ export default function AccountsList() {
     setParentId('')
     setErrorMsg(null)
   }
+  
+  const resetTransferForm = () => {
+    setFromAccountId('')
+    setToAccountId('')
+    setTransferAmount('')
+    setTransferDate(formatISODateString(new Date()))
+    setTransferDescription('')
+    setTransferError(null)
+  }
+  
+  const handleTransfer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setTransferError(null)
+    
+    // Validations
+    if (!fromAccountId) {
+      setTransferError('Selecciona una cuenta de origen')
+      return
+    }
+    if (!toAccountId) {
+      setTransferError('Selecciona una cuenta de destino')
+      return
+    }
+    if (fromAccountId === toAccountId) {
+      setTransferError('Las cuentas de origen y destino deben ser diferentes')
+      return
+    }
+    const amount = parseFloat(transferAmount)
+    if (isNaN(amount) || amount <= 0) {
+      setTransferError('Introduce un importe válido mayor a 0')
+      return
+    }
+    
+    setSubmitting(true)
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setTransferError('No se pudo obtener el usuario')
+      setSubmitting(false)
+      return
+    }
+    
+    try {
+      await createTransfer(
+        user.id,
+        fromAccountId,
+        toAccountId,
+        amount,
+        transferDate,
+        transferDescription || undefined,
+        currentWorkspace?.id || null
+      )
+      setShowTransferModal(false)
+      resetTransferForm()
+      loadData()
+      
+      // Show success toast with transfer details
+      const fromAccount = accounts.find(a => a.id === fromAccountId)
+      const toAccount = accounts.find(a => a.id === toAccountId)
+      toast.success(
+        'Transferencia completada',
+        `${formatCurrency(amount)} transferidos de ${fromAccount?.name || 'cuenta'} a ${toAccount?.name || 'cuenta'}`
+      )
+    } catch (error: any) {
+      console.error('Error creating transfer:', error)
+      setTransferError('Error al crear la transferencia. ' + (error.message || ''))
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat(t('locale.code') === 'es' ? 'es-ES' : 'en-US', {
@@ -192,7 +278,10 @@ export default function AccountsList() {
           <p className="page-subtitle">{t('accounts.subtitle')}</p>
         </div>
         <div className="d-flex gap-2">
-          {/* Transfer button removed until fixed */}
+          <button className="btn btn-secondary" onClick={() => { resetTransferForm(); setShowTransferModal(true); }}>
+            <ArrowRightLeft size={20} />
+            {t('accounts.transfer')}
+          </button>
           <button className="btn btn-primary" onClick={() => { resetForm(); setShowCreateModal(true); }}>
             <Plus size={20} />
             {t('accounts.new')}
@@ -276,10 +365,7 @@ export default function AccountsList() {
                         {acc.level > 0 && (
                           <div style={{ width: 8, height: 8, borderLeft: '1px solid var(--gray-400)', borderBottom: '1px solid var(--gray-400)', marginBottom: 4 }} />
                         )}
-                        <span 
-                          className="hover:text-primary cursor-pointer hover:underline"
-                          onClick={() => navigate(`/app/accounts/${acc.id}`)}
-                        >
+                        <span className="hover:text-primary hover:underline">
                           {acc.name}
                         </span>
                       </div>
@@ -299,14 +385,14 @@ export default function AccountsList() {
                       <div className="d-flex gap-1 justify-end">
                         <button
                           className="btn btn-icon btn-ghost"
-                          onClick={() => openEditModal(acc)}
+                          onClick={(e) => { e.stopPropagation(); openEditModal(acc); }}
                           title={t('common.edit')}
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           className={`btn btn-icon ${acc.is_active ? 'btn-ghost' : 'btn-success'}`}
-                          onClick={() => handleToggle(acc)}
+                          onClick={(e) => { e.stopPropagation(); handleToggle(acc); }}
                           title={acc.is_active ? t('common.save') : t('common.edit')} 
                         >
                           {acc.is_active ? <PowerOff size={16} /> : <Power size={16} />}
@@ -483,6 +569,106 @@ export default function AccountsList() {
               disabled={submitting}
             >
               {submitting ? t('common.loading') : t('common.save')}
+            </button>
+          </UiModalFooter>
+        </form>
+      </UiModal>
+
+      {/* Transfer Modal */}
+      <UiModal 
+        isOpen={showTransferModal} 
+        onClose={() => setShowTransferModal(false)}
+        width="500px"
+      >
+        <form onSubmit={handleTransfer}>
+          <UiModalHeader>{t('accounts.transferTitle')}</UiModalHeader>
+          <UiModalBody>
+            {transferError && (
+              <div className="d-flex items-center gap-2 mb-4 p-2 bg-gray-50 border border-danger text-danger rounded">
+                <AlertTriangle size={16} />
+                <span>{transferError}</span>
+              </div>
+            )}
+
+            <div className="form-group">
+              <UiField label="Cuenta de Origen">
+                <UiSelect
+                  value={fromAccountId}
+                  onChange={(val: string) => {
+                    setFromAccountId(val)
+                    // Reset destination if same as new origin
+                    if (val === toAccountId) setToAccountId('')
+                  }}
+                  options={[
+                    { value: '', label: 'Selecciona una cuenta...' },
+                    ...accounts.filter(a => a.is_active).map(acc => ({
+                      value: acc.id,
+                      label: `${acc.name} (${formatCurrency(acc.balance)})`
+                    }))
+                  ]}
+                />
+              </UiField>
+            </div>
+
+            <div className="form-group">
+              <UiField label="Cuenta de Destino">
+                <UiSelect
+                  value={toAccountId}
+                  onChange={(val: string) => setToAccountId(val)}
+                  options={[
+                    { value: '', label: 'Selecciona una cuenta...' },
+                    ...accounts
+                      .filter(a => a.is_active && a.id !== fromAccountId)
+                      .map(acc => ({
+                        value: acc.id,
+                        label: `${acc.name} (${formatCurrency(acc.balance)})`
+                      }))
+                  ]}
+                />
+              </UiField>
+            </div>
+
+            <div className="form-group">
+              <UiNumber
+                label="Importe (€)"
+                value={transferAmount}
+                onChange={(val: string) => setTransferAmount(val)}
+                placeholder="0.00"
+                step="0.01"
+                min={0.01}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <UiField label="Fecha">
+                <UiDatePicker
+                  value={transferDate}
+                  onChange={(d) => setTransferDate(d ? formatISODateString(d) : '')}
+                  required
+                />
+              </UiField>
+            </div>
+
+            <div className="form-group">
+              <UiInput
+                label="Descripción (opcional)"
+                value={transferDescription}
+                onChange={(e) => setTransferDescription(e.target.value)}
+                placeholder="Ej: Traspaso a ahorro mensual"
+              />
+            </div>
+          </UiModalBody>
+          <UiModalFooter>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowTransferModal(false)}>
+              {t('common.cancel')}
+            </button>
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              disabled={submitting || !fromAccountId || !toAccountId || !transferAmount}
+            >
+              {submitting ? t('common.loading') : t('accounts.transfer')}
             </button>
           </UiModalFooter>
         </form>

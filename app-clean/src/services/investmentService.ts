@@ -245,22 +245,117 @@ export const investmentTypes = [
   { value: 'manual', label: 'Otro / Manual' }
 ]
 
-// Placeholder for future external price API integration
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function fetchExternalPrice(_investment: Investment): Promise<number | null> {
-  // TODO: In the future, this function could connect to external APIs:
-  // - CoinGecko for crypto prices
-  // - AlphaVantage for stock prices
-  // - Yahoo Finance for general market data
-  // 
-  // For now, returns null to indicate manual price updates are required.
-  // 
-  // Example pseudocode:
-  // if (investment.type === 'crypto') {
-  //   const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${investment.name}&vs_currencies=eur`)
-  //   const data = await response.json()
-  //   return data[investment.name]?.eur || null
-  // }
+// Crypto name to CoinGecko ID mapping
+const CRYPTO_ID_MAP: Record<string, string> = {
+  'bitcoin': 'bitcoin',
+  'btc': 'bitcoin',
+  'ethereum': 'ethereum',
+  'eth': 'ethereum',
+  'ripple': 'ripple',
+  'xrp': 'ripple',
+  'cardano': 'cardano',
+  'ada': 'cardano',
+  'solana': 'solana',
+  'sol': 'solana',
+  'polkadot': 'polkadot',
+  'dot': 'polkadot',
+  'dogecoin': 'dogecoin',
+  'doge': 'dogecoin',
+  'litecoin': 'litecoin',
+  'ltc': 'litecoin',
+  'avalanche': 'avalanche-2',
+  'avax': 'avalanche-2',
+  'chainlink': 'chainlink',
+  'link': 'chainlink',
+  'polygon': 'matic-network',
+  'matic': 'matic-network',
+}
+
+/**
+ * Fetch current price from CoinGecko API (free, no API key required)
+ * Supports crypto only for now
+ */
+export async function fetchExternalPrice(investment: Investment): Promise<number | null> {
+  if (investment.type !== 'crypto') {
+    // Only crypto supported for now
+    return null
+  }
+
+  try {
+    // Normalize investment name to lowercase and find CoinGecko ID
+    const normalizedName = investment.name.toLowerCase().trim()
+    const coinId = CRYPTO_ID_MAP[normalizedName] || normalizedName
+
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=eur`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        }
+      }
+    )
+
+    if (!response.ok) {
+      console.warn(`CoinGecko API error: ${response.status}`)
+      return null
+    }
+
+    const data = await response.json()
+    const price = data[coinId]?.eur
+
+    if (typeof price === 'number') {
+      return price
+    }
+
+    console.warn(`Price not found for ${coinId}`)
+    return null
+  } catch (error) {
+    console.error('Error fetching external price:', error)
+    return null
+  }
+}
+
+/**
+ * Fetch prices for multiple cryptos at once (more efficient)
+ */
+export async function fetchMultipleCryptoPrices(names: string[]): Promise<Record<string, number>> {
+  const coinIds = names.map(name => {
+    const normalized = name.toLowerCase().trim()
+    return CRYPTO_ID_MAP[normalized] || normalized
+  })
+
+  const uniqueIds = [...new Set(coinIds)]
   
-  return null
+  try {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${uniqueIds.join(',')}&vs_currencies=eur`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        }
+      }
+    )
+
+    if (!response.ok) {
+      console.warn(`CoinGecko API error: ${response.status}`)
+      return {}
+    }
+
+    const data = await response.json()
+    const result: Record<string, number> = {}
+
+    names.forEach((name, index) => {
+      const coinId = coinIds[index]
+      if (data[coinId]?.eur) {
+        result[name.toLowerCase()] = data[coinId].eur
+      }
+    })
+
+    return result
+  } catch (error) {
+    console.error('Error fetching multiple prices:', error)
+    return {}
+  }
 }

@@ -42,7 +42,8 @@ import {
   Pencil,
   AlertTriangle,
   X,
-  CreditCard
+  CreditCard,
+  Filter
 } from 'lucide-react'
 // import { DayPicker } from 'react-day-picker' // Removed
 // import { format } from 'date-fns' // Removed
@@ -62,6 +63,7 @@ import { CategoryPicker } from '../../components/domain/CategoryPicker'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { SkeletonList } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
+import { Confetti } from '../../components/Confetti'
 
 // Define flattened account type extending Account to include tree metadata
 interface FlatAccount extends Account {
@@ -74,6 +76,7 @@ export default function MovementsList() {
   const { settings } = useSettings()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast() // Toast notifications
+  const [showConfetti, setShowConfetti] = useState(false)
   const [movements, setMovements] = useState<Movement[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [flatAccounts, setFlatAccounts] = useState<FlatAccount[]>([]) // Flattened hierarchy for selectors
@@ -86,6 +89,10 @@ export default function MovementsList() {
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [searchTerm, setSearchTerm] = useState('')
+  const [filterAccountId, setFilterAccountId] = useState('')
+  const [filterCategoryId, setFilterCategoryId] = useState('')
+  const [filterType, setFilterType] = useState<string>('')
+  const [allCategories, setAllCategories] = useState<{id: string, name: string, color: string}[]>([])
 
 
   // Form state
@@ -113,6 +120,11 @@ export default function MovementsList() {
   // Edit/Delete state
   const [editingMovement, setEditingMovement] = useState<Movement | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [movementToDelete, setMovementToDelete] = useState<Movement | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Reload when workspace changes
   useEffect(() => {
@@ -136,6 +148,19 @@ export default function MovementsList() {
 
       setMovements(movementsData)
       setAccounts(accountsData)
+      
+      // Extract unique categories from movements for filter dropdown
+      const uniqueCategories = new Map<string, {id: string, name: string, color: string}>()
+      movementsData.forEach(m => {
+        if (m.category) {
+          uniqueCategories.set(m.category.id || m.category.name, {
+            id: m.category.id || m.category.name,
+            name: m.category.name,
+            color: m.category.color || '#6366f1'
+          })
+        }
+      })
+      setAllCategories(Array.from(uniqueCategories.values()))
       
       // Calculate hierarchy
       // We cast to any because buildAccountTree expects AccountWithBalance but only needs id/parent_id structure mostly
@@ -214,6 +239,9 @@ export default function MovementsList() {
         // Create new movement
         await createMovement(movementData)
         toast.success('Movimiento registrado', type === 'income' ? '¡Ingreso añadido!' : type === 'expense' ? 'Gasto registrado' : 'Inversión guardada')
+        // Fire confetti for celebration! 🎉
+        setShowConfetti(true)
+        setTimeout(() => setShowConfetti(false), 3000)
       }
 
       setShowModal(false)
@@ -253,24 +281,35 @@ export default function MovementsList() {
     setDescription(mov.description || '')
     setShowModal(true)
   }
+  
+  // Open delete confirmation modal
+  const openDeleteModal = (mov: Movement) => {
+    setMovementToDelete(mov)
+    setDeleteError(null)
+    setShowDeleteModal(true)
+  }
 
-  // Delete movement with confirmation
-  const handleDelete = async (movementId: string) => {
-    if (!confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) {
-      return
-    }
+  // Delete movement with confirmation modal
+  const handleDelete = async () => {
+    if (!movementToDelete) return
     
-    setDeletingId(movementId)
+    setDeletingId(movementToDelete.id)
+    setDeleteError(null)
+    
     try {
-      await deleteMovement(movementId)
+      const movDesc = movementToDelete.description || movementToDelete.kind
+      await deleteMovement(movementToDelete.id)
       // Remove from local state
-      setMovements(movements.filter(m => m.id !== movementId))
+      setMovements(movements.filter(m => m.id !== movementToDelete.id))
       // Recalculate summary
-      const newMovements = movements.filter(m => m.id !== movementId)
+      const newMovements = movements.filter(m => m.id !== movementToDelete.id)
       setSummary(calculateMonthlySummary(newMovements))
+      setShowDeleteModal(false)
+      setMovementToDelete(null)
+      toast.success('Movimiento eliminado', `"${movDesc}" eliminado correctamente`)
     } catch (err) {
       console.error('Error deleting movement:', err)
-      alert('Error al eliminar el movimiento')
+      setDeleteError('Error al eliminar el movimiento')
     } finally {
       setDeletingId(null)
     }
@@ -544,6 +583,70 @@ export default function MovementsList() {
          
          <div style={{ height: 28, width: 1, background: '#334155' }} />
          
+         {/* Filter Dropdowns */}
+         <div className="flex items-center gap-2">
+             <Filter size={16} className="text-gray-400" />
+             <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Filtrar:</span>
+         </div>
+         
+         <div className="w-32">
+             <UiSelect
+               value={filterType}
+               onChange={(val: string) => setFilterType(val)}
+               options={[
+                 { value: '', label: 'Tipo' },
+                 { value: 'income', label: 'Ingresos' },
+                 { value: 'expense', label: 'Gastos' },
+                 { value: 'investment', label: 'Inversiones' }
+               ]}
+             />
+         </div>
+         
+         <div className="w-40">
+             <UiSelect
+               value={filterAccountId}
+               onChange={(val: string) => setFilterAccountId(val)}
+               options={[
+                 { value: '', label: 'Cuenta' },
+                 ...accounts.map(acc => ({
+                   value: acc.id,
+                   label: acc.name
+                 }))
+               ]}
+             />
+         </div>
+         
+         <div className="w-40">
+             <UiSelect
+               value={filterCategoryId}
+               onChange={(val: string) => setFilterCategoryId(val)}
+               options={[
+                 { value: '', label: 'Categoría' },
+                 ...allCategories.map(cat => ({
+                   value: cat.id,
+                   label: cat.name
+                 }))
+               ]}
+             />
+         </div>
+         
+         {(filterType || filterAccountId || filterCategoryId || searchTerm) && (
+           <button
+             onClick={() => {
+               setFilterType('')
+               setFilterAccountId('')
+               setFilterCategoryId('')
+               setSearchTerm('')
+             }}
+             className="btn btn-ghost text-sm text-gray-500 hover:text-danger"
+           >
+             <X size={14} />
+             Limpiar
+           </button>
+         )}
+         
+         <div style={{ height: 28, width: 1, background: '#334155' }} />
+         
          <div className="flex items-center gap-2">
              <Calendar size={16} className="text-gray-400" />
              <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Exportar:</span>
@@ -604,27 +707,78 @@ export default function MovementsList() {
 
       {/* Movements List */}
       {(() => {
-        // Filter movements by search term
+        // Filter movements by all criteria
         const filteredMovements = movements.filter(mov => {
-          if (!searchTerm.trim()) return true
-          const term = searchTerm.toLowerCase()
-          return (
-            (mov.description?.toLowerCase().includes(term)) ||
-            (mov.category?.name?.toLowerCase().includes(term)) ||
-            (mov.account?.name?.toLowerCase().includes(term)) ||
-            (String(mov.amount).includes(term))
-          )
+          // Type filter
+          if (filterType && mov.kind !== filterType) return false
+          
+          // Account filter
+          if (filterAccountId && mov.account_id !== filterAccountId) return false
+          
+          // Category filter
+          if (filterCategoryId && mov.category?.id !== filterCategoryId) return false
+          
+          // Date range filter (only for display, export uses its own)
+          if (startDate && new Date(mov.date) < startDate) return false
+          if (endDate && new Date(mov.date) > endDate) return false
+          
+          // Search term
+          if (searchTerm.trim()) {
+            const term = searchTerm.toLowerCase()
+            return (
+              (mov.description?.toLowerCase().includes(term)) ||
+              (mov.category?.name?.toLowerCase().includes(term)) ||
+              (mov.account?.name?.toLowerCase().includes(term)) ||
+              (String(mov.amount).includes(term))
+            )
+          }
+          
+          return true
         })
         
-        return filteredMovements.length === 0 ? (
-        <div className="section-card flex flex-col items-center justify-center p-12 text-center">
-          <ArrowUpDown size={48} className="text-gray-300 mb-4" />
-          <p className="text-gray-500 mb-4">{t('movements.empty')}</p>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            {t('movements.createFirst')}
-          </button>
-        </div>
-      ) : (
+        // Check if any filter is active
+        const hasActiveFilters = filterType || filterAccountId || filterCategoryId || searchTerm || startDate || endDate
+        
+        return (
+          <>
+            {/* Filter Results Counter */}
+            {hasActiveFilters && movements.length > 0 && (
+              <div className="mb-4 text-sm text-gray-500">
+                Mostrando <span className="font-semibold text-primary">{filteredMovements.length}</span> de {movements.length} movimientos
+              </div>
+            )}
+            
+            {filteredMovements.length === 0 ? (
+              <div className="section-card flex flex-col items-center justify-center p-12 text-center">
+                <ArrowUpDown size={48} className="text-gray-300 mb-4" />
+                {hasActiveFilters ? (
+                  <>
+                    <p className="text-gray-500 mb-2">No se encontraron movimientos con estos filtros</p>
+                    <button 
+                      className="btn btn-secondary mt-2"
+                      onClick={() => {
+                        setFilterType('')
+                        setFilterAccountId('')
+                        setFilterCategoryId('')
+                        setSearchTerm('')
+                        setStartDate(undefined)
+                        setEndDate(undefined)
+                      }}
+                    >
+                      <X size={16} />
+                      Limpiar filtros
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-gray-500 mb-4">{t('movements.empty')}</p>
+                    <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                      {t('movements.createFirst')}
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -728,7 +882,7 @@ export default function MovementsList() {
                         <button
                           type="button"
                           className="btn btn-icon btn-danger"
-                          onClick={() => handleDelete(mov.id)}
+                          onClick={() => openDeleteModal(mov)}
                           disabled={deletingId === mov.id}
                           title="Eliminar"
                         >
@@ -746,7 +900,9 @@ export default function MovementsList() {
             </table>
           </div>
         </div>
-      )
+            )}
+          </>
+        )
       })()}
 
       {/* Movement Modal */}
@@ -932,6 +1088,63 @@ export default function MovementsList() {
             </UiModalFooter>
         </UiModal>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <UiModal 
+        isOpen={showDeleteModal} 
+        onClose={() => setShowDeleteModal(false)}
+        width="400px"
+      >
+        <UiModalHeader>⚠️ Eliminar Movimiento</UiModalHeader>
+        <UiModalBody>
+          {deleteError && (
+            <div className="d-flex items-center gap-2 mb-4 p-2 bg-gray-50 border border-danger text-danger rounded">
+              <AlertTriangle size={16} />
+              <span>{deleteError}</span>
+            </div>
+          )}
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
+            ¿Estás seguro de que quieres eliminar este movimiento?
+          </p>
+          {movementToDelete && (
+            <div className="p-3 bg-gray-50 dark:bg-slate-800 rounded-lg mb-4">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">{movementToDelete.description || getTypeLabel(movementToDelete.kind)}</span>
+                <span className="font-bold" style={{ color: getTypeColor(movementToDelete.kind) }}>
+                  {movementToDelete.kind === 'income' ? '+' : '-'}{formatCurrency(movementToDelete.amount)}
+                </span>
+              </div>
+              <div className="text-sm text-gray-500 mt-1">
+                {formatDate(movementToDelete.date)} • {movementToDelete.account?.name || 'Sin cuenta'}
+              </div>
+            </div>
+          )}
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            Esta acción no se puede deshacer.
+          </p>
+        </UiModalBody>
+        <UiModalFooter>
+          <button 
+            type="button" 
+            className="btn btn-secondary" 
+            onClick={() => setShowDeleteModal(false)}
+            disabled={deletingId !== null}
+          >
+            Cancelar
+          </button>
+          <button 
+            type="button" 
+            className="btn btn-danger" 
+            onClick={handleDelete}
+            disabled={deletingId !== null}
+          >
+            {deletingId ? 'Eliminando...' : 'Sí, eliminar'}
+          </button>
+        </UiModalFooter>
+      </UiModal>
+      
+      {/* Confetti celebration on new movement */}
+      <Confetti trigger={showConfetti} />
     </div>
   )
 }

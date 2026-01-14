@@ -10,6 +10,7 @@ import {
   deleteInvestment,
   calculateTotals,
   investmentTypes,
+  fetchExternalPrice,
   type Investment,
   type CreateInvestmentInput
 } from '../../services/investmentService'
@@ -51,6 +52,7 @@ export default function InvestmentsList() {
   const [accountId, setAccountId] = useState('') // Holding Account
   const [fundFromId, setFundFromId] = useState('') // Funding Account
   const [submitting, setSubmitting] = useState(false)
+  const [updatingPrices, setUpdatingPrices] = useState(false)
 
   // Update price form
   const [newPrice, setNewPrice] = useState('')
@@ -60,6 +62,53 @@ export default function InvestmentsList() {
   useEffect(() => {
     loadData()
   }, [currentWorkspace])
+  
+  // Auto-update crypto prices every 2 minutes
+  useEffect(() => {
+    // Only run if we have crypto investments
+    const hasCrypto = investments.some(inv => inv.type === 'crypto')
+    if (!hasCrypto || loading) return
+    
+    // Initial update on page load (after a small delay to not hit API immediately)
+    const initialTimeout = setTimeout(() => {
+      handleAutoUpdatePricesQuiet()
+    }, 3000)
+    
+    // Then update every 2 minutes
+    const interval = setInterval(() => {
+      handleAutoUpdatePricesQuiet()
+    }, 2 * 60 * 1000) // 2 minutes
+    
+    return () => {
+      clearTimeout(initialTimeout)
+      clearInterval(interval)
+    }
+  }, [investments.length, loading])
+  
+  // Quiet version (no alerts) for auto-updates
+  const handleAutoUpdatePricesQuiet = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || updatingPrices) return
+    
+    setUpdatingPrices(true)
+    
+    try {
+      const cryptoInvestments = investments.filter(inv => inv.type === 'crypto')
+      
+      for (const inv of cryptoInvestments) {
+        const newPriceValue = await fetchExternalPrice(inv)
+        if (newPriceValue !== null && Math.abs(newPriceValue - inv.current_price) > 0.01) {
+          await updatePrice(inv.id, user.id, newPriceValue, new Date().toISOString().split('T')[0])
+        }
+      }
+      
+      await loadData()
+    } catch (error) {
+      console.error('Error auto-updating prices:', error)
+    } finally {
+      setUpdatingPrices(false)
+    }
+  }
 
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -191,6 +240,42 @@ export default function InvestmentsList() {
     const typeObj = investmentTypes.find(t => t.value === typeVal)
     return typeObj ? typeObj.label : typeVal
   }
+  
+  // Auto-update crypto prices using CoinGecko API
+  const handleAutoUpdatePrices = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    
+    setUpdatingPrices(true)
+    let updatedCount = 0
+    
+    try {
+      // Filter crypto investments only
+      const cryptoInvestments = investments.filter(inv => inv.type === 'crypto')
+      
+      for (const inv of cryptoInvestments) {
+        const newPriceValue = await fetchExternalPrice(inv)
+        if (newPriceValue !== null && newPriceValue !== inv.current_price) {
+          await updatePrice(inv.id, user.id, newPriceValue, new Date().toISOString().split('T')[0])
+          updatedCount++
+        }
+      }
+      
+      // Reload data to show updated prices
+      await loadData()
+      
+      if (updatedCount > 0) {
+        alert(`✅ ${updatedCount} precio(s) actualizado(s)`)
+      } else {
+        alert('Los precios ya están actualizados')
+      }
+    } catch (error) {
+      console.error('Error updating prices:', error)
+      alert('Error al actualizar precios')
+    } finally {
+      setUpdatingPrices(false)
+    }
+  }
 
   const totals = calculateTotals(investments)
 
@@ -210,10 +295,22 @@ export default function InvestmentsList() {
           <h1 className="page-title">{t('investments.title')}</h1>
           <p className="page-subtitle">{t('investments.subtitle')}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-          <Plus size={20} />
-          {t('investments.new')}
-        </button>
+        <div className="flex gap-2">
+          {investments.some(inv => inv.type === 'crypto') && (
+            <button 
+              className="btn btn-secondary" 
+              onClick={handleAutoUpdatePrices}
+              disabled={updatingPrices}
+            >
+              <RefreshCw size={18} className={updatingPrices ? 'animate-spin' : ''} />
+              {updatingPrices ? 'Actualizando...' : 'Actualizar precios'}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+            <Plus size={20} />
+            {t('investments.new')}
+          </button>
+        </div>
       </div>
 
       {/* Summary */}

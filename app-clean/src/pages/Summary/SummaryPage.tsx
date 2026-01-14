@@ -43,6 +43,7 @@ export default function SummaryPage() {
   const [chartGrouping, setChartGrouping] = useState<0.25 | 0.5 | 1 | 2 | 3>(1) // 0.25=bi-weekly, 0.5=weekly, 1=monthly, 2=bi-monthly, 3=quarterly
   const [historyMonths, setHistoryMonths] = useState<number>(12) // 3, 6, 12, or 24 months
   const [chartViewType, setChartViewType] = useState<'bars' | 'lines'>('bars') // Toggle between bar chart and line chart
+  const [chartCumulative, setChartCumulative] = useState(false) // Toggle between individual and cumulative view
   
   // Roll-up state from context
   const rollupEnabled = settings.rollupAccountsByParent
@@ -567,6 +568,48 @@ export default function SummaryPage() {
                       Líneas
                     </button>
                   </div>
+                  
+                  {/* Cumulative Toggle */}
+                  <div style={{ display: 'flex', gap: '0.125rem', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '0.5rem', padding: '0.125rem' }}>
+                    <button
+                      onClick={() => setChartCumulative(false)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.7rem',
+                        fontWeight: !chartCumulative ? 600 : 400,
+                        borderRadius: '0.375rem',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: !chartCumulative ? '#f59e0b' : 'transparent',
+                        color: !chartCumulative ? 'white' : 'inherit'
+                      }}
+                    >
+                      <Layers size={12} />
+                      Único
+                    </button>
+                    <button
+                      onClick={() => setChartCumulative(true)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.7rem',
+                        fontWeight: chartCumulative ? 600 : 400,
+                        borderRadius: '0.375rem',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: chartCumulative ? '#f59e0b' : 'transparent',
+                        color: chartCumulative ? 'white' : 'inherit'
+                      }}
+                    >
+                      Σ
+                      Acumulado
+                    </button>
+                  </div>
                 </div>
               }
            />
@@ -633,9 +676,24 @@ export default function SummaryPage() {
                      })
                    }
                  }
-               }
-               
-                const maxValue = Math.max(...chartData.flatMap(d => [d.income, d.expenses]), 1)
+                }
+                
+                // Apply cumulative transformation if enabled
+                if (chartCumulative && chartData.length > 0) {
+                  let cumulativeIncome = 0
+                  let cumulativeExpenses = 0
+                  chartData = chartData.map(d => {
+                    cumulativeIncome += d.income
+                    cumulativeExpenses += d.expenses
+                    return {
+                      label: d.label,
+                      income: cumulativeIncome,
+                      expenses: cumulativeExpenses
+                    }
+                  })
+                }
+                
+                 const maxValue = Math.max(...chartData.flatMap(d => [d.income, d.expenses]), 1)
                 const formatShort = (n: number) => n >= 1000 ? `${(n/1000).toFixed(0)}k` : n.toFixed(0)
                 
                 // Add profit to data for line chart
