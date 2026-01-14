@@ -5,7 +5,7 @@ import { invalidateCategories } from './catalogCache'
 export interface Movement {
   id: string
   user_id: string
-  organization_id?: string | null // [NEW] Multi-Workspace support
+  organization_id?: string | null
   account_id: string
   kind: 'income' | 'expense' | 'investment'
   amount: number
@@ -15,10 +15,20 @@ export interface Movement {
   status?: string
   is_business?: boolean
   created_at: string
+  // New fields
+  tax_rate?: number | null
+  tax_amount?: number | null
+  provider?: string | null
+  payment_method?: string | null
+  paid_by_user_id?: string | null
+  paid_by_external?: string | null
+  linked_debt_id?: string | null
+  is_subscription?: boolean
+  subscription_end_date?: string | null
+  auto_renew?: boolean
   // Joined data
   account?: { id: string; name: string }
   category?: { id: string; name: string; color?: string }
-  // Creator profile (for org context)
   creator?: { id: string; display_name: string | null; email: string | null } | null
 }
 
@@ -141,13 +151,24 @@ export function calculateMonthlySummary(movements: Movement[]) {
 // Create movement
 export interface CreateMovementInput {
   user_id: string
-  organization_id?: string | null // [NEW] Optional org context
+  organization_id?: string | null
   account_id: string
   kind: 'income' | 'expense' | 'investment'
   amount: number
   date: string
   description?: string | null
   category_id?: string | null
+  // New optional fields
+  tax_rate?: number | null
+  tax_amount?: number | null
+  provider?: string | null
+  payment_method?: string | null
+  paid_by_user_id?: string | null
+  paid_by_external?: string | null
+  linked_debt_id?: string | null
+  is_subscription?: boolean
+  subscription_end_date?: string | null
+  auto_renew?: boolean
 }
 
 export async function createMovement(input: CreateMovementInput): Promise<Movement> {
@@ -157,13 +178,24 @@ export async function createMovement(input: CreateMovementInput): Promise<Moveme
     .from('movements')
     .insert([{
       user_id: input.user_id,
-      organization_id: input.organization_id || null, // Ensure explicit null for personal
+      organization_id: input.organization_id || null,
       account_id: input.account_id,
       kind: input.kind,
       amount: input.amount,
       date: input.date,
       description: input.description || null,
-      category_id: input.category_id || null
+      category_id: input.category_id || null,
+      // New fields
+      tax_rate: input.tax_rate ?? null,
+      tax_amount: input.tax_amount ?? null,
+      provider: input.provider || null,
+      payment_method: input.payment_method || null,
+      paid_by_user_id: input.paid_by_user_id || null,
+      paid_by_external: input.paid_by_external || null,
+      linked_debt_id: input.linked_debt_id || null,
+      is_subscription: input.is_subscription ?? false,
+      subscription_end_date: input.subscription_end_date || null,
+      auto_renew: input.auto_renew ?? true
     }])
     .select()
     .single()

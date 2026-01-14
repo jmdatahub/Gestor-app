@@ -4,6 +4,9 @@ import { Sun, Moon, Monitor, X } from 'lucide-react';
 import type { Density, NotificationSettings } from '../context/SettingsContext';
 import { UiSelect } from './ui/UiSelect';
 import { UiSegmented } from './ui/UiSegmented';
+import { PaymentMethodsSettings } from './domain/PaymentMethodsSettings';
+import { ApiTokensSettings } from './domain/ApiTokensSettings';
+import { ApiDocsPanel } from './domain/ApiDocsPanel';
 
 type Props = {
   open: boolean;
@@ -109,6 +112,12 @@ export default function SettingsPanel({ open, onClose }: Props) {
             </div>
           </div>
 
+          {/* Payment Methods Section */}
+          <div className="settings-section">
+            <div className="settings-section-title">Métodos de Pago</div>
+             <PaymentMethodsSettings />
+          </div>
+
           {/* Alerts Section (Updated to Notifications) */}
           <div className="settings-section">
             <div className="settings-section-title">{t('settings.alerts')}</div>
@@ -134,6 +143,15 @@ export default function SettingsPanel({ open, onClose }: Props) {
               />
               <span>{t('settings.notifications.upcomingDebts') || 'Deudas próximas'}</span>
             </label>
+          </div>
+
+          {/* API & Developers Section */}
+          <div className="settings-section">
+            <div className="settings-section-title">API & Desarrolladores</div>
+             <ApiTokensSettings />
+             <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
+               <ApiDocsPanel />
+             </div>
           </div>
         </div>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../lib/supabaseClient'
 import { UiField } from '../ui/UiField'
 import { Plus, Check, ChevronDown, X, Search } from 'lucide-react'
@@ -16,6 +17,7 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [isOpen, setIsOpen] = useState(false)
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 })
   
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -35,8 +37,31 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
   }, [])
 
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 50)
+    if (isOpen) {
+      // 1. Calculate Position
+      if (containerRef.current) {
+         const rect = containerRef.current.getBoundingClientRect()
+         setCoords({
+            top: rect.bottom + 6, // 6px margin
+            left: rect.left,
+            width: rect.width
+         })
+      }
+
+      // 2. Focus input
+      if (inputRef.current) {
+        setTimeout(() => inputRef.current?.focus(), 50)
+      }
+
+      // 3. Add scroll listener to close on scroll (prevent floating)
+      const handleScroll = () => setIsOpen(false)
+      window.addEventListener('scroll', handleScroll, true) // capture=true to catch scroll in modal
+      window.addEventListener('resize', handleScroll)
+
+      return () => {
+        window.removeEventListener('scroll', handleScroll, true)
+        window.removeEventListener('resize', handleScroll)
+      }
     }
   }, [isOpen])
 
@@ -163,26 +188,29 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
           </div>
         )}
 
-        {/* Dropdown */}
-        {isOpen && (
+        {/* Dropdown (Portal) */}
+        {isOpen && createPortal(
           <div style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: '6px',
+            position: 'fixed', // Fixed to viewport to escape modal clipping
+            top: coords.top,
+            left: coords.left,
+            width: coords.width,
+            // Calculate max height based on viewport space
+            maxHeight: Math.min(300, window.innerHeight - coords.top - 20),
             background: '#1e293b',
             border: '1px solid #334155',
             borderRadius: '12px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
-            zIndex: 100,
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)', // Stronger shadow
+            zIndex: 9999, // Super high z-index
             overflow: 'hidden',
-            animation: 'dropIn 0.15s ease-out'
+            animation: 'dropIn 0.15s ease-out',
+            display: 'flex', 
+            flexDirection: 'column'
           }}>
             <style>{`@keyframes dropIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }`}</style>
             
             {/* Search */}
-            <div style={{ padding: '12px', borderBottom: '1px solid #334155' }}>
+            <div style={{ padding: '12px', borderBottom: '1px solid #334155', flexShrink: 0 }}>
               <div style={{ position: 'relative' }}>
                 <Search size={16} color="#64748b" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                 <input
@@ -194,7 +222,7 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
                     if (e.key === 'Escape') setIsOpen(false)
                     if (e.key === 'Enter' && filtered.length === 0 && searchTerm.trim()) {
                       e.preventDefault()
-                      handleCreate()
+                      if (filtered.length === 0 && searchTerm.trim()) handleCreate()
                     }
                   }}
                   placeholder="Buscar..."
@@ -213,7 +241,7 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
             </div>
 
             {/* Options */}
-            <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
               {loading ? (
                 <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
                   Cargando...
@@ -298,7 +326,8 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
                 </div>
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </UiField>

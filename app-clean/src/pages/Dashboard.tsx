@@ -16,6 +16,7 @@ import { NetWorthInfo, NetWorthChart, useNetWorth } from '../components/ChartSec
 import { useWorkspace } from '../context/WorkspaceContext'
 import { PendingInvitations } from '../components/invitations/PendingInvitations'
 import { BudgetWidget } from '../components/BudgetWidget'
+import { SubscriptionAlertsWidget } from '../components/domain/SubscriptionAlertsWidget'
 
 interface AccountSummary {
   totalBalance: number
@@ -220,6 +221,13 @@ export default function Dashboard() {
         userId={userId}
         onInvitationAccepted={handleInvitationAccepted}
       />
+
+      {/* Subscription Alerts Widget */}
+      {userId && (
+        <div className="mb-6">
+          <SubscriptionAlertsWidget userId={userId} organizationId={currentWorkspace?.id} />
+        </div>
+      )}
 
       {/* Pending Recurring Movements Banner */}
       {pendingCount > 0 && (

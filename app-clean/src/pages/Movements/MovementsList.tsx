@@ -19,6 +19,7 @@ import {
   buildAccountTree, 
   flattenAccountTree
 } from '../../services/accountService'
+import { createDebt as createDebtService } from '../../services/debtService'
 import { ensureDefaultAccountsForUser } from '../../services/authService'
 import { getTextColorClass, getCategoryPillStyle } from '../../utils/categoryColors'
 import { useSettings } from '../../context/SettingsContext'
@@ -43,7 +44,10 @@ import {
   AlertTriangle,
   X,
   CreditCard,
-  Filter
+  Filter,
+  CalendarClock,
+  AlertCircle,
+  Settings
 } from 'lucide-react'
 // import { DayPicker } from 'react-day-picker' // Removed
 // import { format } from 'date-fns' // Removed
@@ -64,6 +68,19 @@ import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../compon
 import { SkeletonList } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { Confetti } from '../../components/Confetti'
+import { UiSwitch } from '../../components/ui/UiSwitch'
+
+// Services
+import { 
+  getPaymentMethods, 
+  initializeDefaultPaymentMethods, 
+  type PaymentMethod
+} from '../../services/paymentMethodService'
+import { 
+  searchProviders, 
+  upsertProvider,
+  type Provider 
+} from '../../services/providerService'
 
 // Define flattened account type extending Account to include tree metadata
 interface FlatAccount extends Account {
@@ -77,6 +94,25 @@ export default function MovementsList() {
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast() // Toast notifications
   const [showConfetti, setShowConfetti] = useState(false)
+  
+  // New Fields State
+  const [provider, setProvider] = useState('')
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
+  
+  const [taxRate, setTaxRate] = useState<number>(21)
+  const [taxAmount, setTaxAmount] = useState<number | undefined>(undefined)
+  const [showTaxSection, setShowTaxSection] = useState(false)
+  
+  const [paidByUserId, setPaidByUserId] = useState<string>('')
+  const [paidByExternal, setPaidByExternal] = useState('')
+  const [createDebt, setCreateDebt] = useState(true)
+  
+  const [isSubscription, setIsSubscription] = useState(false)
+  const [subscriptionEndDate, setSubscriptionEndDate] = useState<Date | undefined>(undefined)
+  const [autoRenew, setAutoRenew] = useState(true)
+
   const [movements, setMovements] = useState<Movement[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [flatAccounts, setFlatAccounts] = useState<FlatAccount[]>([]) // Flattened hierarchy for selectors
@@ -171,6 +207,15 @@ export default function MovementsList() {
       // setCategories(categoriesData) // Removed: Categories loaded by CategoryPicker
       setSummary(calculateMonthlySummary(monthlyData))
 
+      // Load payment methods
+      await initializeDefaultPaymentMethods(user.id)
+      const methods = await getPaymentMethods(user.id, currentWorkspace?.id)
+      setPaymentMethods(methods)
+
+      // Load providers for autocomplete
+      const provs = await searchProviders(user.id, '', currentWorkspace?.id)
+      setProviders(provs)
+
       // Set default account (general)
       const generalAccount = accountsData.find(a => a.type === 'general')
       if (generalAccount) setAccountId(generalAccount.id)
@@ -220,15 +265,58 @@ export default function MovementsList() {
           }
       }
 
+      // Update backend
       const movementData = {
         user_id: user.id,
-        organization_id: currentWorkspace?.id || null,  // Include workspace
+        organization_id: currentWorkspace?.id || null, 
         account_id: accountId,
         kind: type as 'income' | 'expense' | 'investment',
         amount: parseFloat(amount),
         date: formatISODateString(date),
         description: description || null,
-        category_id: finalCategoryId
+        category_id: finalCategoryId,
+        // New fields
+        provider: provider.trim() || undefined,
+        payment_method: paymentMethod || undefined,
+        tax_rate: showTaxSection ? taxRate : undefined,
+        tax_amount: showTaxSection ? taxAmount : undefined,
+        paid_by_user_id: paidByUserId || undefined,
+        paid_by_external: paidByExternal || undefined,
+        is_subscription: isSubscription,
+        subscription_end_date: isSubscription && subscriptionEndDate ? formatISODateString(subscriptionEndDate) : undefined,
+        auto_renew: isSubscription ? autoRenew : undefined
+      }
+
+      // Phase 6: Automatic Debt Creation
+      // Only create debt when creating new movement + paid by external + checkbox checked
+      let createdDebtId: string | null = null
+      if (!editingMovement && paidByExternal && createDebt) { // createDebt is boolean state from form
+         try {
+           const debtData = await createDebtService({
+             user_id: user.id,
+             organization_id: currentWorkspace?.id || null, // Create debt in workspace context
+             direction: 'i_owe', // I owe them because they paid for me
+             counterparty_name: paidByExternal,
+             total_amount: parseFloat(amount),
+             description: `Generado desde movimiento: ${description || 'Gasto'}`,
+             due_date: null // No specific due date
+           })
+           createdDebtId = debtData.id
+           // Update movement data with linked debt
+           // Note: Need to cast movementData to any or update interface to allow linked_debt_id
+           ;(movementData as any).linked_debt_id = createdDebtId
+           
+           toast.success('Deuda creada', `Se generó una deuda con ${paidByExternal}`)
+         } catch (debtErr) {
+           console.error('Error creating linked debt:', debtErr)
+           toast.error('Error deuda', 'No se pudo crear la deuda automática. El movimiento se guardará sin vincular.')
+           // We continue to save the movement anyway
+         }
+      }
+
+      // Upsert provider if name provided
+      if (provider.trim()) {
+         await upsertProvider(user.id, provider, currentWorkspace?.id)
       }
 
       if (editingMovement) {
@@ -266,6 +354,18 @@ export default function MovementsList() {
     setDescription('')
     setAppError(null)
     setEditingMovement(null)
+    // Reset new fields
+    setProvider('')
+    setPaymentMethod('')
+    setTaxRate(21)
+    setTaxAmount(undefined)
+    setShowTaxSection(false)
+    setPaidByUserId('')
+    setPaidByExternal('')
+    setIsSubscription(false)
+    setSubscriptionEndDate(undefined)
+    setAutoRenew(true)
+    
     const generalAccount = accounts.find(a => a.type === 'general')
     if (generalAccount) setAccountId(generalAccount.id)
   }
@@ -279,6 +379,18 @@ export default function MovementsList() {
     setAmount(String(mov.amount))
     setCategoryId(mov.category_id || '')
     setDescription(mov.description || '')
+    // New fields
+    setProvider(mov.provider || '')
+    setPaymentMethod(mov.payment_method || '')
+    setTaxRate(mov.tax_rate ?? 21)
+    setTaxAmount(mov.tax_amount ?? undefined)
+    setShowTaxSection(!!mov.tax_amount)
+    setPaidByUserId(mov.paid_by_user_id || '')
+    setPaidByExternal(mov.paid_by_external || '')
+    setIsSubscription(mov.is_subscription || false)
+    setSubscriptionEndDate(mov.subscription_end_date ? new Date(mov.subscription_end_date) : undefined)
+    setAutoRenew(mov.auto_renew ?? true)
+    
     setShowModal(true)
   }
   
@@ -1015,6 +1127,138 @@ export default function MovementsList() {
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={`${t('common.description')}...`}
                 />
+              </div>
+
+              {/* Proveedor */}
+              <div className="mb-4">
+                 <UiField label="Proveedor (Opcional)">
+                    <UiSelect
+                        value={provider}
+                        onChange={setProvider}
+                        options={providers?.map?.(p => ({ value: p.name, label: p.name })) || []}
+                        searchable
+                        creatable
+                        onCreate={(val) => {
+                            setProvider(val)
+                            // Optionally add to temp list if needed, but 'value' handling in UiSelect might suffice if state updates
+                        }}
+                        placeholder="Buscar o crear proveedor..."
+                    />
+                 </UiField>
+              </div>
+
+              {/* Método de Pago */}
+              <div className="mb-4">
+                 <UiField label="Método de pago">
+                    <UiSelect
+                        value={paymentMethod}
+                        onChange={setPaymentMethod}
+                        options={[
+                           { value: '', label: 'Seleccionar...' },
+                           ...(paymentMethods?.map(pm => ({ 
+                               value: pm.name, 
+                               label: pm.name 
+                           })) || [])
+                        ]}
+                    />
+                 </UiField>
+              </div>
+
+              {/* IVA Section */}
+              <div className="mb-4 p-4 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                  <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Desglosar IVA</span>
+                      </div>
+                      <UiSwitch checked={showTaxSection} onChange={setShowTaxSection} />
+                  </div>
+                  
+                  {showTaxSection && (
+                      <div className="flex gap-4">
+                          <div className="w-1/3">
+                               <UiNumber 
+                                 label="% IVA" 
+                                 value={taxRate} 
+                                 onChange={(v) => setTaxRate(Number(v))} 
+                               />
+                          </div>
+                          <div className="w-2/3">
+                               <UiNumber 
+                                 label="Cuota IVA" 
+                                 value={taxAmount} 
+                                 onChange={(v) => {
+                                   setTaxAmount(parseFloat(v))
+                                   // Logic to inverse update rate could be complex, leave manual override
+                                 }} 
+                               />
+                          </div>
+                      </div>
+                  )}
+              </div>
+
+              {/* Paid By (Only for Workspace) */}
+              {currentWorkspace && (
+                 <div className="mb-4 p-4 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-gray-700">
+                    <UiField label="Pagado por">
+                        <UiSelect
+                           value={paidByExternal ? 'other' : (paidByUserId || '')}
+                           onChange={(val) => {
+                               if (val === 'other') {
+                                   setPaidByUserId('')
+                                   setPaidByExternal('Externo') // Default text
+                               } else {
+                                   setPaidByUserId(val)
+                                   setPaidByExternal('')
+                               }
+                           }}
+                           options={[
+                               { value: '', label: 'Yo (Por defecto)' },
+                               { value: 'other', label: 'Otro (Externo) -> Generar Deuda' }
+                           ]}
+                        />
+                    </UiField>
+                    
+                    {paidByExternal && (
+                        <div className="mt-3">
+                           <UiInput
+                              label="Nombre del pagador externo"
+                              value={paidByExternal === 'Externo' ? '' : paidByExternal}
+                              onChange={(e) => setPaidByExternal(e.target.value)}
+                              placeholder="Ej. Empresa, Socio..."
+                           />
+                           <div className="mt-2 flex items-center gap-2">
+                              <UiSwitch checked={createDebt} onChange={setCreateDebt} />
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Crear deuda automáticamente</span>
+                           </div>
+                        </div>
+                    )}
+                 </div>
+              )}
+
+              {/* Subscription Toggle */}
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                          <CalendarClock size={18} className="text-primary" />
+                          <span className="font-medium text-gray-700 dark:text-gray-300">Suscripción recurrente</span>
+                      </div>
+                      <UiSwitch checked={isSubscription} onChange={setIsSubscription} />
+                  </div>
+                  
+                  {isSubscription && (
+                      <div className="mt-4 pl-4 border-l-2 border-primary/20 space-y-4">
+                           <UiDatePicker 
+                              label="Fecha fin suscripción (Opcional)"
+                              value={subscriptionEndDate || null}
+                              onChange={(d) => setSubscriptionEndDate(d || undefined)}
+                           />
+                           
+                           <div className="flex items-center justify-between">
+                               <span className="text-sm text-gray-600 dark:text-gray-400">Renovación automática</span>
+                               <UiSwitch checked={autoRenew} onChange={setAutoRenew} />
+                           </div>
+                      </div>
+                  )}
               </div>
             </UiModalBody>
             <UiModalFooter>

@@ -158,3 +158,26 @@ export async function addDebtMovement(movement: Omit<DebtMovement, 'id' | 'creat
 
   return movementData
 }
+
+// Count pending debts (not closed)
+export async function countPendingDebts(userId: string, organizationId: string | null = null): Promise<number> {
+  let query = supabase
+    .from('debts')
+    .select('*', { count: 'exact', head: true }) // count only
+    .eq('user_id', userId)
+    .eq('is_closed', false)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { count, error } = await query
+
+  if (error) {
+    console.error('Error counting pending debts:', error)
+    return 0
+  }
+  return count || 0
+}

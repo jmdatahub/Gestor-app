@@ -6,6 +6,7 @@ import { useI18n } from '../hooks/useI18n'
 import { useOffline } from '../context/OfflineContext'
 import SidebarUserMenu from '../components/layout/SidebarUserMenu'
 import { getMyPendingInvitations } from '../services/organizationService'
+import { countPendingDebts } from '../services/debtService'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { HeaderWorkspaceSelector } from '../components/layout/HeaderWorkspaceSelector'
 
@@ -49,6 +50,7 @@ export default function AppLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pendingInvitations, setPendingInvitations] = useState(0)
+  const [pendingDebts, setPendingDebts] = useState(0)
   
   // Workspace Switch Transition State
   const [isSwitchingWorkspace, setIsSwitchingWorkspace] = useState(false)
@@ -99,6 +101,15 @@ export default function AppLayout() {
     }
   }
 
+  const updatePendingDebts = async (userId: string) => {
+    try {
+      const count = await countPendingDebts(userId, currentWorkspace?.id)
+      setPendingDebts(count)
+    } catch (err) {
+      console.error('Error updating pending debts:', err)
+    }
+  }
+
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
@@ -106,6 +117,7 @@ export default function AppLayout() {
     } else {
       if (session.user?.email) {
         updateInvitations(session.user.email)
+        updatePendingDebts(session.user.id)
       }
     }
     setLoading(false)
@@ -292,13 +304,30 @@ export default function AppLayout() {
                     color: 'white',
                     fontSize: 10,
                     fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 2px 6px rgba(239,68,68,0.5)',
                     animation: 'pulse 2s infinite'
                   }}>
                     {pendingInvitations}
+                  </span>
+                )}
+                {/* Red badge for pending debts */}
+                {item.key === 'nav.debts' && pendingDebts > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    minWidth: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    background: '#ef4444',
+                    color: 'white',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid var(--sidebar-bg)'
+                  }}>
+                    {pendingDebts}
                   </span>
                 )}
               </div>
