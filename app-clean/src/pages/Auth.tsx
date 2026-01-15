@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { ensureDefaultAccountsForUser } from '../services/authService'
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, Shield, BarChart3, AlertTriangle } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, Shield, BarChart3, AlertTriangle, CheckCircle, Mail } from 'lucide-react'
 import { UiInput } from '../components/ui/UiInput'
 
 export default function Auth() {
@@ -14,11 +14,19 @@ export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSuspendedMessage, setShowSuspendedMessage] = useState(false)
+  const [showEmailConfirmed, setShowEmailConfirmed] = useState(false)
+  const [showRegistrationSuccess, setShowRegistrationSuccess] = useState(false)
 
-  // Check if user was redirected due to suspension
+  // Check URL params for various states
   useEffect(() => {
+    // User was suspended
     if (searchParams.get('suspended') === 'true') {
       setShowSuspendedMessage(true)
+    }
+    // User just confirmed email (Supabase redirects with access_token or type=signup)
+    const hashParams = new URLSearchParams(window.location.hash.slice(1))
+    if (hashParams.get('access_token') || searchParams.get('type') === 'signup') {
+      setShowEmailConfirmed(true)
     }
   }, [searchParams])
 
@@ -50,9 +58,9 @@ export default function Auth() {
         }
         navigate('/app/dashboard')
       } else {
-        // Usa VITE_SITE_URL se está configurada, senón usa o orixe actual
+        // Registration - send verification email
         const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin
-        const { data, error } = await supabase.auth.signUp({ 
+        const { error } = await supabase.auth.signUp({ 
           email, 
           password,
           options: {
@@ -60,13 +68,26 @@ export default function Auth() {
           }
         })
         if (error) throw error
-        if (data.user) {
-          await ensureDefaultAccountsForUser(data.user.id)
-          navigate('/app/dashboard')
-        }
+        
+        // Show success message - user needs to confirm email
+        setShowRegistrationSuccess(true)
+        setEmail('')
+        setPassword('')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ha ocurrido un error')
+      // Translate Supabase errors to friendly messages
+      const message = err instanceof Error ? err.message : 'Ha ocurrido un error'
+      if (message.includes('Invalid login credentials') || message.includes('invalid_credentials')) {
+        setError('Correo o contraseña incorrectos. Por favor, verifica tus datos.')
+      } else if (message.includes('Email not confirmed')) {
+        setError('Debes confirmar tu correo electrónico antes de iniciar sesión.')
+      } else if (message.includes('User not found')) {
+        setError('No existe una cuenta con ese correo electrónico.')
+      } else if (message.includes('rate limit') || message.includes('too many')) {
+        setError('Demasiados intentos. Por favor, espera unos minutos e intenta de nuevo.')
+      } else {
+        setError(message)
+      }
     } finally {
       setLoading(false)
     }
@@ -159,6 +180,53 @@ export default function Auth() {
             </div>
 
             <form onSubmit={handleSubmit} className="auth-form">
+              {/* Email Verified Success */}
+              {showEmailConfirmed && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  borderRadius: '12px',
+                  color: '#22c55e'
+                }}>
+                  <CheckCircle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div>
+                    <strong style={{ display: 'block', marginBottom: 4 }}>¡Correo verificado!</strong>
+                    <span style={{ fontSize: '0.875rem', color: 'rgba(34, 197, 94, 0.9)' }}>
+                      Tu cuenta ha sido verificada correctamente. Ya puedes iniciar sesión.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Registration Success */}
+              {showRegistrationSuccess && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                  background: 'rgba(79, 70, 229, 0.1)',
+                  border: '1px solid rgba(79, 70, 229, 0.3)',
+                  borderRadius: '12px',
+                  color: 'var(--primary)'
+                }}>
+                  <Mail size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div>
+                    <strong style={{ display: 'block', marginBottom: 4 }}>¡Revisa tu correo!</strong>
+                    <span style={{ fontSize: '0.875rem', opacity: 0.9 }}>
+                      Te hemos enviado un enlace de confirmación. Haz clic en él para activar tu cuenta.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Suspended Account */}
               {showSuspendedMessage && (
                 <div style={{
                   display: 'flex',
