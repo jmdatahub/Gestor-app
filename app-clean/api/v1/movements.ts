@@ -15,11 +15,21 @@ import { createClient } from '@supabase/supabase-js'
 // ============================================================
 // Configuration
 // ============================================================
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || ''
+// Note: VITE_ prefixed vars are NOT available in Vercel serverless functions
+// We must use SUPABASE_URL (without VITE_ prefix)
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
+// Debug log for config issues
+console.log('API Config:', {
+  hasUrl: !!supabaseUrl,
+  urlPrefix: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'MISSING',
+  hasServiceKey: !!supabaseServiceKey,
+  keyPrefix: supabaseServiceKey ? supabaseServiceKey.substring(0, 20) + '...' : 'MISSING'
+})
+
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('FATAL: Missing Supabase configuration')
+  console.error('FATAL: Missing Supabase configuration. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.')
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
