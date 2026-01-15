@@ -2,8 +2,24 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { ensureDefaultAccountsForUser } from '../services/authService'
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, Shield, BarChart3, AlertTriangle, CheckCircle, Mail } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, Shield, BarChart3, AlertTriangle, CheckCircle, Mail, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { UiInput } from '../components/ui/UiInput'
+
+// Password strength calculator
+function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+  let score = 0
+  if (password.length >= 6) score++
+  if (password.length >= 8) score++
+  if (/[A-Z]/.test(password)) score++
+  if (/[0-9]/.test(password)) score++
+  if (/[^A-Za-z0-9]/.test(password)) score++
+
+  if (score <= 1) return { score, label: 'Muy débil', color: '#ef4444' }
+  if (score === 2) return { score, label: 'Débil', color: '#f97316' }
+  if (score === 3) return { score, label: 'Aceptable', color: '#eab308' }
+  if (score === 4) return { score, label: 'Buena', color: '#22c55e' }
+  return { score, label: 'Muy segura', color: '#10b981' }
+}
 
 export default function Auth() {
   const navigate = useNavigate()
@@ -16,6 +32,10 @@ export default function Auth() {
   const [showSuspendedMessage, setShowSuspendedMessage] = useState(false)
   const [showEmailConfirmed, setShowEmailConfirmed] = useState(false)
   const [showRegistrationSuccess, setShowRegistrationSuccess] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
+  const [resetEmailSent, setResetEmailSent] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
 
   // Check URL params for various states
   useEffect(() => {
@@ -92,6 +112,33 @@ export default function Auth() {
       setLoading(false)
     }
   }
+
+  // Handle password reset
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email.trim()) {
+      setError('Por favor, introduce tu correo electrónico')
+      return
+    }
+    
+    setResetLoading(true)
+    setError(null)
+    
+    try {
+      const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${siteUrl}/auth/reset-password`
+      })
+      if (error) throw error
+      setResetEmailSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al enviar el correo')
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
+  const passwordStrength = getPasswordStrength(password)
 
   const features = [
     { icon: TrendingUp, text: 'Registra todos tus ingresos' },
@@ -268,17 +315,82 @@ export default function Auth() {
                 />
               </div>
 
-              <div className="mb-6">
-                <UiInput
-                  id="password"
-                  type="password"
-                  label="Contraseña"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  hint={!isLogin ? "Mínimo 6 caracteres" : undefined}
-                />
+              <div className="mb-4" style={{ position: 'relative' }}>
+                <label htmlFor="password" style={{ 
+                  display: 'block', 
+                  marginBottom: '6px', 
+                  fontSize: '0.875rem', 
+                  fontWeight: 500,
+                  color: 'var(--text-secondary)' 
+                }}>
+                  Contraseña
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    className="form-input"
+                    style={{
+                      width: '100%',
+                      paddingRight: '44px'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      color: 'var(--text-muted)',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                
+                {/* Password Strength Indicator - only during registration */}
+                {!isLogin && password.length > 0 && (
+                  <div style={{ marginTop: '8px' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '4px',
+                      marginBottom: '4px'
+                    }}>
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <div
+                          key={i}
+                          style={{
+                            flex: 1,
+                            height: '4px',
+                            borderRadius: '2px',
+                            background: i <= passwordStrength.score ? passwordStrength.color : 'var(--border-color)',
+                            transition: 'background 0.2s'
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <span style={{ 
+                      fontSize: '0.75rem', 
+                      color: passwordStrength.color,
+                      fontWeight: 500 
+                    }}>
+                      {passwordStrength.label}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <button
@@ -293,6 +405,30 @@ export default function Auth() {
                     : 'Crear Cuenta'
                 }
               </button>
+
+              {/* Forgot Password Link - only on login */}
+              {isLogin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(true)
+                    setError(null)
+                    setResetEmailSent(false)
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    marginTop: '12px',
+                    width: '100%',
+                    textAlign: 'center'
+                  }}
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              )}
             </form>
 
             <div className="auth-form-footer">
@@ -304,6 +440,7 @@ export default function Auth() {
                 onClick={() => {
                   setIsLogin(!isLogin)
                   setError(null)
+                  setShowForgotPassword(false)
                 }}
                 className="auth-toggle-btn"
               >
@@ -313,6 +450,122 @@ export default function Auth() {
           </div>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotPassword && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '400px',
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            {resetEmailSent ? (
+              <>
+                <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    background: 'rgba(34, 197, 94, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px'
+                  }}>
+                    <Mail size={28} color="#22c55e" />
+                  </div>
+                  <h3 style={{ marginBottom: '8px', fontSize: '1.25rem' }}>¡Correo enviado!</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    Revisa tu bandeja de entrada y sigue el enlace para restablecer tu contraseña.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowForgotPassword(false)
+                    setResetEmailSent(false)
+                  }}
+                  className="btn btn-primary w-full"
+                >
+                  Entendido
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    background: 'var(--primary-soft)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px'
+                  }}>
+                    <KeyRound size={28} color="var(--primary)" />
+                  </div>
+                  <h3 style={{ marginBottom: '8px', fontSize: '1.25rem' }}>Recuperar contraseña</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    Introduce tu correo y te enviaremos un enlace para crear una nueva contraseña.
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="auth-error" style={{ marginBottom: '16px' }}>
+                    {error}
+                  </div>
+                )}
+
+                <form onSubmit={handleResetPassword}>
+                  <UiInput
+                    id="reset-email"
+                    type="email"
+                    label="Correo electrónico"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tu@email.com"
+                    required
+                  />
+                  
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForgotPassword(false)
+                        setError(null)
+                      }}
+                      className="btn btn-secondary"
+                      style={{ flex: 1 }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      style={{ flex: 1 }}
+                      disabled={resetLoading}
+                    >
+                      {resetLoading ? 'Enviando...' : 'Enviar enlace'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
