@@ -191,10 +191,10 @@ export default function Dashboard() {
               style={{
                 padding: '8px 12px',
                 paddingRight: '32px',
-                background: 'var(--card-bg)',
-                border: '1px solid var(--border)',
+                background: 'var(--bg-sidebar)',
+                border: '1px solid rgba(255,255,255,0.1)',
                 borderRadius: '8px',
-                color: 'var(--text-primary)',
+                color: '#f8fafc',
                 fontSize: '14px',
                 fontWeight: 500,
                 cursor: 'pointer',
