@@ -64,16 +64,19 @@ async function hashToken(token: string): Promise<string> {
 
 async function validateToken(authHeader: string | undefined): Promise<string | null> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('API Auth: No Bearer header found')
     return null
   }
 
   const rawToken = authHeader.replace('Bearer ', '').trim()
   if (!rawToken.startsWith('sk_live_')) {
+    console.log('API Auth: Token does not start with sk_live_')
     return null
   }
 
   try {
     const tokenHash = await hashToken(rawToken)
+    console.log('API Auth: Looking for token hash:', tokenHash.substring(0, 16) + '...')
 
     const { data, error } = await supabase
       .from('api_tokens')
@@ -81,15 +84,24 @@ async function validateToken(authHeader: string | undefined): Promise<string | n
       .eq('token_hash', tokenHash)
       .single()
 
-    if (error || !data) {
+    if (error) {
+      console.log('API Auth: Query error:', error.message, error.code)
       return null
     }
+    
+    if (!data) {
+      console.log('API Auth: No token found matching hash')
+      return null
+    }
+
+    console.log('API Auth: Token valid for user:', data.user_id)
 
     // Update last_used_at (fire and forget, don't block)
     supabase.rpc('update_token_last_used', { p_token_hash: tokenHash }).catch(() => {})
 
     return data.user_id
-  } catch {
+  } catch (err) {
+    console.log('API Auth: Unexpected error:', err)
     return null
   }
 }
