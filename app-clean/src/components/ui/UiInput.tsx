@@ -39,7 +39,7 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
               text-sm placeholder:text-muted
               focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary
               disabled:opacity-50 disabled:cursor-not-allowed
-              ${icon ? 'pl-9' : 'pl-3'}
+              ${icon ? 'pl-11' : 'pl-3'}
               ${rightIcon ? 'pr-9' : 'pr-3'}
               ${error ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}
               ${className}
