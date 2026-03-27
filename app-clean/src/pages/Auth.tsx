@@ -298,8 +298,20 @@ export default function Auth() {
               )}
               
               {error && (
-                <div className="auth-error">
-                  {error}
+                <div className="auth-error" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  color: '#f87171',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  marginBottom: '20px',
+                  fontSize: '0.875rem'
+                }}>
+                  <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                  <span>{error}</span>
                 </div>
               )}
 
@@ -312,54 +324,43 @@ export default function Auth() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="tu@email.com"
                   required
+                  icon={<Mail size={18} />}
+                  className="w-full"
                 />
               </div>
 
-              <div className="mb-4" style={{ position: 'relative' }}>
-                <label htmlFor="password" style={{ 
-                  display: 'block', 
-                  marginBottom: '6px', 
-                  fontSize: '0.875rem', 
-                  fontWeight: 500,
-                  color: 'var(--text-secondary)' 
-                }}>
-                  Contraseña
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    className="form-input"
-                    style={{
-                      width: '100%',
-                      paddingRight: '44px'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: '4px',
-                      color: 'var(--text-muted)',
-                      display: 'flex',
-                      alignItems: 'center'
-                    }}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
+              <div className="mb-4">
+                <UiInput
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  label="Contraseña"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  icon={<KeyRound size={18} />}
+                  className="w-full"
+                  rightIcon={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        color: 'var(--text-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        lineHeight: 0,
+                        marginRight: '-4px'
+                      }}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  }
+                />
                 
                 {/* Password Strength Indicator - only during registration */}
                 {!isLogin && password.length > 0 && (
