@@ -326,6 +326,7 @@ export default function Auth() {
                   required
                   icon={<Mail size={18} />}
                   className="w-full"
+                  autoComplete="username"
                 />
               </div>
 
@@ -340,6 +341,7 @@ export default function Auth() {
                   required
                   icon={<KeyRound size={18} />}
                   className="w-full"
+                  autoComplete="current-password"
                   rightIcon={
                     <button
                       type="button"
