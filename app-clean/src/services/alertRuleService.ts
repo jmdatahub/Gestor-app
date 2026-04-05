@@ -93,8 +93,6 @@ export async function createAlertRule(input: CreateAlertRuleInput): Promise<Aler
   if (input.trigger_percentage !== undefined) insertData.trigger_percentage = input.trigger_percentage
   if (input.description) insertData.description = input.description
 
-  console.log('[AlertRuleService] Creating rule with data:', insertData)
-
   const { data, error } = await supabase
     .from('alert_rules')
     .insert([insertData])
@@ -105,7 +103,6 @@ export async function createAlertRule(input: CreateAlertRuleInput): Promise<Aler
     console.error('[AlertRuleService] Error creating alert rule:', error)
     // If error mentions unknown column, try with basic fields only
     if (error.message?.includes('column') || error.code === '42703') {
-      console.log('[AlertRuleService] Retrying with basic fields only...')
       const basicInsert = {
         user_id: input.user_id,
         name: input.name,

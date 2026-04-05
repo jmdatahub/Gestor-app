@@ -36,7 +36,7 @@ cd app-clean
 npm run dev
 ```
 
-Abre **http://localhost:5173/** en tu navegador.
+Abre **http://localhost:5180/** en tu navegador.
 
 ### Build para producción
 

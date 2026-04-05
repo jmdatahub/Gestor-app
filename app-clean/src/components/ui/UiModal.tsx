@@ -18,7 +18,8 @@ export function UiModal({
   children, 
   width = 'md', 
   className = '',
-  closeOnOutsideClick = true 
+  closeOnOutsideClick = true,
+  title
 }: UiModalProps) {
   
   // Close on ESC
@@ -66,6 +67,7 @@ export function UiModal({
         role="dialog"
         aria-modal="true"
       >
+        {title && <UiModalHeader title={title} onClose={onClose} />}
         {children}
       </div>
     </div>,

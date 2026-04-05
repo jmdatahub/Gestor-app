@@ -32,7 +32,13 @@ if (!supabaseUrl || !supabaseServiceKey) {
   console.error('FATAL: Missing Supabase configuration. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.')
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey)
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+    detectSessionInUrl: false
+  }
+})
 
 // ============================================================
 // Types
@@ -72,7 +78,13 @@ async function hashToken(token: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function validateToken(authHeader: string | undefined): Promise<string | null> {
+interface TokenValidationResult {
+  userId: string
+  organizationId: string | null
+  scopes: string[]
+}
+
+async function validateToken(authHeader: string | undefined): Promise<TokenValidationResult | null> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log('API Auth: No Bearer header found')
     return null
@@ -90,7 +102,7 @@ async function validateToken(authHeader: string | undefined): Promise<string | n
 
     const { data, error } = await supabase
       .from('api_tokens')
-      .select('user_id')
+      .select('user_id, organization_id, scopes')
       .eq('token_hash', tokenHash)
       .single()
 
@@ -104,12 +116,16 @@ async function validateToken(authHeader: string | undefined): Promise<string | n
       return null
     }
 
-    console.log('API Auth: Token valid for user:', data.user_id)
+    console.log('API Auth: Token valid for user:', data.user_id, 'org:', data.organization_id)
 
     // Update last_used_at (fire and forget, don't block)
-    supabase.rpc('update_token_last_used', { p_token_hash: tokenHash }).catch(() => {})
+    void supabase.rpc('update_token_last_used', { p_token_hash: tokenHash }).then(() => {})
 
-    return data.user_id
+    return {
+      userId: data.user_id,
+      organizationId: data.organization_id || null,
+      scopes: data.scopes || []
+    }
   } catch (err) {
     console.log('API Auth: Unexpected error:', err)
     return null
@@ -163,10 +179,12 @@ function validateMovement(m: any, index: number): ValidationError[] {
   return errors
 }
 
-function prepareMovement(m: MovementInput, userId: string) {
+function prepareMovement(m: MovementInput, userId: string, tokenOrgId: string | null) {
   return {
     user_id: userId,
-    organization_id: m.organization_id || null,
+    // If token is scoped, force its org. If token is personal (null), force null (personal space).
+    // This prevents a personal token from writing to an organization.
+    organization_id: tokenOrgId,
     account_id: m.account_id,
     kind: m.kind,
     amount: Number(m.amount),
@@ -206,17 +224,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Authenticate
-  const userId = await validateToken(req.headers.authorization)
-  if (!userId) {
+  const tokenData = await validateToken(req.headers.authorization)
+  if (!tokenData) {
     return res.status(401).json({ 
       error: 'Unauthorized', 
       message: 'Invalid or missing API token. Include header: Authorization: Bearer sk_live_...' 
     })
   }
 
+  const { userId, organizationId, scopes } = tokenData
+
   try {
     // ========== GET: List Movements ==========
     if (req.method === 'GET') {
+      if (!scopes.includes('movements:read')) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Token lacks movements:read scope' })
+      }
+
       const { 
         limit = '50', 
         offset = '0', 
@@ -240,7 +264,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           category:categories(id, name, color),
           account:accounts(id, name, type)
         `, { count: 'exact' })
-        .eq('user_id', userId)
+        
+      // Override workspace if token is scoped
+      if (organizationId) {
+        query = query.eq('organization_id', organizationId)
+      } else {
+        query = query.eq('user_id', userId)
+        if (organization_id) {
+          if (organization_id === 'personal') {
+            query = query.is('organization_id', null)
+          } else {
+            query = query.eq('organization_id', organization_id)
+          }
+        }
+      }
+      
+      // Complete the query chain
+      query = query
         .order('date', { ascending: false })
         .range(offsetNum, offsetNum + limitNum - 1)
 
@@ -253,11 +293,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (to && /^\d{4}-\d{2}-\d{2}$/.test(to as string)) {
         query = query.lte('date', to)
-      }
-      if (organization_id) {
-        query = query.eq('organization_id', organization_id)
-      } else {
-        query = query.is('organization_id', null)
       }
       if (category_id) {
         query = query.eq('category_id', category_id)
@@ -289,6 +324,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ========== POST: Create Movement(s) ==========
     } else if (req.method === 'POST') {
+      if (!scopes.includes('movements:write')) {
+        return res.status(403).json({ error: 'Forbidden', message: 'Token lacks movements:write scope' })
+      }
+
       const body = req.body
 
       if (!body || (Array.isArray(body) && body.length === 0)) {
@@ -317,7 +356,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Prepare data
-      const prepared = movements.map(m => prepareMovement(m, userId))
+      const prepared = movements.map(m => prepareMovement(m, userId, organizationId))
 
       // Insert movements
       const { data, error } = await supabase
@@ -351,7 +390,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .from('debts')
               .insert({
                 user_id: userId,
-                organization_id: m.organization_id || null,
+                organization_id: organizationId,
                 direction: 'i_owe',
                 counterparty_name: m.paid_by_external,
                 total_amount: Number(m.amount),

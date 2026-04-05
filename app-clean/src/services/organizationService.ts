@@ -50,9 +50,16 @@ export async function getUserOrganizations(userId: string): Promise<Organization
     console.error('Error fetching user organizations:', error)
     throw error
   }
+  
+  interface OrgMemberQueryResult {
+    org_id: string
+    organization: Organization | null
+  }
 
-  // Map to flattened Organization array
-  return data.map((item: any) => item.organization)
+  // Map to flattened Organization array, filtering out nulls
+  return (data as any[] as OrgMemberQueryResult[])
+    .map(item => item.organization)
+    .filter((org): org is Organization => org !== null)
 }
 
 // Get single organization details
@@ -145,19 +152,13 @@ export async function getOrganizationMembers(orgId: string): Promise<Organizatio
     return []
   }
 
-  console.log('[DEBUG] Members data:', membersData)
-
   // Step 2: Get profiles for all member user_ids
   const userIds = membersData.map(m => m.user_id)
-  console.log('[DEBUG] Fetching profiles for user IDs:', userIds)
   
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
     .select('id, email, display_name, avatar_type')
     .in('id', userIds)
-
-  console.log('[DEBUG] Profiles data:', profilesData)
-  console.log('[DEBUG] Profiles error:', profilesError)
 
   if (profilesError) {
     console.warn('Could not fetch profiles, returning members without profile data:', profilesError)
@@ -166,7 +167,6 @@ export async function getOrganizationMembers(orgId: string): Promise<Organizatio
 
   // Step 3: Map profiles to members
   const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || [])
-  console.log('[DEBUG] Profiles map size:', profilesMap.size)
   
   return membersData.map(m => ({
     org_id: m.org_id,
@@ -189,8 +189,6 @@ export async function inviteMember(orgId: string, email: string, role: AppRole):
     console.error('Error inviting member:', error)
     throw error
   }
-
-  console.log('Invitation created:', data)
 }
 
 // Remove member

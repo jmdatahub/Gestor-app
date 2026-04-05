@@ -316,9 +316,6 @@ export async function getWeeklyHistory(
 
   const { data: movements } = await query
   
-  console.log(`[WeeklyHistory] Weeks: ${sortedEntries.length}, Range: ${startDate} to ${endDate}`)
-  console.log(`[WeeklyHistory] Fetched ${movements?.length || 0} movements`)
-  
   // Aggregate movements into weeks
   for (const m of (movements || [])) {
     // Parse the date string directly to avoid timezone issues
@@ -422,12 +419,24 @@ export async function getAccountBalancesSummary(
 }
 
 // Financial Distribution for Dashboard
+export interface FinancialDistributionSubItem {
+  name: string
+  value: number
+  color?: string
+  opacity?: number
+}
+
 export interface FinancialDistribution {
   totalAssets: number
   liquidity: number
   savings: number
   investments: number
-  distribution: { name: string; value: number; color: string }[]
+  distribution: { 
+    name: string; 
+    value: number; 
+    color: string; 
+    subItems?: FinancialDistributionSubItem[] 
+  }[]
 }
 
 export async function getFinancialDistribution(
@@ -441,7 +450,7 @@ export async function getFinancialDistribution(
   let investmentsAssetsValue = 0
   let investmentSubItems: { [key: string]: number } = {}
   let goalsTotal = 0
-  let goalsSubItems: any[] = []
+  let goalsSubItems: FinancialDistributionSubItem[] = []
 
   if (!organizationId) {
       const userInvestments = await getUserInvestments(userId)
@@ -515,9 +524,14 @@ export async function getFinancialDistribution(
   const liquidity = bank + cash
   
   const totalAssets = liquidity + savings + totalInvestments + other
-
+  
   // 6. Distribution Data
-  const distribution: { name: string; value: number; color: string; subItems?: any[] }[] = [
+  const distribution: { 
+    name: string; 
+    value: number; 
+    color: string; 
+    subItems?: FinancialDistributionSubItem[] 
+  }[] = [
     { 
         name: 'Cuentas / Bancos', 
         value: Math.max(0, bank), 

@@ -172,8 +172,6 @@ export interface CreateMovementInput {
 }
 
 export async function createMovement(input: CreateMovementInput): Promise<Movement> {
-  console.log('[movementService] Creating movement:', input)
-  
   const { data, error } = await supabase
     .from('movements')
     .insert([{
@@ -205,7 +203,6 @@ export async function createMovement(input: CreateMovementInput): Promise<Moveme
     throw error
   }
   
-  console.log('[movementService] Movement created:', data)
   return data
 }
 
@@ -214,8 +211,6 @@ export async function updateMovement(
   movementId: string, 
   updates: Partial<CreateMovementInput>
 ): Promise<Movement> {
-  console.log('[movementService] Updating movement:', movementId, updates)
-  
   const { data, error } = await supabase
     .from('movements')
     .update(updates)
@@ -228,14 +223,11 @@ export async function updateMovement(
     throw error
   }
   
-  console.log('[movementService] Movement updated:', data)
   return data
 }
 
 // Delete movement
 export async function deleteMovement(movementId: string): Promise<void> {
-  console.log('[movementService] Deleting movement:', movementId)
-  
   const { error } = await supabase
     .from('movements')
     .delete()
@@ -245,8 +237,6 @@ export async function deleteMovement(movementId: string): Promise<void> {
     console.error('[movementService] Error deleting movement:', error)
     throw error
   }
-  
-  console.log('[movementService] Movement deleted:', movementId)
 }
 
 // Fetch user accounts

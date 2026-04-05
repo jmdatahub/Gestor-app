@@ -4,31 +4,31 @@ Este documento es el **Manual de Operaciones** paso a paso. No avanzamos al sigu
 
 ---
 
-## 🏗️ FASE 1: INFRAESTRUCTURA DE BASE DE DATOS (Estado: PENDIENTE)
+## 🏗️ FASE 1: INFRAESTRUCTURA DE BASE DE DATOS (Estado: ✅ COMPLETADO)
 **Objetivo:** Crear las tablas necesarias sin tocar NADA de lo que ya funciona.
 **Riesgo:** Nulo (solo añade tablas nuevas).
 
 ### 1.1 Ejecución de Script Core
-- [ ] **Acción:** Ejecutar `migrations/MIG_001_v2_multi_workspace_core.sql` en Supabase SQL Editor.
-- [ ] **Verificación (SQL):** Ejecutar `SELECT * FROM public.organizations;` (No debe dar error, da 0 filas).
-- [ ] **Verificación (SQL):** Ejecutar `SELECT * FROM public.profiles;` (No debe dar error).
+- [x] **Acción:** Ejecutar `migrations/MIG_001_v2_multi_workspace_core.sql` en Supabase SQL Editor.
+- [x] **Verificación (SQL):** Ejecutar `SELECT * FROM public.organizations;` (No debe dar error, da 0 filas).
+- [x] **Verificación (SQL):** Ejecutar `SELECT * FROM public.profiles;` (No debe dar error).
 
 ### 1.2 Verificación de Integridad y Seguridad
-- [ ] **Acción:** Ejecutar `migrations/VERIFY_MIG_001_v2.sql`.
-- [ ] **Check 1:** Tabla `movements` da status "PASS: Clean" (no se ha tocado).
-- [ ] **Check 2:** Policies de `organization_members` no incluyen INSERT.
-- [ ] **Check 3:** Trigger `on_auth_user_created` existe.
+- [x] **Acción:** Ejecutar `migrations/VERIFY_MIG_001_v2.sql`.
+- [x] **Check 1:** Tabla `movements` da status "PASS: Clean" (no se ha tocado).
+- [x] **Check 2:** Policies de `organization_members` no incluyen INSERT.
+- [x] **Check 3:** Trigger `on_auth_user_created` existe.
 
 ### 1.3 Prueba de Humo (Manual)
-- [ ] **Acción (SQL):** `SELECT create_organization('Test Company PTY');`
+- [x] **Acción (SQL):** `SELECT create_organization('Test Company PTY');`
     *   *Resultado Esperado:* ERROR `User not authorized` (Correcto, seguridad activa).
-- [ ] **Acción (SQL):** `UPDATE profiles SET can_create_orgs = true WHERE id = auth.uid();`
-- [ ] **Acción (SQL):** `SELECT create_organization('Test Company PTY');`
+- [x] **Acción (SQL):** `UPDATE profiles SET can_create_orgs = true WHERE id = auth.uid();`
+- [x] **Acción (SQL):** `SELECT create_organization('Test Company PTY');`
     *   *Resultado Esperado:* Devuelve UUID (Correcto, funcionamiento OK).
 
 ---
 
-## 🌑 FASE 2: ADAPTACIÓN DE DATOS "SHADOW" (Siguiente)
+## 🌑 FASE 2: ADAPTACIÓN DE DATOS "SHADOW" (Estado: 🔄 EN PROGRESO)
 **Objetivo:** Que las tablas antiguas "soporten" empresas, pero sigan funcionando como siempre.
 
 ### 2.1 Columna Organization ID en Movements

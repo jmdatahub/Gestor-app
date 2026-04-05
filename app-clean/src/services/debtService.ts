@@ -73,8 +73,6 @@ export async function fetchDebtMovements(debtId: string): Promise<DebtMovement[]
 
 // Create new debt with robust error handling
 export async function createDebt(input: CreateDebtInput): Promise<Debt> {
-  console.log('[debtService] Creating debt:', input)
-  
   const { data, error } = await supabase
     .from('debts')
     .insert([{
@@ -96,7 +94,6 @@ export async function createDebt(input: CreateDebtInput): Promise<Debt> {
     throw error
   }
   
-  console.log('[debtService] Debt created successfully:', data)
   return data
 }
 

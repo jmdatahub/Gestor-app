@@ -203,8 +203,6 @@ export async function updateAccount(accountId: string, updates: Partial<Account>
 
 // Delete account permanently
 export async function deleteAccount(accountId: string): Promise<void> {
-  console.log('[accountService] Deleting account:', accountId)
-  
   const { error } = await supabase
     .from('accounts')
     .delete()
@@ -215,7 +213,6 @@ export async function deleteAccount(accountId: string): Promise<void> {
     throw error
   }
   
-  console.log('[accountService] Account deleted:', accountId)
   invalidateAccounts()
 }
 

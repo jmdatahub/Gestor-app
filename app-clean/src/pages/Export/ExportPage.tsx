@@ -16,7 +16,8 @@ import {
   exportRecurringToExcel,
   exportAllToExcel
 } from '../../services/exportService'
-import { FileText, FileCode, FileSpreadsheet, Download, Package } from 'lucide-react'
+import { downloadFullBackup } from '../../services/backupService'
+import { FileText, FileCode, FileSpreadsheet, Download, Package, ShieldCheck } from 'lucide-react'
 import { useSettings } from '../../context/SettingsContext'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { formatISODateString } from '../../utils/date'
@@ -82,6 +83,27 @@ export default function ExportPage() {
     }
   }
 
+  const handleFullBackup = async () => {
+    setLoading('backup')
+    setMessage(null)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No autenticado')
+
+      const recordCount = await downloadFullBackup(user.id)
+      setMessage({ 
+        type: 'success', 
+        text: `Copia de seguridad completada. ${recordCount} registros respaldados.` 
+      })
+    } catch (error) {
+      console.error('Backup error:', error)
+      setMessage({ type: 'error', text: 'Error al generar copia de seguridad' })
+    } finally {
+      setLoading(null)
+    }
+  }
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -102,6 +124,43 @@ export default function ExportPage() {
           {message.text}
         </div>
       )}
+
+      {/* Full Backup */}
+      <UiCard className="mb-6 border-0" style={{ 
+          background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', 
+          color: 'white' 
+      }}>
+        <div className="d-flex justify-between items-center p-6">
+            <div className="d-flex items-center gap-4">
+            <ShieldCheck size={40} className="text-white" />
+            <div>
+                <h3 className="text-lg font-bold text-white mb-1">Copia de Seguridad Completa (JSON)</h3>
+                <p className="text-sm text-white opacity-90 mb-0">
+                  Descarga un archivo con <b>absolutamente todos</b> tus datos para poder restaurarlos en el futuro si fuera necesario.
+                </p>
+            </div>
+            </div>
+            <button
+            className="btn"
+            onClick={handleFullBackup}
+            disabled={loading !== null}
+            style={{ 
+                minWidth: '220px', 
+                background: 'white', 
+                color: '#059669', 
+                border: 'none',
+                fontWeight: 600
+            }}
+            >
+            {loading === 'backup' ? 'Generando...' : (
+                <div className="d-flex items-center gap-2">
+                <Download size={20} />
+                Descargar Backup JSON
+                </div>
+            )}
+            </button>
+        </div>
+      </UiCard>
 
       {/* Export All */}
       <UiCard className="mb-6 border-0" style={{ 

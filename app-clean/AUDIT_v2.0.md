@@ -135,7 +135,7 @@
 app-clean/
 ├── 📄 index.html              # Entry point HTML
 ├── 📄 package.json            # Dependencias NPM
-├── 📄 vite.config.ts          # Configuración Vite (port 5173)
+├── 📄 vite.config.ts          # Configuración Vite (port 5180)
 ├── 📄 tsconfig.json           # Configuración TypeScript
 ├── 📄 supabase-tables.sql     # Schema SQL completo
 │

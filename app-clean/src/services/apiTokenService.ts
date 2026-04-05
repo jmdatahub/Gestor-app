@@ -1,10 +1,33 @@
 /**
- * API Token Service
- * Handles CRUD for API tokens and validation
+ * API Token Service v2
+ * Handles CRUD for API tokens with granular scopes and workspace support
  */
 import { supabase } from '../lib/supabaseClient'
 
-// Generate a secure random token prefix
+// All available scopes
+export const API_SCOPES = [
+  { id: 'movements:read',    label: 'Movimientos — Leer',         group: 'Movimientos' },
+  { id: 'movements:write',   label: 'Movimientos — Crear',        group: 'Movimientos' },
+  { id: 'accounts:read',     label: 'Cuentas — Leer',             group: 'Cuentas' },
+  { id: 'categories:read',   label: 'Categorías — Leer',          group: 'Categorías' },
+  { id: 'debts:read',        label: 'Deudas — Leer',              group: 'Deudas' },
+  { id: 'debts:write',       label: 'Deudas — Crear/Editar',      group: 'Deudas' },
+  { id: 'savings:read',      label: 'Ahorros — Leer',             group: 'Ahorros' },
+  { id: 'savings:write',     label: 'Ahorros — Crear/Editar',     group: 'Ahorros' },
+  { id: 'investments:read',  label: 'Inversiones — Leer',         group: 'Inversiones' },
+  { id: 'investments:write', label: 'Inversiones — Crear/Editar', group: 'Inversiones' },
+] as const
+
+export type ApiScope = typeof API_SCOPES[number]['id']
+
+export const DEFAULT_SCOPES: ApiScope[] = [
+  'movements:read',
+  'movements:write',
+  'accounts:read',
+  'categories:read',
+]
+
+// Generate a secure random token
 function generateToken(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   let token = 'sk_live_'
@@ -14,7 +37,7 @@ function generateToken(): string {
   return token
 }
 
-// Simple hash function using Web Crypto API
+// Hash using Web Crypto API (same algorithm as serverless API)
 async function hashToken(token: string): Promise<string> {
   const encoder = new TextEncoder()
   const data = encoder.encode(token)
@@ -28,18 +51,32 @@ export interface ApiToken {
   user_id: string
   name: string
   token_hash: string
-  permissions: string[]
+  organization_id: string | null
+  scopes: ApiScope[]
+  expires_at: string | null
   last_used_at: string | null
   created_at: string
+  // Joined
+  organization?: { id: string; name: string } | null
+}
+
+export interface CreateApiTokenInput {
+  name: string
+  organization_id?: string | null
+  scopes?: ApiScope[]
+  expires_at?: string | null
 }
 
 /**
- * Fetch all tokens for a user (hashes only, not real tokens)
+ * Fetch all tokens for a user (with organization name joined)
  */
 export async function getApiTokens(userId: string): Promise<ApiToken[]> {
   const { data, error } = await supabase
     .from('api_tokens')
-    .select('*')
+    .select(`
+      *,
+      organization:organizations(id, name)
+    `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
 
@@ -47,7 +84,7 @@ export async function getApiTokens(userId: string): Promise<ApiToken[]> {
     console.error('Error fetching API tokens:', error)
     throw error
   }
-  return data || []
+  return (data || []) as ApiToken[]
 }
 
 /**
@@ -56,8 +93,7 @@ export async function getApiTokens(userId: string): Promise<ApiToken[]> {
  */
 export async function createApiToken(
   userId: string,
-  name: string,
-  permissions: string[] = ['read', 'write']
+  input: CreateApiTokenInput
 ): Promise<{ token: string; record: ApiToken }> {
   const rawToken = generateToken()
   const tokenHash = await hashToken(rawToken)
@@ -66,11 +102,16 @@ export async function createApiToken(
     .from('api_tokens')
     .insert({
       user_id: userId,
-      name,
+      name: input.name,
       token_hash: tokenHash,
-      permissions
+      organization_id: input.organization_id || null,
+      scopes: input.scopes || DEFAULT_SCOPES,
+      expires_at: input.expires_at || null,
     })
-    .select()
+    .select(`
+      *,
+      organization:organizations(id, name)
+    `)
     .single()
 
   if (error) {
@@ -78,7 +119,7 @@ export async function createApiToken(
     throw error
   }
 
-  return { token: rawToken, record: data }
+  return { token: rawToken, record: data as ApiToken }
 }
 
 /**
@@ -97,28 +138,13 @@ export async function revokeApiToken(tokenId: string): Promise<void> {
 }
 
 /**
- * Validate a token from an incoming request
- * Returns the user_id if valid, null otherwise
+ * Update token scopes
  */
-export async function validateApiToken(rawToken: string): Promise<string | null> {
-  if (!rawToken || !rawToken.startsWith('sk_live_')) {
-    return null
-  }
-
-  const tokenHash = await hashToken(rawToken)
-
-  const { data, error } = await supabase
+export async function updateTokenScopes(tokenId: string, scopes: ApiScope[]): Promise<void> {
+  const { error } = await supabase
     .from('api_tokens')
-    .select('user_id')
-    .eq('token_hash', tokenHash)
-    .single()
+    .update({ scopes })
+    .eq('id', tokenId)
 
-  if (error || !data) {
-    return null
-  }
-
-  // Update last used (fire and forget)
-  supabase.rpc('update_token_last_used', { p_token_hash: tokenHash }).then()
-
-  return data.user_id
+  if (error) throw error
 }

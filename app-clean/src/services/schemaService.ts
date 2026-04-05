@@ -28,14 +28,14 @@ export interface SchemaMismatch {
 
 // Expected columns per table (what the frontend code expects)
 export const EXPECTED_SCHEMA: Record<string, string[]> = {
-  movements: ['id', 'user_id', 'account_id', 'kind', 'amount', 'date', 'description', 'category_id', 'created_at'],
-  accounts: ['id', 'user_id', 'name', 'type', 'balance', 'is_active', 'parent_account_id', 'created_at'],
-  categories: ['id', 'user_id', 'name', 'kind', 'color', 'created_at'],
-  debts: ['id', 'user_id', 'direction', 'counterparty_name', 'total_amount', 'remaining_amount', 'due_date', 'is_closed', 'created_at'],
+  movements: ['id', 'user_id', 'organization_id', 'account_id', 'kind', 'amount', 'date', 'description', 'category_id', 'created_at'],
+  accounts: ['id', 'user_id', 'organization_id', 'name', 'type', 'balance', 'is_active', 'parent_account_id', 'created_at'],
+  categories: ['id', 'user_id', 'organization_id', 'name', 'kind', 'color', 'created_at'],
+  debts: ['id', 'user_id', 'organization_id', 'direction', 'counterparty_name', 'total_amount', 'remaining_amount', 'due_date', 'is_closed', 'created_at'],
   debt_movements: ['id', 'debt_id', 'type', 'amount', 'date', 'note', 'created_at'],
-  savings_goals: ['id', 'user_id', 'name', 'target_amount', 'current_amount', 'target_date', 'status', 'created_at'],
-  investments: ['id', 'user_id', 'name', 'type', 'symbol', 'quantity', 'purchase_price', 'current_price', 'created_at'],
-  recurring_rules: ['id', 'user_id', 'name', 'type', 'amount', 'frequency', 'is_active', 'created_at'],
+  savings_goals: ['id', 'user_id', 'organization_id', 'name', 'target_amount', 'current_amount', 'target_date', 'status', 'created_at'],
+  investments: ['id', 'user_id', 'organization_id', 'name', 'type', 'symbol', 'quantity', 'purchase_price', 'current_price', 'created_at'],
+  recurring_rules: ['id', 'user_id', 'organization_id', 'name', 'type', 'amount', 'frequency', 'is_active', 'created_at'],
   alerts: ['id', 'user_id', 'type', 'title', 'message', 'is_read', 'created_at'],
   alert_rules: ['id', 'user_id', 'name', 'type', 'condition', 'is_active', 'created_at']
 }

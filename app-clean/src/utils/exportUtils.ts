@@ -6,8 +6,6 @@ export const exportToCSV = (
   filename: string, 
   headers?: { key: string; label: string }[]
 ): void => {
-  console.log('[CSV Export] Starting with', data?.length || 0, 'rows')
-  
   if (!data || data.length === 0) {
     console.warn('[CSV Export] No data to export')
     alert('No hay datos para exportar')
@@ -23,9 +21,6 @@ export const exportToCSV = (
     const labels = headers 
       ? headers.map(h => h.label) 
       : keys
-
-    console.log('[CSV Export] Keys:', keys)
-    console.log('[CSV Export] Labels:', labels)
 
     // Build CSV content manually
     let csvContent = ''
@@ -60,9 +55,6 @@ export const exportToCSV = (
       csvContent += values.join(';') + '\r\n'
     }
 
-    console.log('[CSV Export] Content length:', csvContent.length)
-    console.log('[CSV Export] First 300 chars:', csvContent.substring(0, 300))
-
     // Direct download - NO external dependencies
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -80,9 +72,6 @@ export const exportToCSV = (
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
     }, 150)
-
-    console.log('[CSV Export] Download triggered successfully')
-
   } catch (error) {
     console.error('[CSV Export] Error:', error)
     alert('Error al exportar CSV: ' + (error as Error).message)
