@@ -16,34 +16,94 @@ async function hashToken(token: string): Promise<string> {
   return hash.digest('hex')
 }
 
-// Envía un mensaje de vuelta a Telegram
-async function sendMessage(chatId: string | number, text: string) {
-  const url = `https://api.telegram.org/bot${telegramToken}/sendMessage`
+// Envía mensaje a través de la API oficial de Telegram
+async function sendMessage(chatId: string | number, text: string, reply_markup?: any) {
   try {
-    await fetch(url, {
+    const body: any = {
+      chat_id: chatId,
+      text: text,
+      parse_mode: 'HTML' // Optional, permits minor formatting
+    }
+    if (reply_markup) {
+      body.reply_markup = reply_markup
+    }
+
+    await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text })
+      body: JSON.stringify(body)
     })
-  } catch (e) {
-    console.error('Error sending telegram message', e)
+  } catch (error) {
+    console.error('Error sending message to Telegram:', error)
+  }
+}
+
+// Responde a un callback_query para quitar el estado de "Cargando" del botón
+async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  try {
+    const body: any = { callback_query_id: callbackQueryId }
+    if (text) body.text = text
+    await fetch(`https://api.telegram.org/bot${telegramToken}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+  } catch (err) {
+    console.error('Error answering callback:', err)
   }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Telegram webhooks use POST
-  if (req.method !== 'POST') {
-    return res.status(200).send('Bot is active')
-  }
-
-  // Do not send 200 OK prematurely in Vercel Serverless
-  // Wait for processing to finish before responding
+  // Only accept POST
+  if (req.method !== 'POST') return res.status(200).send('OK')
 
   try {
-    const { message } = req.body
-    if (!message || !message.text) return
-    
-    const chatId = message.chat.id.toString()
+    const body = req.body
+
+    // --- PROCESAR CLICS EN BOTONES (CALLBACK QUERIES) ---
+    if (body.callback_query) {
+      const callbackId = body.callback_query.id
+      const chatId = body.callback_query.message.chat.id
+      const data = body.callback_query.data // Ej: "c:categoryPrefix:movementPrefix" o "inc:movementPrefix"
+      
+      // Asegurar respuesta rápida a TG para apagar el "loading" del botón
+      await answerCallbackQuery(callbackId)
+
+      // Get user linked
+      const { data: linkedTokens } = await supabase.from('api_tokens').select('user_id, organization_id').contains('scopes', [`tg_chat:${chatId}`]).limit(1)
+      if (!linkedTokens || linkedTokens.length === 0) return res.status(200).send('OK')
+
+      const parts = data.split(':')
+      if (parts[0] === 'c' && parts.length === 3) {
+        // Asignar Categoría
+        const catPrefix = parts[1]
+        const movPrefix = parts[2]
+        
+        // Buscar el id exacto
+        const { data: cats } = await supabase.from('categories').select('id, name').ilike('id', `${catPrefix}%`).limit(1)
+        const { data: movs } = await supabase.from('movements').select('id').ilike('id', `${movPrefix}%`).limit(1)
+        
+        if (cats?.length && movs?.length) {
+          await supabase.from('movements').update({ category_id: cats[0].id }).eq('id', movs[0].id)
+          await sendMessage(chatId, `✔️ ¡Categorizado como <b>${cats[0].name}</b>!`)
+        }
+      } else if (parts[0] === 'inc' && parts.length === 2) {
+        // Convertir a Ingreso
+        const movPrefix = parts[1]
+        const { data: movs } = await supabase.from('movements').select('id').ilike('id', `${movPrefix}%`).limit(1)
+        if (movs?.length) {
+          await supabase.from('movements').update({ kind: 'income', category_id: null }).eq('id', movs[0].id)
+          await sendMessage(chatId, `✔️ ¡Cambiado a <b>Ingreso</b>!`)
+        }
+      }
+      return res.status(200).send('OK')
+    }
+
+    // --- PROCESAR MENSAJES DE TEXTO ---
+    const message = body.message
+    if (!message || !message.text) return res.status(200).send('OK')
+
+    const chatId = message.chat.id
     const text = message.text.trim()
 
     // Comando especial para vincular cuenta: /link <sk_live_...>
@@ -153,7 +213,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send('OK')
     }
 
-    const { error: insertError } = await supabase
+    const { data: createdMovement, error: insertError } = await supabase
       .from('movements')
       .insert({
         user_id: userId,
@@ -165,14 +225,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         description: `📱 [Bot]: ${description}`,
         date: new Date().toISOString().split('T')[0] // Hoy
       })
+      .select('id')
+      .single()
 
-    if (insertError) {
+    if (insertError || !createdMovement) {
       console.error(insertError)
-      await sendMessage(chatId, '🔥 Falló al guardar el gasto en la BBDD: ' + insertError.message)
+      await sendMessage(chatId, '🔥 Falló al guardar el gasto en la BBDD: ' + insertError?.message)
       return res.status(200).send('OK')
     }
 
-    await sendMessage(chatId, `🚀 Gasto guardado con éxito:\n\n➖ ${amount}€ \n📝 ${description}`)
+    const movPrefix = createdMovement.id.substring(0, 8)
+
+    // Buscar las top categorías del usuario
+    let catQuery = supabase.from('categories').select('id, name').eq('user_id', userId).eq('type', 'expense')
+    if (targetOrgId === null) {
+      catQuery = catQuery.is('organization_id', null)
+    } else {
+      catQuery = catQuery.eq('organization_id', targetOrgId)
+    }
+    const { data: topCategories } = await catQuery.limit(8)
+
+    // Armar el teclado interactivo
+    const keyboard: any[][] = []
+    let row: any[] = []
+    
+    topCategories?.forEach((cat) => {
+      row.push({ text: `📁 ${cat.name}`, callback_data: `c:${cat.id.substring(0,8)}:${movPrefix}` })
+      if (row.length === 2) { // 2 botones por fila
+        keyboard.push(row)
+        row = []
+      }
+    })
+    if (row.length > 0) keyboard.push(row)
+    
+    // Añadir botón de cambiar a ingreso al final
+    keyboard.push([{ text: '➕ Es un Ingreso (No gasto)', callback_data: `inc:${movPrefix}` }])
+
+    const msgTxt = `🚀 <b>Gasto guardado:</b>\n➖ <b>${amount}€</b>\n📝 ${description}\n\n<i>¿En qué categoría lo clasifico?</i>`
+    await sendMessage(chatId, msgTxt, { inline_keyboard: keyboard })
+
     return res.status(200).send('OK')
 
   } catch (error) {
