@@ -20,6 +20,7 @@ interface CacheEntry<T> {
   data: T
   timestamp: number
   userId: string
+  organizationId?: string | null
 }
 
 interface Account {
@@ -58,9 +59,10 @@ let categoriesCache: CacheEntry<Category[]> | null = null
 // HELPERS
 // ==============================================
 
-function isValid<T>(cache: CacheEntry<T> | null, userId: string): boolean {
+function isValid<T>(cache: CacheEntry<T> | null, userId: string, organizationId?: string | null): boolean {
   if (!cache) return false
   if (cache.userId !== userId) return false
+  if (cache.organizationId !== (organizationId || null)) return false
   const age = Date.now() - cache.timestamp
   return age < TTL_MS
 }
@@ -79,18 +81,22 @@ function log(message: string, ...args: unknown[]) {
  * Get accounts for user (cached)
  * Returns cached data if valid, otherwise fetches from Supabase
  */
-export async function getAccounts(userId: string): Promise<Account[]> {
-  if (isValid(accountsCache, userId)) {
+export async function getAccounts(userId: string, organizationId?: string | null): Promise<Account[]> {
+  if (isValid(accountsCache, userId, organizationId)) {
     log('HIT accounts cache')
     return accountsCache!.data
   }
 
   log('MISS accounts cache - fetching from Supabase')
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('*')
-    .eq('user_id', userId)
-    .order('name')
+  let query = supabase.from('accounts').select('*').order('name')
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching accounts:', error)
@@ -101,7 +107,8 @@ export async function getAccounts(userId: string): Promise<Account[]> {
   accountsCache = {
     data: accounts,
     timestamp: Date.now(),
-    userId
+    userId,
+    organizationId: organizationId || null
   }
 
   return accounts
@@ -110,26 +117,30 @@ export async function getAccounts(userId: string): Promise<Account[]> {
 /**
  * Get active accounts only (cached, filtered)
  */
-export async function getActiveAccounts(userId: string): Promise<Account[]> {
-  const accounts = await getAccounts(userId)
+export async function getActiveAccounts(userId: string, organizationId?: string | null): Promise<Account[]> {
+  const accounts = await getAccounts(userId, organizationId)
   return accounts.filter(a => a.is_active)
 }
 
 /**
  * Get categories for user (cached)
  */
-export async function getCategories(userId: string): Promise<Category[]> {
-  if (isValid(categoriesCache, userId)) {
+export async function getCategories(userId: string, organizationId?: string | null): Promise<Category[]> {
+  if (isValid(categoriesCache, userId, organizationId)) {
     log('HIT categories cache')
     return categoriesCache!.data
   }
 
   log('MISS categories cache - fetching from Supabase')
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('user_id', userId)
-    .order('name')
+  let query = supabase.from('categories').select('*').order('name')
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     // Categories table might not exist yet
@@ -141,7 +152,8 @@ export async function getCategories(userId: string): Promise<Category[]> {
   categoriesCache = {
     data: categories,
     timestamp: Date.now(),
-    userId
+    userId,
+    organizationId: organizationId || null
   }
 
   return categories
@@ -179,11 +191,11 @@ export function invalidateAll() {
  * Warmup cache (preload both catalogs)
  * Call on dashboard load for better UX
  */
-export async function warmup(userId: string): Promise<void> {
+export async function warmup(userId: string, organizationId?: string | null): Promise<void> {
   log('WARMUP starting')
   await Promise.all([
-    getAccounts(userId),
-    getCategories(userId)
+    getAccounts(userId, organizationId),
+    getCategories(userId, organizationId)
   ])
   log('WARMUP complete')
 }
@@ -195,11 +207,13 @@ export function getCacheStats() {
   return {
     accounts: accountsCache ? {
       userId: accountsCache.userId,
+      organizationId: accountsCache.organizationId,
       count: accountsCache.data.length,
       ageMs: Date.now() - accountsCache.timestamp
     } : null,
     categories: categoriesCache ? {
       userId: categoriesCache.userId,
+      organizationId: categoriesCache.organizationId,
       count: categoriesCache.data.length,
       ageMs: Date.now() - categoriesCache.timestamp
     } : null

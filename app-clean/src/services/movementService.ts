@@ -51,7 +51,7 @@ export interface Category {
 }
 
 // Fetch movements for user (OR Organization)
-export async function fetchMovements(userId: string, limit = 50, organizationId?: string | null): Promise<Movement[]> {
+export async function fetchMovements(userId: string, limit = 50, offset = 0, organizationId?: string | null): Promise<Movement[]> {
   let query = supabase
     .from('movements')
     .select(`
@@ -60,7 +60,7 @@ export async function fetchMovements(userId: string, limit = 50, organizationId?
       category:categories(id, name, color)
     `)
     .order('date', { ascending: false })
-    .limit(limit)
+    .range(offset, offset + limit - 1)
 
   if (organizationId) {
     // Org Mode: Filter by Org ID

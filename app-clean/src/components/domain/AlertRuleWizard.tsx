@@ -210,9 +210,9 @@ export function AlertRuleWizard({ isOpen, onClose, onSuccess }: AlertRuleWizardP
   
   return (
     <UiModal isOpen={isOpen} onClose={onClose} width="500px">
-      <div className="p-6">
+      <div className="p-6 flex flex-col flex-1 min-h-0">
         {/* Header with Steps */}
-        <div className="d-flex items-center gap-2 mb-6">
+        <div className="d-flex items-center gap-2 mb-6 shrink-0">
           <StepIndicator step={1} current={step === 'type'} done={step !== 'type'} label="Tipo" />
           <ChevronRight size={16} className="text-gray-300" />
           <StepIndicator step={2} current={step === 'condition'} done={['options', 'confirm'].includes(step)} label="Condición" />

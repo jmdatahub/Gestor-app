@@ -12,12 +12,14 @@ import {
   calculateMonthlySummary,
   type Movement,
   type Account,
+  type CreateMovementInput,
 } from '../../services/movementService'
 import { 
   createAccount, 
   accountTypes, 
   buildAccountTree, 
-  flattenAccountTree
+  flattenAccountTree,
+  type AccountWithBalance
 } from '../../services/accountService'
 import { createDebt as createDebtService } from '../../services/debtService'
 import { ensureDefaultAccountsForUser } from '../../services/authService'
@@ -121,6 +123,11 @@ export default function MovementsList() {
   const [showModal, setShowModal] = useState(false)
   const [summary, setSummary] = useState({ income: 0, expense: 0, balance: 0 })
 
+  // Pagination State
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+
   // Export & Filter State
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
@@ -177,12 +184,14 @@ export default function MovementsList() {
       await ensureDefaultAccountsForUser(user.id)
 
       const [movementsData, monthlyData, accountsData] = await Promise.all([
-        fetchMovements(user.id, 50, orgId),
+        fetchMovements(user.id, 50, 0, orgId),
         fetchMonthlyMovements(user.id, orgId),
         fetchAccounts(user.id, orgId)
       ])
 
       setMovements(movementsData)
+      setPage(0)
+      setHasMore(movementsData.length === 50)
       setAccounts(accountsData)
       
       // Extract unique categories from movements for filter dropdown
@@ -199,8 +208,9 @@ export default function MovementsList() {
       setAllCategories(Array.from(uniqueCategories.values()))
       
       // Calculate hierarchy
-      // We cast to any because buildAccountTree expects AccountWithBalance but only needs id/parent_id structure mostly
-      const tree = buildAccountTree(accountsData as any)
+      // buildAccountTree expects AccountWithBalance, so we add a dummy balance
+      const accountsWithBalance = accountsData.map(a => ({ ...a, balance: 0 } as AccountWithBalance))
+      const tree = buildAccountTree(accountsWithBalance)
       const flat = flattenAccountTree(tree)
       setFlatAccounts(flat)
 
@@ -225,6 +235,39 @@ export default function MovementsList() {
       setAppError({ message: 'Error al cargar los datos' })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadMoreMovements = async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
+      const orgId = currentWorkspace?.id || null
+      const nextPage = page + 1
+      const offset = nextPage * 50
+      
+      const newMovements = await fetchMovements(user.id, 50, offset, orgId)
+      
+      if (newMovements.length < 50) {
+        setHasMore(false)
+      }
+      
+      if (newMovements.length > 0) {
+        setMovements(prev => {
+          // Merge avoiding duplicates just in case
+          const existingIds = new Set(prev.map(m => m.id))
+          const filteredNew = newMovements.filter(m => !existingIds.has(m.id))
+          return [...prev, ...filteredNew]
+        })
+        setPage(nextPage)
+      }
+    } catch (error) {
+      console.error('Error loading more movements:', error)
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -266,7 +309,7 @@ export default function MovementsList() {
       }
 
       // Update backend
-      const movementData = {
+      const movementData: CreateMovementInput = {
         user_id: user.id,
         organization_id: currentWorkspace?.id || null, 
         account_id: accountId,
@@ -303,8 +346,7 @@ export default function MovementsList() {
            })
            createdDebtId = debtData.id
            // Update movement data with linked debt
-           // Note: Need to cast movementData to any or update interface to allow linked_debt_id
-           ;(movementData as any).linked_debt_id = createdDebtId
+           movementData.linked_debt_id = createdDebtId
            
            toast.success('Deuda creada', `Se generó una deuda con ${paidByExternal}`)
          } catch (debtErr) {
@@ -468,15 +510,17 @@ export default function MovementsList() {
       setAccounts(updatedAccounts)
       
       // Re-calculate hierarchy
-      const tree = buildAccountTree(updatedAccounts as any)
+      const accountsWithBalance = updatedAccounts.map(a => ({ ...a, balance: 0 } as AccountWithBalance))
+      const tree = buildAccountTree(accountsWithBalance)
       const flat = flattenAccountTree(tree)
       setFlatAccounts(flat)
 
       setAccountId(newAccount.id)
       resetAccountModal()
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating account:', err)
-      setNewAccountError('No se pudo crear la cuenta. ' + (err.message || ''))
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      setNewAccountError('No se pudo crear la cuenta. ' + errorMessage)
     } finally {
       setCreatingAccount(false)
     }
@@ -891,6 +935,7 @@ export default function MovementsList() {
                 )}
               </div>
             ) : (
+              <>
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -1012,6 +1057,24 @@ export default function MovementsList() {
             </table>
           </div>
         </div>
+        
+        {hasMore && filteredMovements.length > 0 && !hasActiveFilters && (
+          <div className="flex justify-center mt-6 mb-4">
+            <button 
+              className="btn btn-secondary px-8 py-2 rounded-full font-medium shadow-sm transition-all hover:bg-white dark:hover:bg-slate-800"
+              onClick={loadMoreMovements}
+              disabled={loadingMore}
+            >
+              {loadingMore ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent" />
+                  Cargando...
+                </div>
+              ) : 'Cargar más movimientos'}
+            </button>
+          </div>
+        )}
+              </>
             )}
           </>
         )

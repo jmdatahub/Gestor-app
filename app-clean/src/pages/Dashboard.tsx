@@ -81,10 +81,10 @@ export default function Dashboard() {
     setUserId(user.id)
 
     try {
-      // Warmup catalog cache for faster subsequent loads (invalidate if workspace changed?)
-      warmupCache(user.id)
-      
       const workspaceId = currentWorkspace?.id || null // Org ID or NULL for personal
+
+      // Warmup catalog cache for faster subsequent loads (invalidate if workspace changed?)
+      warmupCache(user.id, workspaceId)
 
       const [accounts, movements, accountList, financialData] = await Promise.all([
         fetchAccountsSummary(user.id, workspaceId),

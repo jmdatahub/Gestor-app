@@ -170,34 +170,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const catPrefix = parts[1]
         const movPrefix = parts[2]
         // Buscar el id exacto
-        const { data: cats } = await supabase.from('categories').select('id, name').ilike('id', `${catPrefix}%`).limit(1)
-        const { data: movs } = await supabase.from('movements').select('id, amount, kind, description').ilike('id', `${movPrefix}%`).limit(1)
+        // Buscar el id exacto en JS para evitar errores de cast UUID en Supabase
+        const { data: userCats } = await supabase.from('categories').select('id, name').eq('user_id', userId)
+        const { data: userMovs } = await supabase.from('movements').select('id, amount, kind, description').eq('user_id', userId).order('created_at', { ascending: false }).limit(20)
         
-        if (cats?.length && movs?.length) {
-          await supabase.from('movements').update({ category_id: cats[0].id }).eq('id', movs[0].id)
-          const m = movs[0]
-          const safeDesc = escapeHtml(m.description || '')
-          const typeLabel = m.kind === 'income' ? 'Ingreso' : 'Gasto'
-          const msgTxt = `✅ <b>${typeLabel} de ${m.amount}€ categorizado en ${cats[0].name}.</b>\n📝 ${safeDesc}\n\n<i>💬 Si quieres cambiar esta nota, escribe el nuevo texto ahora.</i>`
+        const cat = userCats?.find(c => c.id.startsWith(catPrefix))
+        const mov = userMovs?.find(m => m.id.startsWith(movPrefix))
+        
+        if (cat && mov) {
+          await supabase.from('movements').update({ category_id: cat.id }).eq('id', mov.id)
+          const safeDesc = escapeHtml(mov.description || '')
+          const typeLabel = mov.kind === 'income' ? 'Ingreso' : 'Gasto'
+          const msgTxt = `✅ <b>${typeLabel} de ${mov.amount}€ categorizado en ${cat.name}.</b>\n📝 ${safeDesc}\n\n<i>💬 Si quieres cambiar esta nota, escribe el nuevo texto ahora.</i>`
           await editMessageText(chatId, body.callback_query.message.message_id, msgTxt)
         }
       } else if ((parts[0] === 'inc' || parts[0] === 'exp') && parts.length === 2) {
         // Convertir a Ingreso/Gasto
         const newKind = parts[0] === 'inc' ? 'income' : 'expense'
         const movPrefix = parts[1]
-        const { data: movs } = await supabase.from('movements').select('id, amount, description').ilike('id', `${movPrefix}%`).limit(1)
-        if (movs?.length) {
-          await supabase.from('movements').update({ kind: newKind, category_id: null }).eq('id', movs[0].id)
+        
+        const { data: userMovs } = await supabase.from('movements').select('id, amount, description').eq('user_id', userId).order('created_at', { ascending: false }).limit(20)
+        const mov = userMovs?.find(m => m.id.startsWith(movPrefix))
+        
+        if (mov) {
+          await supabase.from('movements').update({ kind: newKind, category_id: null }).eq('id', mov.id)
           
           // Regen keyboard
           const kb = await buildCategoriesKeyboard(userId, targetOrgId, newKind, movPrefix, 0)
-          const m = movs[0]
-          const safeDesc = escapeHtml(m.description || '')
+          const safeDesc = escapeHtml(mov.description || '')
           const typeLabel = newKind === 'income' ? 'Ingreso' : 'Gasto'
           const typeSign = newKind === 'income' ? '➕' : '➖'
           const msgTxt = kb.length > 0
-            ? `🚀 <b>${typeLabel} convertido:</b>\n${typeSign} <b>${m.amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico?</i>`
-            : `🚀 ${typeLabel} convertido:\n${typeSign} ${m.amount}€\n📝 ${safeDesc}`
+            ? `🚀 <b>${typeLabel} convertido:</b>\n${typeSign} <b>${mov.amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico?</i>`
+            : `🚀 ${typeLabel} convertido:\n${typeSign} ${mov.amount}€\n📝 ${safeDesc}`
             
           await editMessageText(chatId, body.callback_query.message.message_id, msgTxt, kb.length > 0 ? { inline_keyboard: kb } : undefined)
         }

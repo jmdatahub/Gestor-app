@@ -83,7 +83,7 @@ export default function AccountDetail() {
       setFlatAccounts(flat)
 
       // Get movements for this account
-      const movementsData = await fetchMovements(user.id, 50, orgId)
+      const movementsData = await fetchMovements(user.id, 50, 0, orgId)
       const accountMovements = movementsData.filter(m => m.account_id === id)
       setMovements(accountMovements.slice(0, 20)) // Last 20 movements
 
