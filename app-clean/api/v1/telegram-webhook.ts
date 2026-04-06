@@ -207,21 +207,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Si no encontramos el token específico, usamos el primero disponible (fallback)
     const targetOrgId = linkedToken?.organization_id ?? null
 
-    // Lógica para extraer la cantidad (Ej: "Mercadona 45", "15.40 cervezas", "Gasto de 10 euros")
-    // Esta RegEx busca el primer número positivo (opcional decimales cortos)
-    const amountMatch = text.match(/(?:^|\s)(\d+(?:[.,]\d{1,2})?)(?:€|eur|euros)?(?:\s|$)/i)
+    // Lógica para extraer la cantidad.
+    // Acepta: "25 mercadona", "+25 sueldo" (ingreso), "-25 gasolina", "25,50 comida", "12.99 netflix"
+    const amountMatch = text.match(/([+-]?)(\d+(?:[.,]\d{1,2})?)(?:€|eur|euros)?(?:\s|$)/i)
     
     if (!amountMatch) {
-      await sendMessage(chatId, '⚠️ No he encontrado un precio claro en tu mensaje. Usa números como 15 o 20.50')
+      await sendMessage(chatId, '⚠️ No he encontrado un precio claro en tu mensaje.\nEjemplos: "25 mercadona" (gasto) o "+1000 sueldo" (ingreso)')
       return res.status(200).send('OK')
     }
 
-    const amountStr = amountMatch[1].replace(',', '.')
+    const sign = amountMatch[1] // '+' o '-' o ''
+    const amountStr = amountMatch[2].replace(',', '.')
     const amount = Number(amountStr)
+    // Si empieza con '+' es un ingreso, en cualquier otro caso es un gasto
+    const kind: 'income' | 'expense' = sign === '+' ? 'income' : 'expense'
 
-    // La descripción será el resto del texto
-    let description = text.replace(amountMatch[0], ' ').trim()
-    if (!description) description = 'Gasto rápido (Telegram)'
+    // La descripción será el resto del texto (quitamos el número y el signo)
+    let description = text.replace(amountMatch[0], ' ').replace(/^[+-]/, '').trim()
+    if (!description) description = kind === 'income' ? 'Ingreso rápido (Telegram)' : 'Gasto rápido (Telegram)'
 
     // Buscar una cuenta que pertenezca ESPECÍFICAMENTE al workspace elegido (targetOrgId)
     let accountQuery = supabase.from('accounts').select('id, organization_id').eq('user_id', userId)
@@ -254,7 +257,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         account_id: accountsData[0].id,
         organization_id: targetOrgId,
         category_id: categories && categories.length > 0 ? categories[0].id : null,
-        kind: 'expense',
+        kind: kind,
         amount: amount,
         description: `📱 [Bot]: ${description}`,
         date: new Date().toISOString().split('T')[0] // Hoy
@@ -270,8 +273,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const movPrefix = createdMovement.id.substring(0, 8)
 
-    // Buscar las top categorías del usuario
-    let catQuery = supabase.from('categories').select('id, name').eq('user_id', userId).eq('type', 'expense')
+    // Buscar las top categorías del usuario (del tipo que corresponde)
+    let catQuery = supabase.from('categories').select('id, name').eq('user_id', userId).eq('type', kind)
     if (targetOrgId === null) {
       catQuery = catQuery.is('organization_id', null)
     } else {
@@ -292,14 +295,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
     if (row.length > 0) keyboard.push(row)
     
-    // Añadir botón de cambiar a ingreso al final
-    keyboard.push([{ text: '➕ Es un Ingreso (No gasto)', callback_data: `inc:${movPrefix}` }])
+    // Botón para cambiar el tipo — solo mostramos si hay categorías
+    if (kind === 'expense') {
+      keyboard.push([{ text: '➕ Cambiar a Ingreso', callback_data: `inc:${movPrefix}` }])
+    } else {
+      keyboard.push([{ text: '➖ Cambiar a Gasto', callback_data: `exp:${movPrefix}` }])
+    }
 
     // Escapamos la descripción del usuario para evitar que rompa el HTML
     const safeDesc = escapeHtml(description)
+    const typeLabel = kind === 'income' ? 'Ingreso' : 'Gasto'
+    const typeSign = kind === 'income' ? '➕' : '➖'
     const msgTxt = keyboard.length > 1
-      ? `🚀 <b>Gasto guardado:</b>\n➖ <b>${amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico?</i>`
-      : `🚀 Gasto guardado:\n➖ ${amount}€\n📝 ${safeDesc}`
+      ? `🚀 <b>${typeLabel} guardado:</b>\n${typeSign} <b>${amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico?</i>`
+      : `🚀 ${typeLabel} guardado:\n${typeSign} ${amount}€\n📝 ${safeDesc}`
     await sendMessage(chatId, msgTxt, keyboard.length > 1 ? { inline_keyboard: keyboard } : undefined)
 
     return res.status(200).send('OK')
