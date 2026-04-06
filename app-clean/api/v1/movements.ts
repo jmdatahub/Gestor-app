@@ -179,12 +179,15 @@ function validateMovement(m: any, index: number): ValidationError[] {
   return errors
 }
 
-function prepareMovement(m: MovementInput, userId: string, tokenOrgId: string | null) {
+function prepareMovement(m: MovementInput, userId: string, tokenOrgId: string | null, tokenScopes: string[]) {
+  // If token is scoped, force its org. If token is personal (null), force null (personal space).
+  // EXCEPT if the token has the 'global:access' scope, then we allow it to write to whatever org the payload specified.
+  const isGlobal = tokenScopes.includes('global:access')
+  const finalOrgId = isGlobal ? (m.organization_id || null) : tokenOrgId
+
   return {
     user_id: userId,
-    // If token is scoped, force its org. If token is personal (null), force null (personal space).
-    // This prevents a personal token from writing to an organization.
-    organization_id: tokenOrgId,
+    organization_id: finalOrgId,
     account_id: m.account_id,
     kind: m.kind,
     amount: Number(m.amount),
@@ -264,11 +267,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           category:categories(id, name, color),
           account:accounts(id, name, type)
         `, { count: 'exact' })
-        
-      // Override workspace if token is scoped
-      if (organizationId) {
-        query = query.eq('organization_id', organizationId)
-      } else {
+      const isGlobal = scopes.includes('global:access')
+      
+      // Filter workspace constraint
+      if (isGlobal) {
+        // Global token allows querying ANY organization requested by the client (if they own it)
         query = query.eq('user_id', userId)
         if (organization_id) {
           if (organization_id === 'personal') {
@@ -277,6 +280,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             query = query.eq('organization_id', organization_id)
           }
         }
+      } else if (organizationId) {
+        // Scoped to a specific organization
+        query = query.eq('organization_id', organizationId)
+      } else {
+        // Scoped to personal space ONLY
+        query = query.eq('user_id', userId).is('organization_id', null)
       }
       
       // Complete the query chain
@@ -356,7 +365,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Prepare data
-      const prepared = movements.map(m => prepareMovement(m, userId, organizationId))
+      const prepared = movements.map(m => prepareMovement(m, userId, organizationId, scopes))
 
       // Insert movements
       const { data, error } = await supabase

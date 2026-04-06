@@ -131,10 +131,16 @@ export function ApiTokensSettings() {
     if (!user) return
     
     try {
+      const finalOrgId = selectedOrgId === 'global' ? null : (selectedOrgId || null)
+      const finalScopes = Array.from(selectedScopes)
+      if (selectedOrgId === 'global') {
+        finalScopes.push('global:access' as ApiScope) // Add global tag
+      }
+      
       const { token, record } = await createApiToken(user.id, {
         name: newTokenName.trim(),
-        organization_id: selectedOrgId || null,
-        scopes: Array.from(selectedScopes)
+        organization_id: finalOrgId,
+        scopes: finalScopes
       })
       
       setTokens(prev => [record, ...prev])
@@ -277,6 +283,7 @@ export function ApiTokensSettings() {
                     }}
                   >
                     <option value="" style={{ background: '#1a1a2e', color: '#fff' }}>Datos Locales (Solo mis datos personales)</option>
+                    <option value="global" style={{ background: '#2c1e16', color: '#f97316', fontWeight: 'bold' }}>🗝️ Acceso Maestro (Todos los Workspaces)</option>
                     <optgroup label="Mis Workspaces" style={{ background: '#131320', color: '#a0a0b0' }}>
                       {workspaces.map(w => (
                         <option key={w.org_id} value={w.org_id} style={{ background: '#1a1a2e', color: '#fff' }}>{w.organization.name}</option>
