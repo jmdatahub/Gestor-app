@@ -78,11 +78,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Asegurar respuesta rápida a TG para apagar el "loading" del botón
       await answerCallbackQuery(callbackId)
 
-      // Get user linked
+      // Get user linked — buscamos por texto para evitar problemas de tipo text[] vs jsonb
       const { data: linkedTokens } = await supabase
         .from('api_tokens')
         .select('user_id, organization_id')
-        .filter('scopes', 'cs', JSON.stringify([`tg_chat:${chatId}`]))
+        .filter('scopes::text', 'ilike', `%tg_chat:${chatId}%`)
         .limit(1)
       if (!linkedTokens || linkedTokens.length === 0) return res.status(200).send('OK')
 
@@ -172,11 +172,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // SI ES UN TEXTO NORMAL, ES UN GASTO
-    // Recuperar el token atado a este chat ID mirando los scopes!
+    // Recuperar el token atado a este chat ID — buscamos por texto para evitar problemas de tipo
     const { data: linkedTokens } = await supabase
       .from('api_tokens')
       .select('user_id, organization_id')
-      .filter('scopes', 'cs', JSON.stringify([`tg_chat:${chatId}`]))
+      .filter('scopes::text', 'ilike', `%tg_chat:${chatId}%`)
       .limit(1)
 
     if (!linkedTokens || linkedTokens.length === 0) {
