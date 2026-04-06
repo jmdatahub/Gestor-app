@@ -133,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Buscar una cuenta y categoría por defecto para asignarle
     // (Buscamos la primera cuenta normal y la primera de gastos)
-    const { data: accounts } = await supabase.from('accounts').select('id').eq('user_id', userId).limit(1)
+    const { data: accounts } = await supabase.from('accounts').select('id, organization_id').eq('user_id', userId).limit(1)
     const { data: categories } = await supabase.from('categories').select('id').eq('user_id', userId).eq('type', 'expense').limit(1)
 
     if (!accounts || accounts.length === 0) {
@@ -146,6 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .insert({
         user_id: userId,
         account_id: accounts[0].id,
+        organization_id: accounts[0].organization_id,
         category_id: categories && categories.length > 0 ? categories[0].id : null,
         kind: 'expense',
         amount: amount,
