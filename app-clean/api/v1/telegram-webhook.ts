@@ -36,8 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).send('Bot is active')
   }
 
-  // Telegram expects 200 OK immediately, otherwise it retries
-  res.status(200).send('OK')
+  // Do not send 200 OK prematurely in Vercel Serverless
+  // Wait for processing to finish before responding
 
   try {
     const { message } = req.body
@@ -50,12 +50,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (text.startsWith('/link')) {
       const parts = text.split(' ')
       if (parts.length < 2) {
-        return sendMessage(chatId, '❌ Debes incluir tu token API. Ejemplo: /link sk_live_ABC123')
+        await sendMessage(chatId, '❌ Debes incluir tu token API. Ejemplo: /link sk_live_ABC123')
+        return res.status(200).send('OK')
       }
       
       const rawToken = parts[1]
       if (!rawToken.startsWith('sk_live_')) {
-        return sendMessage(chatId, '❌ Formato de token inválido. Debe empezar por sk_live_')
+        await sendMessage(chatId, '❌ Formato de token inválido. Debe empezar por sk_live_')
+        return res.status(200).send('OK')
       }
 
       // Buscar el token en base de datos
@@ -67,11 +69,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single()
 
       if (tokenError || !tokenData) {
-        return sendMessage(chatId, '❌ Token no encontrado o expirado. Crea uno en los Ajustes de la App de Gestor.')
+        await sendMessage(chatId, '❌ Token no encontrado o expirado. Crea uno en los Ajustes de la App de Gestor.')
+        return res.status(200).send('OK')
       }
 
       if (!tokenData.scopes.includes('movements:write')) {
-         return sendMessage(chatId, '❌ Este token no tiene permiso para crear gastos (movements:write). Crea uno con más permisos.')
+         await sendMessage(chatId, '❌ Este token no tiene permiso para crear gastos (movements:write). Crea uno con más permisos.')
+         return res.status(200).send('OK')
       }
 
       // Actualizar el perfil del usuario para asociar su Telegram a su User ID
@@ -82,15 +86,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (updateError) {
         console.error('Error linking ID', updateError)
-        return sendMessage(chatId, '❌ Ocurrió un error al vincular la cuenta a nivel de base de datos.')
+        await sendMessage(chatId, '❌ Ocurrió un error al vincular la cuenta a nivel de base de datos.')
+        return res.status(200).send('OK')
       }
 
-      return sendMessage(chatId, '✅ ¡Cuenta vinculada con éxito! Ya puedes enviarme tus gastos con formato: "15.50 Cena con amigos"')
+      await sendMessage(chatId, '✅ ¡Cuenta vinculada con éxito! Ya puedes enviarme tus gastos con formato: "15.50 Cena con amigos"')
+      return res.status(200).send('OK')
     }
 
     // Si es un comando genérico como /start
     if (text === '/start') {
-      return sendMessage(chatId, '👋 ¡Hola! Soy el Gestor Bot.\nPara empezar, entra en tu App > Ajustes > API Tokens, y envíame tu clave usando el comando:\n\n/link tú_sk_live_xxxxxxxxx')
+      await sendMessage(chatId, '👋 ¡Hola! Soy el Gestor Bot.\nPara empezar, entra en tu App > Ajustes > API Tokens, y envíame tu clave usando el comando:\n\n/link tú_sk_live_xxxxxxxxx')
+      return res.status(200).send('OK')
     }
 
     // SI ES UN TEXTO NORMAL, ES UN GASTO
@@ -102,7 +109,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single()
 
     if (!profile) {
-      return sendMessage(chatId, '⚠️ Tu chat no está vinculado. Usa el comando /link <TU_TOKEN> primero.')
+      await sendMessage(chatId, '⚠️ Tu chat no está vinculado. Usa el comando /link <TU_TOKEN> primero.')
+      return res.status(200).send('OK')
     }
     const userId = profile.id
 
@@ -111,7 +119,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const amountMatch = text.match(/(?:^|\s)(\d+(?:[.,]\d{1,2})?)(?:€|eur|euros)?(?:\s|$)/i)
     
     if (!amountMatch) {
-      return sendMessage(chatId, '⚠️ No he encontrado un precio claro en tu mensaje. Usa números como 15 o 20.50')
+      await sendMessage(chatId, '⚠️ No he encontrado un precio claro en tu mensaje. Usa números como 15 o 20.50')
+      return res.status(200).send('OK')
     }
 
     const amountStr = amountMatch[1].replace(',', '.')
@@ -127,7 +136,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: categories } = await supabase.from('categories').select('id').eq('user_id', userId).eq('type', 'expense').limit(1)
 
     if (!accounts || accounts.length === 0) {
-      return sendMessage(chatId, '⚠️ Necesitas tener al menos una Cuenta bancaria creada en la app.')
+      await sendMessage(chatId, '⚠️ Necesitas tener al menos una Cuenta bancaria creada en la app.')
+      return res.status(200).send('OK')
     }
 
     const { error: insertError } = await supabase
@@ -144,10 +154,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (insertError) {
       console.error(insertError)
-      return sendMessage(chatId, '🔥 Falló al guardar el gasto en la BBDD: ' + insertError.message)
+      await sendMessage(chatId, '🔥 Falló al guardar el gasto en la BBDD: ' + insertError.message)
+      return res.status(200).send('OK')
     }
 
-    return sendMessage(chatId, `🚀 Gasto guardado con éxito:\n\n➖ ${amount}€ \n📝 ${description}`)
+    await sendMessage(chatId, `🚀 Gasto guardado con éxito:\n\n➖ ${amount}€ \n📝 ${description}`)
+    return res.status(200).send('OK')
 
   } catch (error) {
     console.error('Unhandled webhook error:', error)
