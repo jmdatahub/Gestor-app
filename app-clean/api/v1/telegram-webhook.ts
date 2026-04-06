@@ -364,9 +364,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .limit(1)
 
       if (recentMov && recentMov.length > 0) {
-        // Podríamos comprobar si el created_at es reciente, pero siendo Telegram basta con el último.
-        const prevDesc = recentMov[0].description ? recentMov[0].description.replace(/^📱 \[Bot\]: /, '') : ''
-        const newDesc = prevDesc ? `${prevDesc} - ${text}` : text
+        // Si la descripción es solo el emoji placeholder, la reemplazamos entera por la nota nueva.
+        const currentDesc = recentMov[0].description || ''
+        const isPlaceholder = currentDesc === '📱' || currentDesc.includes('Gasto rápido')
+        const newDesc = isPlaceholder ? text : `${currentDesc} - ${text}`
         
         await supabase.from('movements').update({ description: newDesc }).eq('id', recentMov[0].id)
         await sendMessage(chatId, `📝 ¡Nota guardada!`)
@@ -384,7 +385,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // La descripción será el resto del texto (quitamos el número y el signo)
     let description = text.replace(amountMatch[0], ' ').replace(/^[+-]/, '').trim()
-    if (!description) description = kind === 'income' ? 'Ingreso rápido (Telegram)' : 'Gasto rápido (Telegram)'
+    if (!description) description = '📱'
 
     // Buscar una cuenta que pertenezca ESPECÍFICAMENTE al workspace elegido (targetOrgId)
     let accountQuery = supabase.from('accounts').select('id, organization_id').eq('user_id', userId)
@@ -413,7 +414,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         category_id: categories && categories.length > 0 ? categories[0].id : null,
         kind: kind,
         amount: amount,
-        description: `📱 [Bot]: ${description}`,
+        description: description,
         date: new Date().toISOString().split('T')[0] // Hoy
       })
       .select('id')
