@@ -92,49 +92,50 @@ async function editMessageText(chatId: string | number, messageId: number, text:
 
 // Crea el teclado paginado de categorías
 async function buildCategoriesKeyboard(userId: string, targetOrgId: string | null, kind: 'expense' | 'income', movPrefix: string, page: number = 0) {
-  const limit = 4;
-  const offset = page * limit;
-  // Get categories (fetch one extra to know if there's a next page)
-  let catQuery = supabase.from('categories').select('id, name').eq('user_id', userId).eq('type', kind)
-  if (targetOrgId === null) {
-    catQuery = catQuery.is('organization_id', null)
-  } else {
-    catQuery = catQuery.eq('organization_id', targetOrgId)
-  }
-  const { data: cats } = await catQuery.range(offset, offset + limit) // Fetch 5 items if limit is 4
-  
+  const PAGE_SIZE = 6 // 6 categorías por página, 2 por fila = 3 filas
+
+  // Fetcheamos todas las categorías del usuario del tipo correcto
+  // NO filtramos por org_id para no perder categorías si hay mismatch
+  const { data: allCats } = await supabase
+    .from('categories')
+    .select('id, name')
+    .eq('user_id', userId)
+    .eq('type', kind)
+    .order('name', { ascending: true })
+
+  const cats = allCats ?? []
+  const total = cats.length
+  const offset = page * PAGE_SIZE
+  const pageCats = cats.slice(offset, offset + PAGE_SIZE)
+  const hasNext = offset + PAGE_SIZE < total
+  const hasPrev = page > 0
+  const kindShort = kind === 'expense' ? 'e' : 'i'
   const keyboard: any[][] = []
   let row: any[] = []
-  
-  const hasNext = cats && cats.length > limit
-  const displayCats = cats ? cats.slice(0, limit) : []
 
-  displayCats.forEach((cat) => {
-    row.push({ text: `📁 ${cat.name}`, callback_data: `c:${cat.id.substring(0,8)}:${movPrefix}` })
-    if (row.length === 2) {
-      keyboard.push(row)
-      row = []
-    }
+  // Botones de categorías (2 por fila)
+  pageCats.forEach((cat) => {
+    row.push({ text: `📌 ${cat.name}`, callback_data: `c:${cat.id.substring(0,8)}:${movPrefix}` })
+    if (row.length === 2) { keyboard.push(row); row = [] }
   })
   if (row.length > 0) keyboard.push(row)
-  
-  // Paginación
-  const navRow = []
-  const kindShort = kind === 'expense' ? 'e' : 'i'
-  if (page > 0) {
-    navRow.push({ text: '⬅️ Ant', callback_data: `p:${page - 1}:${kindShort}:${movPrefix}` })
-  }
-  if (hasNext) {
-    navRow.push({ text: 'Sig ➡️', callback_data: `p:${page + 1}:${kindShort}:${movPrefix}` })
-  }
-  if (navRow.length > 0) keyboard.push(navRow)
 
-  // Botón para cambiar tipo
-  if (kind === 'expense') {
-    keyboard.push([{ text: '➕ Cambiar a Ingreso', callback_data: `inc:${movPrefix}` }])
-  } else {
-    keyboard.push([{ text: '➖ Cambiar a Gasto', callback_data: `exp:${movPrefix}` }])
+  // Fila de navegación (solo si hay más de una página)
+  if (hasPrev || hasNext) {
+    const navRow: any[] = []
+    if (hasPrev) navRow.push({ text: `⬅️ Anteriores`, callback_data: `p:${page - 1}:${kindShort}:${movPrefix}` })
+    navRow.push({ text: `📄 ${page + 1}/${Math.ceil(total / PAGE_SIZE)}`, callback_data: `noop` })
+    if (hasNext) navRow.push({ text: `Siguientes ➡️`, callback_data: `p:${page + 1}:${kindShort}:${movPrefix}` })
+    keyboard.push(navRow)
   }
+
+  // Botón de cambio de tipo (siempre al final, separado)
+  if (kind === 'expense') {
+    keyboard.push([{ text: '💰 Convertir a Ingreso', callback_data: `inc:${movPrefix}` }])
+  } else {
+    keyboard.push([{ text: '💸 Convertir a Gasto', callback_data: `exp:${movPrefix}` }])
+  }
+
   return keyboard
 }
 
