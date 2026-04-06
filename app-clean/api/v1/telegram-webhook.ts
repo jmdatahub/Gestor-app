@@ -62,6 +62,82 @@ async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   }
 }
 
+// Edita el teclado interactivo/texto de un mensaje existente
+async function editMessageText(chatId: string | number, messageId: number, text: string, reply_markup?: any) {
+  try {
+    const body: any = {
+      chat_id: chatId,
+      message_id: messageId,
+      text: text
+    }
+    if (text.includes('<b>') || text.includes('<i>')) {
+      body.parse_mode = 'HTML'
+    }
+    if (reply_markup) {
+      body.reply_markup = reply_markup
+    }
+    const resp = await fetch(`https://api.telegram.org/bot${telegramToken}/editMessageText`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    if (!resp.ok) {
+      const err = await resp.text()
+      console.error('Telegram editMessageText error:', err)
+    }
+  } catch (error) {
+    console.error('Error editing message:', error)
+  }
+}
+
+// Crea el teclado paginado de categorías
+async function buildCategoriesKeyboard(userId: string, targetOrgId: string | null, kind: 'expense' | 'income', movPrefix: string, page: number = 0) {
+  const limit = 4;
+  const offset = page * limit;
+  // Get categories (fetch one extra to know if there's a next page)
+  let catQuery = supabase.from('categories').select('id, name').eq('user_id', userId).eq('type', kind)
+  if (targetOrgId === null) {
+    catQuery = catQuery.is('organization_id', null)
+  } else {
+    catQuery = catQuery.eq('organization_id', targetOrgId)
+  }
+  const { data: cats } = await catQuery.range(offset, offset + limit) // Fetch 5 items if limit is 4
+  
+  const keyboard: any[][] = []
+  let row: any[] = []
+  
+  const hasNext = cats && cats.length > limit
+  const displayCats = cats ? cats.slice(0, limit) : []
+
+  displayCats.forEach((cat) => {
+    row.push({ text: `📁 ${cat.name}`, callback_data: `c:${cat.id.substring(0,8)}:${movPrefix}` })
+    if (row.length === 2) {
+      keyboard.push(row)
+      row = []
+    }
+  })
+  if (row.length > 0) keyboard.push(row)
+  
+  // Paginación
+  const navRow = []
+  const kindShort = kind === 'expense' ? 'e' : 'i'
+  if (page > 0) {
+    navRow.push({ text: '⬅️ Ant', callback_data: `p:${page - 1}:${kindShort}:${movPrefix}` })
+  }
+  if (hasNext) {
+    navRow.push({ text: 'Sig ➡️', callback_data: `p:${page + 1}:${kindShort}:${movPrefix}` })
+  }
+  if (navRow.length > 0) keyboard.push(navRow)
+
+  // Botón para cambiar tipo
+  if (kind === 'expense') {
+    keyboard.push([{ text: '➕ Cambiar a Ingreso', callback_data: `inc:${movPrefix}` }])
+  } else {
+    keyboard.push([{ text: '➖ Cambiar a Gasto', callback_data: `exp:${movPrefix}` }])
+  }
+  return keyboard
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only accept POST
   if (req.method !== 'POST') return res.status(200).send('OK')
@@ -78,36 +154,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Asegurar respuesta rápida a TG para apagar el "loading" del botón
       await answerCallbackQuery(callbackId)
 
-      // Get user linked — buscamos por texto para evitar problemas de tipo text[] vs jsonb
-      const { data: linkedTokens } = await supabase
+      const { data: targetTokens } = await supabase
         .from('api_tokens')
         .select('user_id, organization_id')
         .filter('scopes::text', 'ilike', `%tg_chat:${chatId}%`)
         .limit(1)
-      if (!linkedTokens || linkedTokens.length === 0) return res.status(200).send('OK')
+      if (!targetTokens || targetTokens.length === 0) return res.status(200).send('OK')
 
       const parts = data.split(':')
       if (parts[0] === 'c' && parts.length === 3) {
         // Asignar Categoría
         const catPrefix = parts[1]
         const movPrefix = parts[2]
-        
         // Buscar el id exacto
         const { data: cats } = await supabase.from('categories').select('id, name').ilike('id', `${catPrefix}%`).limit(1)
-        const { data: movs } = await supabase.from('movements').select('id').ilike('id', `${movPrefix}%`).limit(1)
+        const { data: movs } = await supabase.from('movements').select('id, amount, kind, description').ilike('id', `${movPrefix}%`).limit(1)
         
         if (cats?.length && movs?.length) {
           await supabase.from('movements').update({ category_id: cats[0].id }).eq('id', movs[0].id)
-          await sendMessage(chatId, `✔️ ¡Categorizado como <b>${cats[0].name}</b>!`)
+          const m = movs[0]
+          const safeDesc = escapeHtml(m.description || '')
+          const typeLabel = m.kind === 'income' ? 'Ingreso' : 'Gasto'
+          const msgTxt = `✅ <b>${typeLabel} de ${m.amount}€ categorizado en ${cats[0].name}.</b>\n📝 ${safeDesc}\n\n<i>💬 Si quieres cambiar esta nota, escribe el nuevo texto ahora.</i>`
+          await editMessageText(chatId, body.callback_query.message.message_id, msgTxt)
         }
-      } else if (parts[0] === 'inc' && parts.length === 2) {
-        // Convertir a Ingreso
+      } else if ((parts[0] === 'inc' || parts[0] === 'exp') && parts.length === 2) {
+        // Convertir a Ingreso/Gasto
+        const newKind = parts[0] === 'inc' ? 'income' : 'expense'
         const movPrefix = parts[1]
-        const { data: movs } = await supabase.from('movements').select('id').ilike('id', `${movPrefix}%`).limit(1)
+        const { data: movs } = await supabase.from('movements').select('id, amount, description').ilike('id', `${movPrefix}%`).limit(1)
         if (movs?.length) {
-          await supabase.from('movements').update({ kind: 'income', category_id: null }).eq('id', movs[0].id)
-          await sendMessage(chatId, `✔️ ¡Cambiado a <b>Ingreso</b>!`)
+          await supabase.from('movements').update({ kind: newKind, category_id: null }).eq('id', movs[0].id)
+          
+          // Regen keyboard
+          const kb = await buildCategoriesKeyboard(targetTokens[0].user_id, targetTokens[0].organization_id, newKind, movPrefix, 0)
+          const m = movs[0]
+          const safeDesc = escapeHtml(m.description || '')
+          const typeLabel = newKind === 'income' ? 'Ingreso' : 'Gasto'
+          const typeSign = newKind === 'income' ? '➕' : '➖'
+          const msgTxt = kb.length > 1
+            ? `🚀 <b>${typeLabel} convertido:</b>\n${typeSign} <b>${m.amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico?</i>`
+            : `🚀 ${typeLabel} convertido:\n${typeSign} ${m.amount}€\n📝 ${safeDesc}`
+            
+          await editMessageText(chatId, body.callback_query.message.message_id, msgTxt, { inline_keyboard: kb })
         }
+      } else if (parts[0] === 'p' && parts.length === 4) {
+        // Paginación: p:<page>:<e|i>:<movPrefix>
+        const page = parseInt(parts[1], 10)
+        const kind = parts[2] === 'e' ? 'expense' : 'income'
+        const movPrefix = parts[3]
+        
+        const kb = await buildCategoriesKeyboard(targetTokens[0].user_id, targetTokens[0].organization_id, kind, movPrefix, page)
+        
+        // Mantener el texto original del mensaje
+        const originalText = body.callback_query.message.text // Telegram gives plain text or html depending
+        await editMessageText(chatId, body.callback_query.message.message_id, originalText, { inline_keyboard: kb })
       }
       return res.status(200).send('OK')
     }
@@ -212,7 +313,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const amountMatch = text.match(/([+-]?)(\d+(?:[.,]\d{1,2})?)(?:€|eur|euros)?(?:\s|$)/i)
     
     if (!amountMatch) {
-      await sendMessage(chatId, '⚠️ No he encontrado un precio claro en tu mensaje.\nEjemplos: "25 mercadona" (gasto) o "+1000 sueldo" (ingreso)')
+      // SI NO TIENE PRECIO -> Asumimos que es una Nota para el último gasto
+      // Buscamos el último movimiento creado en los últimos 15 min
+      const { data: recentMov } = await supabase
+        .from('movements')
+        .select('id, amount, kind, description')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (recentMov && recentMov.length > 0) {
+        // Podríamos comprobar si el created_at es reciente, pero siendo Telegram basta con el último.
+        const prevDesc = recentMov[0].description ? recentMov[0].description.replace(/^📱 \[Bot\]: /, '') : ''
+        const newDesc = prevDesc ? `${prevDesc} - ${text}` : text
+        
+        await supabase.from('movements').update({ description: newDesc }).eq('id', recentMov[0].id)
+        await sendMessage(chatId, `📝 ¡Nota guardada!`)
+      } else {
+        await sendMessage(chatId, '⚠️ No he encontrado un precio claro en tu mensaje.\nEjemplos: "25 mercadona" (gasto) o "+1000 sueldo" (ingreso)')
+      }
       return res.status(200).send('OK')
     }
 
@@ -307,7 +426,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const typeLabel = kind === 'income' ? 'Ingreso' : 'Gasto'
     const typeSign = kind === 'income' ? '➕' : '➖'
     const msgTxt = keyboard.length > 1
-      ? `🚀 <b>${typeLabel} guardado:</b>\n${typeSign} <b>${amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico?</i>`
+      ? `🚀 <b>${typeLabel} guardado:</b>\n${typeSign} <b>${amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico? 👇</i>\n<i>(También puedes escribir texto normal enviarlo para añadir o cambiar la nota)</i>`
       : `🚀 ${typeLabel} guardado:\n${typeSign} ${amount}€\n📝 ${safeDesc}`
     await sendMessage(chatId, msgTxt, keyboard.length > 1 ? { inline_keyboard: keyboard } : undefined)
 
