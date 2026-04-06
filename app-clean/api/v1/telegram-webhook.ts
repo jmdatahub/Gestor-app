@@ -392,34 +392,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const movPrefix = createdMovement.id.substring(0, 8)
 
-    // Buscar las top categorías del usuario (del tipo que corresponde)
-    let catQuery = supabase.from('categories').select('id, name').eq('user_id', userId).eq('type', kind)
-    if (targetOrgId === null) {
-      catQuery = catQuery.is('organization_id', null)
-    } else {
-      catQuery = catQuery.eq('organization_id', targetOrgId)
-    }
-    const { data: topCategories } = await catQuery.limit(8)
-
-    // Armar el teclado interactivo
-    const keyboard: any[][] = []
-    let row: any[] = []
-    
-    topCategories?.forEach((cat) => {
-      row.push({ text: `📁 ${cat.name}`, callback_data: `c:${cat.id.substring(0,8)}:${movPrefix}` })
-      if (row.length === 2) { // 2 botones por fila
-        keyboard.push(row)
-        row = []
-      }
-    })
-    if (row.length > 0) keyboard.push(row)
-    
-    // Botón para cambiar el tipo — solo mostramos si hay categorías
-    if (kind === 'expense') {
-      keyboard.push([{ text: '➕ Cambiar a Ingreso', callback_data: `inc:${movPrefix}` }])
-    } else {
-      keyboard.push([{ text: '➖ Cambiar a Gasto', callback_data: `exp:${movPrefix}` }])
-    }
+    // Armar el teclado interactivo usando la nueva función con paginación (página 0 inicial)
+    const keyboard = await buildCategoriesKeyboard(userId, targetOrgId, kind, movPrefix, 0)
 
     // Escapamos la descripción del usuario para evitar que rompa el HTML
     const safeDesc = escapeHtml(description)
