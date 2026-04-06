@@ -79,7 +79,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await answerCallbackQuery(callbackId)
 
       // Get user linked
-      const { data: linkedTokens } = await supabase.from('api_tokens').select('user_id, organization_id').contains('scopes', [`tg_chat:${chatId}`]).limit(1)
+      const { data: linkedTokens } = await supabase
+        .from('api_tokens')
+        .select('user_id, organization_id')
+        .filter('scopes', 'cs', JSON.stringify([`tg_chat:${chatId}`]))
+        .limit(1)
       if (!linkedTokens || linkedTokens.length === 0) return res.status(200).send('OK')
 
       const parts = data.split(':')
@@ -172,7 +176,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: linkedTokens } = await supabase
       .from('api_tokens')
       .select('user_id, organization_id')
-      .contains('scopes', [`tg_chat:${chatId}`])
+      .filter('scopes', 'cs', JSON.stringify([`tg_chat:${chatId}`]))
       .limit(1)
 
     if (!linkedTokens || linkedTokens.length === 0) {
