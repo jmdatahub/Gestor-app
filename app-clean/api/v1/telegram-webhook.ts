@@ -152,14 +152,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          return res.status(200).send('OK')
       }
 
-      // Añadimos el chat ID a la lista de scopes del token para atarlo a este token específico
-      // Así preservamos el organization_id del token al buscarlo más tarde!
+      // Guardamos el chat ID en el perfil del usuario (lookup simple y seguro)
+      const chatIdStr = chatId.toString()
+      await supabase
+        .from('profiles')
+        .update({ telegram_chat_id: chatIdStr })
+        .eq('id', tokenData.user_id)
+
+      // TAMBIÉN guardamos en scopes para poder recuperar el org_id en el lookup posterior
       const newScopes = [...(tokenData.scopes || [])]
-      const chatScopeTag = `tg_chat:${chatId}`
-      if (!newScopes.includes(chatScopeTag)) {
-        newScopes.push(chatScopeTag)
-        await supabase.from('api_tokens').update({ scopes: newScopes }).eq('token_hash', tokenHash)
-      }
+      // Limpiamos cualquier tg_chat anterior de este token
+      const cleanedScopes = newScopes.filter(s => !s.startsWith('tg_chat:'))
+      cleanedScopes.push(`tg_chat:${chatIdStr}`)
+      const { error: updateErr } = await supabase
+        .from('api_tokens')
+        .update({ scopes: cleanedScopes })
+        .eq('token_hash', tokenHash)
+      if (updateErr) console.error('Error updating token scopes:', updateErr)
 
       await sendMessage(chatId, '✅ ¡Cuenta vinculada con éxito! Ya puedes enviarme tus gastos con formato: "15.50 Cena con amigos"')
       return res.status(200).send('OK')
@@ -172,19 +181,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // SI ES UN TEXTO NORMAL, ES UN GASTO
-    // Recuperar el token atado a este chat ID — buscamos por texto para evitar problemas de tipo
-    const { data: linkedTokens } = await supabase
-      .from('api_tokens')
-      .select('user_id, organization_id')
-      .filter('scopes::text', 'ilike', `%tg_chat:${chatId}%`)
-      .limit(1)
+    // PASO 1: Buscar el usuario por su telegram_chat_id en profiles (lookup simple y seguro)
+    const chatIdStr = chatId.toString()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('telegram_chat_id', chatIdStr)
+      .single()
 
-    if (!linkedTokens || linkedTokens.length === 0) {
+    if (!profile) {
       await sendMessage(chatId, '⚠️ Tu chat no está vinculado. Usa el comando /link <TU_TOKEN> primero.')
       return res.status(200).send('OK')
     }
-    const userId = linkedTokens[0].user_id
-    const targetOrgId = linkedTokens[0].organization_id
+    const userId = profile.id
+
+    // PASO 2: Buscar todos los tokens del usuario y encontrar el que tiene este chat en scopes (filtrado en JS)
+    const { data: userTokens } = await supabase
+      .from('api_tokens')
+      .select('organization_id, scopes')
+      .eq('user_id', userId)
+
+    const linkedToken = userTokens?.find(t =>
+      Array.isArray(t.scopes) && t.scopes.some((s: string) => s === `tg_chat:${chatIdStr}`)
+    )
+    // Si no encontramos el token específico, usamos el primero disponible (fallback)
+    const targetOrgId = linkedToken?.organization_id ?? null
 
     // Lógica para extraer la cantidad (Ej: "Mercadona 45", "15.40 cervezas", "Gasto de 10 euros")
     // Esta RegEx busca el primer número positivo (opcional decimales cortos)
