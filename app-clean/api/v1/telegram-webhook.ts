@@ -100,7 +100,7 @@ async function buildCategoriesKeyboard(userId: string, targetOrgId: string | nul
     .from('categories')
     .select('id, name')
     .eq('user_id', userId)
-    .eq('type', kind)
+    .eq('kind', kind)          // ← la columna se llama 'kind', no 'type'
     .order('name', { ascending: true })
 
   const cats = allCats ?? []
@@ -355,13 +355,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const { data: accountsData } = await accountQuery.limit(1)
 
-    // Buscar categoría por defecto
-    let categoryQuery = supabase.from('categories').select('id').eq('user_id', userId).eq('type', 'expense')
-    if (targetOrgId === null) {
-      categoryQuery = categoryQuery.is('organization_id', null)
-    } else {
-      categoryQuery = categoryQuery.eq('organization_id', targetOrgId)
-    }
+    let categoryQuery = supabase.from('categories').select('id').eq('user_id', userId).eq('kind', kind)
     const { data: categories } = await categoryQuery.limit(1)
 
     if (!accountsData || accountsData.length === 0) {
