@@ -155,12 +155,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Asegurar respuesta rápida a TG para apagar el "loading" del botón
       await answerCallbackQuery(callbackId)
 
-      const { data: targetTokens } = await supabase
-        .from('api_tokens')
-        .select('user_id, organization_id')
-        .filter('scopes::text', 'ilike', `%tg_chat:${chatId}%`)
-        .limit(1)
-      if (!targetTokens || targetTokens.length === 0) return res.status(200).send('OK')
+      const chatIdStr = chatId.toString()
+      const { data: profile } = await supabase.from('profiles').select('id').eq('telegram_chat_id', chatIdStr).single()
+      if (!profile) return res.status(200).send('OK')
+      const userId = profile.id
+      
+      const { data: userTokens } = await supabase.from('api_tokens').select('organization_id, scopes').eq('user_id', userId)
+      const linkedToken = userTokens?.find(t => Array.isArray(t.scopes) && t.scopes.some((s: string) => s === `tg_chat:${chatIdStr}`))
+      const targetOrgId = linkedToken?.organization_id ?? null
 
       const parts = data.split(':')
       if (parts[0] === 'c' && parts.length === 3) {
@@ -188,7 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await supabase.from('movements').update({ kind: newKind, category_id: null }).eq('id', movs[0].id)
           
           // Regen keyboard
-          const kb = await buildCategoriesKeyboard(targetTokens[0].user_id, targetTokens[0].organization_id, newKind, movPrefix, 0)
+          const kb = await buildCategoriesKeyboard(userId, targetOrgId, newKind, movPrefix, 0)
           const m = movs[0]
           const safeDesc = escapeHtml(m.description || '')
           const typeLabel = newKind === 'income' ? 'Ingreso' : 'Gasto'
@@ -205,7 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const kind = parts[2] === 'e' ? 'expense' : 'income'
         const movPrefix = parts[3]
         
-        const kb = await buildCategoriesKeyboard(targetTokens[0].user_id, targetTokens[0].organization_id, kind, movPrefix, page)
+        const kb = await buildCategoriesKeyboard(userId, targetOrgId, kind, movPrefix, page)
         
         // Mantener el texto original del mensaje
         const originalText = body.callback_query.message.text // Telegram gives plain text or html depending
