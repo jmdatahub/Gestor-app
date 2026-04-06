@@ -282,6 +282,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send('OK')
     }
 
+    // COMANDO OCULTO: /magia para auto-crear categorías pedidas por el usuario
+    if (text === '/magia') {
+      const chatIdStr = chatId.toString()
+      const { data: profile } = await supabase.from('profiles').select('id').eq('telegram_chat_id', chatIdStr).single()
+      if (!profile) {
+        await sendMessage(chatId, '⚠️ Vincula tu cuenta primero con /link')
+        return res.status(200).send('OK')
+      }
+      
+      const userId = profile.id
+      // Limpiamos sus categorías actuales (Opcional, pero para dejarlo limpio)
+      await supabase.from('categories').delete().eq('user_id', userId)
+
+      // Insertamos las solicitadas
+      const newCats = [
+        // Gastos
+        { user_id: userId, name: 'Ocio', kind: 'expense', color: '#f43f5e' },
+        { user_id: userId, name: 'Transporte', kind: 'expense', color: '#eab308' },
+        { user_id: userId, name: 'Comida', kind: 'expense', color: '#22c55e' },
+        { user_id: userId, name: 'Otros', kind: 'expense', color: '#64748b' },
+        // Ingresos
+        { user_id: userId, name: 'Regalo', kind: 'income', color: '#ec4899' },
+        { user_id: userId, name: 'Salario', kind: 'income', color: '#14b8a6' },
+        { user_id: userId, name: 'Soul IA', kind: 'income', color: '#8b5cf6' },
+        { user_id: userId, name: 'Just Jorge', kind: 'income', color: '#3b82f6' },
+        { user_id: userId, name: 'Otros Ingresos', kind: 'income', color: '#94a3b8' }
+      ]
+      const { error } = await supabase.from('categories').insert(newCats)
+      if (error) {
+        await sendMessage(chatId, 'Error inyectando categorías: ' + error.message)
+      } else {
+        await sendMessage(chatId, '✨ ¡Magia aplicada! He reseteado tus categorías y creado exactamente la lista que me has pedido.\n\nPrueba a enviarme un número ahora.')
+      }
+      return res.status(200).send('OK')
+    }
+
     // SI ES UN TEXTO NORMAL, ES UN GASTO
     // PASO 1: Buscar el usuario por su telegram_chat_id en profiles (lookup simple y seguro)
     const chatIdStr = chatId.toString()
