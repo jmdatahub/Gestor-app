@@ -48,13 +48,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Comando especial para vincular cuenta: /link <sk_live_...>
     if (text.startsWith('/link')) {
-      const parts = text.split(' ')
+      // Limpiamos los < > por si lo metió literal '<sk_live...>' y cortamos por cualquier espacio o intro
+      const parts = text.replace(/[<>]/g, '').trim().split(/\s+/)
       if (parts.length < 2) {
         await sendMessage(chatId, '❌ Debes incluir tu token API. Ejemplo: /link sk_live_ABC123')
         return res.status(200).send('OK')
       }
       
-      const rawToken = parts[1]
+      const rawToken = parts[1].trim()
       if (!rawToken.startsWith('sk_live_')) {
         await sendMessage(chatId, '❌ Formato de token inválido. Debe empezar por sk_live_')
         return res.status(200).send('OK')
