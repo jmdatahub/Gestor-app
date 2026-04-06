@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { fetchAccountsSummary, type AccountWithBalance } from '../services/accountService'
 import { getAccountBalancesSummary, getFinancialDistribution, type FinancialDistribution } from '../services/summaryService'
-import { fetchMonthlyMovements, calculateMonthlySummary } from '../services/movementService'
+import { fetchMonthlyMovements, calculateMonthlySummary, getPendingClassificationCount } from '../services/movementService'
 
 import { warmup as warmupCache } from '../services/catalogCache'
 import { generatePendingMovementsForUser, getPendingMovementsCount } from '../services/recurringService'
@@ -42,6 +42,7 @@ export default function Dashboard() {
   const [financialOverview, setFinancialOverview] = useState<FinancialDistribution | null>(null)
   const [topAccounts, setTopAccounts] = useState<AccountWithBalance[]>([])
   const [pendingCount, setPendingCount] = useState(0)
+  const [uncategorizedCount, setUncategorizedCount] = useState(0)
 
   // Initial load when workspace changes
   useEffect(() => {
@@ -100,6 +101,9 @@ export default function Dashboard() {
         // Update pending count
         getPendingMovementsCount(user.id).then(count => setPendingCount(count))
       }).catch(err => console.error('Error generating recurring:', err))
+
+      // Update uncategorized count
+      getPendingClassificationCount(user.id, workspaceId).then(count => setUncategorizedCount(count)).catch(err => console.error(err))
 
       if (accounts) {
         setAccountsSummary(accounts)
@@ -272,6 +276,57 @@ export default function Dashboard() {
           >
             <Bell size={16} />
             Revisar
+          </button>
+        </div>
+      )}
+
+      {/* Uncategorized Movements Banner */}
+      {uncategorizedCount > 0 && (
+        <div 
+          style={{
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(248, 113, 113, 0.1) 100%)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '12px',
+            padding: '16px 20px',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Bell size={20} style={{ color: '#ef4444' }} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {uncategorizedCount} {uncategorizedCount === 1 ? 'movimiento sin clasificar' : 'movimientos sin clasificar'}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Faltan por asignar a una categoría específica o están marcados como "Otros".
+              </div>
+            </div>
+          </div>
+          <button 
+            className="btn"
+            style={{
+              backgroundColor: '#ef4444',
+              color: 'white',
+              border: 'none',
+              whiteSpace: 'nowrap'
+            }}
+            onClick={() => navigate('/app/movements')}
+          >
+            Clasificar
           </button>
         </div>
       )}

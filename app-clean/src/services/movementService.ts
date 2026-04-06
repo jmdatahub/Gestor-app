@@ -346,3 +346,29 @@ function getRandomCategoryColor(): string {
   return colors[Math.floor(Math.random() * colors.length)]
 }
 
+// Get count of movements pending classification (category_id is null OR category is "Otros")
+export async function getPendingClassificationCount(userId: string, organizationId?: string | null): Promise<number> {
+  // First, get "Otros" category IDs
+  let catQuery = supabase.from('categories').select('id').ilike('name', 'otros')
+  if (organizationId) catQuery = catQuery.eq('organization_id', organizationId)
+  else catQuery = catQuery.eq('user_id', userId).is('organization_id', null)
+  
+  const { data: otrosCats } = await catQuery
+  const otrosIds = otrosCats?.map(c => c.id) || []
+
+  // Count movements 
+  let query = supabase.from('movements').select('id', { count: 'exact', head: true })
+  
+  if (organizationId) query = query.eq('organization_id', organizationId)
+  else query = query.eq('user_id', userId).is('organization_id', null)
+
+  if (otrosIds.length > 0) {
+    query = query.or(`category_id.is.null,category_id.in.(${otrosIds.join(',')})`)
+  } else {
+    query = query.is('category_id', null)
+  }
+
+  const { count } = await query
+  return count || 0
+}
+
