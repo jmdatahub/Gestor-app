@@ -192,11 +192,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const safeDesc = escapeHtml(m.description || '')
           const typeLabel = newKind === 'income' ? 'Ingreso' : 'Gasto'
           const typeSign = newKind === 'income' ? '➕' : '➖'
-          const msgTxt = kb.length > 1
+          const msgTxt = kb.length > 0
             ? `🚀 <b>${typeLabel} convertido:</b>\n${typeSign} <b>${m.amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico?</i>`
             : `🚀 ${typeLabel} convertido:\n${typeSign} ${m.amount}€\n📝 ${safeDesc}`
             
-          await editMessageText(chatId, body.callback_query.message.message_id, msgTxt, { inline_keyboard: kb })
+          await editMessageText(chatId, body.callback_query.message.message_id, msgTxt, kb.length > 0 ? { inline_keyboard: kb } : undefined)
         }
       } else if (parts[0] === 'p' && parts.length === 4) {
         // Paginación: p:<page>:<e|i>:<movPrefix>
@@ -399,10 +399,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const safeDesc = escapeHtml(description)
     const typeLabel = kind === 'income' ? 'Ingreso' : 'Gasto'
     const typeSign = kind === 'income' ? '➕' : '➖'
-    const msgTxt = keyboard.length > 1
+    const msgTxt = keyboard.length > 0
       ? `🚀 <b>${typeLabel} guardado:</b>\n${typeSign} <b>${amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico? 👇</i>\n<i>(También puedes escribir texto normal enviarlo para añadir o cambiar la nota)</i>`
       : `🚀 ${typeLabel} guardado:\n${typeSign} ${amount}€\n📝 ${safeDesc}`
-    await sendMessage(chatId, msgTxt, keyboard.length > 1 ? { inline_keyboard: keyboard } : undefined)
+    await sendMessage(chatId, msgTxt, keyboard.length > 0 ? { inline_keyboard: keyboard } : undefined)
 
     return res.status(200).send('OK')
 
