@@ -79,16 +79,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          return res.status(200).send('OK')
       }
 
-      // Actualizar el perfil del usuario para asociar su Telegram a su User ID
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ telegram_chat_id: chatId })
-        .eq('id', tokenData.user_id)
-
-      if (updateError) {
-        console.error('Error linking ID', updateError)
-        await sendMessage(chatId, '❌ Ocurrió un error al vincular la cuenta a nivel de base de datos.')
-        return res.status(200).send('OK')
+      // Añadimos el chat ID a la lista de scopes del token para atarlo a este token específico
+      // Así preservamos el organization_id del token al buscarlo más tarde!
+      const newScopes = [...(tokenData.scopes || [])]
+      const chatScopeTag = `tg_chat:${chatId}`
+      if (!newScopes.includes(chatScopeTag)) {
+        newScopes.push(chatScopeTag)
+        await supabase.from('api_tokens').update({ scopes: newScopes }).eq('token_hash', tokenHash)
       }
 
       await sendMessage(chatId, '✅ ¡Cuenta vinculada con éxito! Ya puedes enviarme tus gastos con formato: "15.50 Cena con amigos"')
@@ -102,18 +99,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // SI ES UN TEXTO NORMAL, ES UN GASTO
-    // Recuperar el usuario atado a este chat ID
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('telegram_chat_id', chatId)
-      .single()
+    // Recuperar el token atado a este chat ID mirando los scopes!
+    const { data: linkedTokens } = await supabase
+      .from('api_tokens')
+      .select('user_id, organization_id')
+      .contains('scopes', [`tg_chat:${chatId}`])
+      .limit(1)
 
-    if (!profile) {
+    if (!linkedTokens || linkedTokens.length === 0) {
       await sendMessage(chatId, '⚠️ Tu chat no está vinculado. Usa el comando /link <TU_TOKEN> primero.')
       return res.status(200).send('OK')
     }
-    const userId = profile.id
+    const userId = linkedTokens[0].user_id
+    const targetOrgId = linkedTokens[0].organization_id
 
     // Lógica para extraer la cantidad (Ej: "Mercadona 45", "15.40 cervezas", "Gasto de 10 euros")
     // Esta RegEx busca el primer número positivo (opcional decimales cortos)
@@ -131,13 +129,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let description = text.replace(amountMatch[0], ' ').trim()
     if (!description) description = 'Gasto rápido (Telegram)'
 
-    // Buscar una cuenta y categoría por defecto para asignarle
-    // (Buscamos la primera cuenta normal y la primera de gastos)
-    const { data: accounts } = await supabase.from('accounts').select('id, organization_id').eq('user_id', userId).limit(1)
-    const { data: categories } = await supabase.from('categories').select('id').eq('user_id', userId).eq('type', 'expense').limit(1)
+    // Buscar una cuenta que pertenezca ESPECÍFICAMENTE al workspace elegido (targetOrgId)
+    let accountQuery = supabase.from('accounts').select('id, organization_id').eq('user_id', userId)
+    if (targetOrgId === null) {
+      accountQuery = accountQuery.is('organization_id', null)
+    } else {
+      accountQuery = accountQuery.eq('organization_id', targetOrgId)
+    }
+    const { data: accountsData } = await accountQuery.limit(1)
 
-    if (!accounts || accounts.length === 0) {
-      await sendMessage(chatId, '⚠️ Necesitas tener al menos una Cuenta bancaria creada en la app.')
+    // Buscar categoría por defecto
+    let categoryQuery = supabase.from('categories').select('id').eq('user_id', userId).eq('type', 'expense')
+    if (targetOrgId === null) {
+      categoryQuery = categoryQuery.is('organization_id', null)
+    } else {
+      categoryQuery = categoryQuery.eq('organization_id', targetOrgId)
+    }
+    const { data: categories } = await categoryQuery.limit(1)
+
+    if (!accountsData || accountsData.length === 0) {
+      const wName = targetOrgId ? 'ese Entorno de trabajo' : 'tu Entorno Personal'
+      await sendMessage(chatId, `⚠️ Necesitas tener al menos una Cuenta bancaria creada en ${wName}.`)
       return res.status(200).send('OK')
     }
 
@@ -145,8 +157,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('movements')
       .insert({
         user_id: userId,
-        account_id: accounts[0].id,
-        organization_id: accounts[0].organization_id,
+        account_id: accountsData[0].id,
+        organization_id: targetOrgId,
         category_id: categories && categories.length > 0 ? categories[0].id : null,
         kind: 'expense',
         amount: amount,
