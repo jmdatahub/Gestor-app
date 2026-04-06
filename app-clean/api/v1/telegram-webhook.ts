@@ -16,23 +16,32 @@ async function hashToken(token: string): Promise<string> {
   return hash.digest('hex')
 }
 
+// Escapa caracteres especiales de HTML para no romper parse_mode
+function escapeHtml(str: string) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 // Envía mensaje a través de la API oficial de Telegram
 async function sendMessage(chatId: string | number, text: string, reply_markup?: any) {
   try {
-    const body: any = {
-      chat_id: chatId,
-      text: text,
-      parse_mode: 'HTML' // Optional, permits minor formatting
+    const body: any = { chat_id: chatId, text }
+    // Solo activamos HTML si el mensaje usa etiquetas nuestras (<b>, <i>)
+    if (text.includes('<b>') || text.includes('<i>')) {
+      body.parse_mode = 'HTML'
     }
     if (reply_markup) {
       body.reply_markup = reply_markup
     }
 
-    await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+    const resp = await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     })
+    if (!resp.ok) {
+      const err = await resp.text()
+      console.error('Telegram sendMessage error:', err)
+    }
   } catch (error) {
     console.error('Error sending message to Telegram:', error)
   }
@@ -261,12 +270,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Añadir botón de cambiar a ingreso al final
     keyboard.push([{ text: '➕ Es un Ingreso (No gasto)', callback_data: `inc:${movPrefix}` }])
 
-    const msgTxt = `🚀 <b>Gasto guardado:</b>\n➖ <b>${amount}€</b>\n📝 ${description}\n\n<i>¿En qué categoría lo clasifico?</i>`
-    await sendMessage(chatId, msgTxt, { inline_keyboard: keyboard })
+    // Escapamos la descripción del usuario para evitar que rompa el HTML
+    const safeDesc = escapeHtml(description)
+    const msgTxt = keyboard.length > 1
+      ? `🚀 <b>Gasto guardado:</b>\n➖ <b>${amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico?</i>`
+      : `🚀 Gasto guardado:\n➖ ${amount}€\n📝 ${safeDesc}`
+    await sendMessage(chatId, msgTxt, keyboard.length > 1 ? { inline_keyboard: keyboard } : undefined)
 
     return res.status(200).send('OK')
 
   } catch (error) {
     console.error('Unhandled webhook error:', error)
+    return res.status(200).send('OK')
   }
 }
