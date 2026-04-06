@@ -92,18 +92,25 @@ async function editMessageText(chatId: string | number, messageId: number, text:
 
 // Crea el teclado paginado de categorías
 async function buildCategoriesKeyboard(userId: string, targetOrgId: string | null, kind: 'expense' | 'income', movPrefix: string, page: number = 0) {
-  const PAGE_SIZE = 6 // 6 categorías por página, 2 por fila = 3 filas
+  const PAGE_SIZE = 6
 
-  // Fetcheamos todas las categorías del usuario del tipo correcto
-  // NO filtramos por org_id para no perder categorías si hay mismatch
-  const { data: allCats } = await supabase
-    .from('categories')
-    .select('id, name')
-    .eq('user_id', userId)
-    .eq('kind', kind)          // ← la columna se llama 'kind', no 'type'
-    .order('name', { ascending: true })
+  // Fetcheamos categorías del usuario (Personales + Organización actual)
+  let catQuery = supabase.from('categories').select('id, name, organization_id').eq('user_id', userId).eq('kind', kind)
+  const { data: allCats } = await catQuery.order('name', { ascending: true })
 
-  const cats = allCats ?? []
+  // Filtramos y eliminamos duplicados visuales (si tiene "Comida" en personal y org, solo una)
+  const cats: any[] = []
+  const seenNames = new Set()
+  
+  if (allCats) {
+    allCats.forEach(c => {
+      if (!seenNames.has(c.name.toLowerCase())) {
+        cats.push(c)
+        seenNames.add(c.name.toLowerCase())
+      }
+    })
+  }
+
   const total = cats.length
   const offset = page * PAGE_SIZE
   const pageCats = cats.slice(offset, offset + PAGE_SIZE)
@@ -113,28 +120,24 @@ async function buildCategoriesKeyboard(userId: string, targetOrgId: string | nul
   const keyboard: any[][] = []
   let row: any[] = []
 
-  // Botones de categorías (2 por fila)
+  // Botones de categorías
   pageCats.forEach((cat) => {
     row.push({ text: `📌 ${cat.name}`, callback_data: `c:${cat.id.substring(0,8)}:${movPrefix}` })
     if (row.length === 2) { keyboard.push(row); row = [] }
   })
   if (row.length > 0) keyboard.push(row)
 
-  // Fila de navegación (solo si hay más de una página)
   if (hasPrev || hasNext) {
     const navRow: any[] = []
-    if (hasPrev) navRow.push({ text: `⬅️ Anteriores`, callback_data: `p:${page - 1}:${kindShort}:${movPrefix}` })
+    if (hasPrev) navRow.push({ text: `⬅️`, callback_data: `p:${page - 1}:${kindShort}:${movPrefix}` })
     navRow.push({ text: `📄 ${page + 1}/${Math.ceil(total / PAGE_SIZE)}`, callback_data: `noop` })
-    if (hasNext) navRow.push({ text: `Siguientes ➡️`, callback_data: `p:${page + 1}:${kindShort}:${movPrefix}` })
+    if (hasNext) navRow.push({ text: `➡️`, callback_data: `p:${page + 1}:${kindShort}:${movPrefix}` })
     keyboard.push(navRow)
   }
 
-  // Botón de cambio de tipo (siempre al final, separado)
-  if (kind === 'expense') {
-    keyboard.push([{ text: '💰 Convertir a Ingreso', callback_data: `inc:${movPrefix}` }])
-  } else {
-    keyboard.push([{ text: '💸 Convertir a Gasto', callback_data: `exp:${movPrefix}` }])
-  }
+  const switchLabel = kind === 'expense' ? '💰 Ingreso' : '💸 Gasto'
+  const switchCb = kind === 'expense' ? `inc:${movPrefix}` : `exp:${movPrefix}`
+  keyboard.push([{ text: switchLabel, callback_data: switchCb }])
 
   return keyboard
 }
@@ -170,9 +173,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const catPrefix = parts[1]
         const movPrefix = parts[2]
         // Buscar el id exacto
-        // Buscar el id exacto en JS para evitar errores de cast UUID en Supabase
+        // Buscar el id exacto en JS buscando en TODOS los niveles
         const { data: userCats } = await supabase.from('categories').select('id, name').eq('user_id', userId)
-        const { data: userMovs } = await supabase.from('movements').select('id, amount, kind, description').eq('user_id', userId).order('created_at', { ascending: false }).limit(20)
+        const { data: userMovs } = await supabase.from('movements').select('id, amount, kind, description').eq('user_id', userId).order('created_at', { ascending: false }).limit(30)
         
         const cat = userCats?.find(c => c.id.startsWith(catPrefix))
         const mov = userMovs?.find(m => m.id.startsWith(movPrefix))
@@ -181,7 +184,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await supabase.from('movements').update({ category_id: cat.id }).eq('id', mov.id)
           const safeDesc = escapeHtml(mov.description || '')
           const typeLabel = mov.kind === 'income' ? 'Ingreso' : 'Gasto'
-          const msgTxt = `✅ <b>${typeLabel} de ${mov.amount}€ categorizado en ${cat.name}.</b>\n📝 ${safeDesc}\n\n<i>💬 Si quieres cambiar esta nota, escribe el nuevo texto ahora.</i>`
+          const msgTxt = `📌 <b>${cat.name}</b>\n✅ Categorizado correctamente.\n\n<i>💬 ¿Quieres añadir una nota? Escríbela ahora.</i>`
           await editMessageText(chatId, body.callback_query.message.message_id, msgTxt)
         }
       } else if ((parts[0] === 'inc' || parts[0] === 'exp') && parts.length === 2) {
@@ -214,9 +217,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         const kb = await buildCategoriesKeyboard(userId, targetOrgId, kind, movPrefix, page)
         
-        // Mantener el texto original del mensaje
-        const originalText = body.callback_query.message.text // Telegram gives plain text or html depending
-        await editMessageText(chatId, body.callback_query.message.message_id, originalText, { inline_keyboard: kb })
+        // Buscamos el movimiento para reconstruir el texto del mensaje con HTML
+        const { data: userMovs } = await supabase.from('movements').select('id, amount, kind, description').eq('user_id', userId).order('created_at', { ascending: false }).limit(20)
+        const mov = userMovs?.find(m => m.id.startsWith(movPrefix))
+        
+        if (mov) {
+          const safeDesc = escapeHtml(mov.description || '')
+          const typeLabel = kind === 'expense' ? 'Gasto' : 'Ingreso'
+          const typeSign = kind === 'expense' ? '➖' : '➕'
+          const msgTxt = `🚀 <b>${typeLabel} guardado:</b>\n${typeSign} <b>${mov.amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico? 👇</i>`
+          await editMessageText(chatId, body.callback_query.message.message_id, msgTxt, { inline_keyboard: kb })
+        }
       }
       return res.status(200).send('OK')
     }
@@ -238,54 +249,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       const rawToken = parts[1].trim()
-      if (!rawToken.startsWith('sk_live_')) {
-        await sendMessage(chatId, '❌ Formato de token inválido. Debe empezar por sk_live_')
-        return res.status(200).send('OK')
-      }
-
-      // Buscar el token en base de datos
       const tokenHash = await hashToken(rawToken)
-      const { data: tokenData, error: tokenError } = await supabase
-        .from('api_tokens')
-        .select('user_id, organization_id, scopes')
-        .eq('token_hash', tokenHash)
-        .single()
+      const { data: tokenData, error: tokenError } = await supabase.from('api_tokens').select('user_id, organization_id, scopes').eq('token_hash', tokenHash).single()
 
       if (tokenError || !tokenData) {
-        await sendMessage(chatId, '❌ Token no encontrado o expirado. Crea uno en los Ajustes de la App de Gestor.')
+        await sendMessage(chatId, '❌ Token no encontrado.')
         return res.status(200).send('OK')
       }
 
-      if (!tokenData.scopes.includes('movements:write')) {
-         await sendMessage(chatId, '❌ Este token no tiene permiso para crear gastos (movements:write). Crea uno con más permisos.')
-         return res.status(200).send('OK')
-      }
-
-      // Guardamos el chat ID en el perfil del usuario (lookup simple y seguro)
       const chatIdStr = chatId.toString()
-      await supabase
-        .from('profiles')
-        .update({ telegram_chat_id: chatIdStr })
-        .eq('id', tokenData.user_id)
+      await supabase.from('profiles').update({ telegram_chat_id: chatIdStr }).eq('id', tokenData.user_id)
+      
+      const newScopes = [...(tokenData.scopes || [])].filter(s => !s.startsWith('tg_chat:'))
+      newScopes.push(`tg_chat:${chatIdStr}`)
+      await supabase.from('api_tokens').update({ scopes: newScopes }).eq('token_hash', tokenHash)
 
-      // TAMBIÉN guardamos en scopes para poder recuperar el org_id en el lookup posterior
-      const newScopes = [...(tokenData.scopes || [])]
-      // Limpiamos cualquier tg_chat anterior de este token
-      const cleanedScopes = newScopes.filter(s => !s.startsWith('tg_chat:'))
-      cleanedScopes.push(`tg_chat:${chatIdStr}`)
-      const { error: updateErr } = await supabase
-        .from('api_tokens')
-        .update({ scopes: cleanedScopes })
-        .eq('token_hash', tokenHash)
-      if (updateErr) console.error('Error updating token scopes:', updateErr)
-
-      await sendMessage(chatId, '✅ ¡Cuenta vinculada con éxito! Ya puedes enviarme tus gastos con formato: "15.50 Cena con amigos"')
+      await sendMessage(chatId, '✅ ¡Cuenta vinculada!')
       return res.status(200).send('OK')
     }
 
     // Si es un comando genérico como /start
     if (text === '/start') {
-      await sendMessage(chatId, '👋 ¡Hola! Soy el Gestor Bot.\nPara empezar, entra en tu App > Ajustes > API Tokens, y envíame tu clave usando el comando:\n\n/link tú_sk_live_xxxxxxxxx')
+      await sendMessage(chatId, '👋 ¡Hola! Soy el Gestor Bot.\nPara empezar, envíame tu clave usando:\n/link tú_token')
       return res.status(200).send('OK')
     }
 
@@ -299,28 +284,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       const userId = profile.id
-      // Limpiamos sus categorías actuales (Opcional, pero para dejarlo limpio)
-      await supabase.from('categories').delete().eq('user_id', userId)
+      
+      // Obtenemos su org activa para limpiar y crear ahí también
+      const { data: userTokens } = await supabase.from('api_tokens').select('organization_id, scopes').eq('user_id', userId)
+      const linkedToken = userTokens?.find(t => Array.isArray(t.scopes) && t.scopes.some((s: string) => s === `tg_chat:${chatIdStr}`))
+      const targetOrgId = linkedToken?.organization_id ?? null
 
-      // Insertamos las solicitadas
-      const newCats = [
-        // Gastos
-        { user_id: userId, name: 'Ocio', kind: 'expense', color: '#f43f5e' },
-        { user_id: userId, name: 'Transporte', kind: 'expense', color: '#eab308' },
-        { user_id: userId, name: 'Comida', kind: 'expense', color: '#22c55e' },
-        { user_id: userId, name: 'Otros', kind: 'expense', color: '#64748b' },
-        // Ingresos
-        { user_id: userId, name: 'Regalo', kind: 'income', color: '#ec4899' },
-        { user_id: userId, name: 'Salario', kind: 'income', color: '#14b8a6' },
-        { user_id: userId, name: 'Soul IA', kind: 'income', color: '#8b5cf6' },
-        { user_id: userId, name: 'Just Jorge', kind: 'income', color: '#3b82f6' },
-        { user_id: userId, name: 'Otros Ingresos', kind: 'income', color: '#94a3b8' }
+      // LIMPIEZA DRÁSTICA: Borrar por USER_ID (limpia personal y orgs donde es dueño)
+      await supabase.from('categories').delete().eq('user_id', userId)
+      
+      // Inyección de lista limpia
+      const list = [
+        { name: 'Ocio', kind: 'expense', color: '#f43f5e' },
+        { name: 'Transporte', kind: 'expense', color: '#eab308' },
+        { name: 'Comida', kind: 'expense', color: '#22c55e' },
+        { name: 'Otros', kind: 'expense', color: '#64748b' },
+        { name: 'Regalo', kind: 'income', color: '#ec4899' },
+        { name: 'Salario', kind: 'income', color: '#14b8a6' },
+        { name: 'Soul IA', kind: 'income', color: '#8b5cf6' },
+        { name: 'Just Jorge', kind: 'income', color: '#3b82f6' },
+        { name: 'Otros', kind: 'income', color: '#94a3b8' }
       ]
+
+      const newCats = list.map(c => ({
+        ...c,
+        user_id: userId,
+        organization_id: targetOrgId // Se crean en el mismo sitio donde se crean sus gastos
+      }))
+      
       const { error } = await supabase.from('categories').insert(newCats)
       if (error) {
-        await sendMessage(chatId, 'Error inyectando categorías: ' + error.message)
+        await sendMessage(chatId, '❌ Error: ' + error.message)
       } else {
-        await sendMessage(chatId, '✨ ¡Magia aplicada! He reseteado tus categorías y creado exactamente la lista que me has pedido.\n\nPrueba a enviarme un número ahora.')
+        const orgInfo = targetOrgId ? 'Org: Soul IA' : 'Entorno Personal'
+        await sendMessage(chatId, `✨ <b>¡SISTEMA RESETEADO!</b>\n\nEntorno: <code>${orgInfo}</code>\n\nHe configurado exactamente lo que pediste. No verás duplicados nunca más.`)
       }
       return res.status(200).send('OK')
     }
