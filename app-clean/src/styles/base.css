@@ -84,7 +84,12 @@
   --transition-slow: 0.3s ease;
   
   /* Spacing */
-  --spacing-page: 24px;
+  --spacing-page: 20px;
+  --spacing-card: 16px;
+  --control-height: 40px;
+  --table-row-pad: 12px;
+  --gap-layout: 16px;
+  --font-size-base: 14px;
   /* Dropdowns & Popovers */
   --dropdown-bg: var(--bg-card);
   --dropdown-border: var(--border-color);
@@ -183,11 +188,13 @@
 
 /* Density Variables */
 [data-density='compact'] {
-  --spacing-page: 14px;
-  --spacing-card: 12px;
-  --control-height: 34px;
-  --table-row-pad: 8px;
-  --radius-md: 8px;
+  --spacing-page: 6px;
+  --spacing-card: 8px;
+  --control-height: 28px;
+  --table-row-pad: 3px;
+  --radius-md: 6px;
+  --gap-layout: 8px;
+  --font-size-base: 12.5px;
 }
 
 [data-density='normal'] {
@@ -195,14 +202,18 @@
   --spacing-card: 16px;
   --control-height: 40px;
   --table-row-pad: 12px;
+  --gap-layout: 16px;
+  --font-size-base: 14px;
 }
 
 [data-density='large'] {
-  --spacing-page: 28px;
-  --spacing-card: 22px;
-  --control-height: 46px;
-  --table-row-pad: 16px;
-  --radius-md: 14px;
+  --spacing-page: 48px;
+  --spacing-card: 28px;
+  --control-height: 54px;
+  --table-row-pad: 22px;
+  --radius-md: 16px;
+  --gap-layout: 28px;
+  --font-size-base: 16px;
 }
 
 @keyframes dropdown-in {
@@ -226,6 +237,7 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: var(--font-size-base);
   background-color: var(--bg-body);
   color: var(--text-primary);
   line-height: 1.6;

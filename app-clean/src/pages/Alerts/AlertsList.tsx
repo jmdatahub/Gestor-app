@@ -229,7 +229,7 @@ export default function AlertsList() {
             style={{ opacity: refreshing ? 0.6 : 1 }}
             disabled={refreshing}
           >
-            <RefreshCw size={18} className={refreshing ? 'spin' : ''} />
+            <RefreshCw size={18} style={refreshing ? { animation: 'spin 0.8s linear infinite' } : {}} />
           </button>
           {unreadCount > 0 && (
             <button className="btn btn-secondary" onClick={handleMarkAllAsRead}>

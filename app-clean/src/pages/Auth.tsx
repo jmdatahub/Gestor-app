@@ -30,6 +30,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSuspendedMessage, setShowSuspendedMessage] = useState(false)
+  const [showPendingApproval, setShowPendingApproval] = useState(false)
   const [showEmailConfirmed, setShowEmailConfirmed] = useState(false)
   const [showRegistrationSuccess, setShowRegistrationSuccess] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -60,20 +61,32 @@ export default function Auth() {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
         
-        // Check if user is suspended before proceeding
+        // Check profile status before proceeding
         if (data.user) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('is_suspended')
+            .select('is_suspended, is_approved')
             .eq('id', data.user.id)
             .single()
-          
-          if (profile?.is_suspended) {
+
+          if (!profile) {
+            await supabase.auth.signOut()
+            setError('Tu cuenta no fue encontrada o fue rechazada. Contacta al administrador.')
+            return
+          }
+
+          if (profile.is_suspended) {
             await supabase.auth.signOut()
             setError('Tu cuenta ha sido suspendida. Contacta al administrador para más información.')
             return
           }
-          
+
+          if (!profile.is_approved) {
+            await supabase.auth.signOut()
+            setShowPendingApproval(true)
+            return
+          }
+
           await ensureDefaultAccountsForUser(data.user.id)
         }
         navigate('/app/dashboard')
@@ -89,7 +102,16 @@ export default function Auth() {
         })
         if (error) throw error
         
-        // Show success message - user needs to confirm email
+        // Notify admin about new pending user
+        if (data.user) {
+          const siteApiUrl = import.meta.env.VITE_SITE_URL || window.location.origin
+          fetch(`${siteApiUrl}/api/v1/notify-new-user`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: data.user.id })
+          }).catch(() => {}) // fire-and-forget
+        }
+        // Show success message - user needs to confirm email and await admin approval
         setShowRegistrationSuccess(true)
         setEmail('')
         setPassword('')
@@ -265,9 +287,32 @@ export default function Auth() {
                 }}>
                   <Mail size={20} style={{ flexShrink: 0, marginTop: 2 }} />
                   <div>
-                    <strong style={{ display: 'block', marginBottom: 4 }}>¡Revisa tu correo!</strong>
+                    <strong style={{ display: 'block', marginBottom: 4 }}>¡Solicitud enviada!</strong>
                     <span style={{ fontSize: '0.875rem', opacity: 0.9 }}>
-                      Te hemos enviado un enlace de confirmación. Haz clic en él para activar tu cuenta.
+                      Confirma tu correo electrónico y el administrador revisará tu solicitud. Te avisaremos cuando tu cuenta esté activa.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Pending Approval */}
+              {showPendingApproval && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                  background: 'rgba(234, 179, 8, 0.1)',
+                  border: '1px solid rgba(234, 179, 8, 0.3)',
+                  borderRadius: '12px',
+                  color: '#ca8a04'
+                }}>
+                  <Shield size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div>
+                    <strong style={{ display: 'block', marginBottom: 4 }}>Cuenta pendiente de aprobación</strong>
+                    <span style={{ fontSize: '0.875rem', color: 'rgba(202, 138, 4, 0.9)' }}>
+                      Tu cuenta está siendo revisada por el administrador. Recibirás acceso una vez sea aprobada.
                     </span>
                   </div>
                 </div>

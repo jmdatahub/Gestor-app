@@ -78,19 +78,19 @@
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: var(--gap-layout, 1rem);
+  margin-bottom: var(--gap-layout, 1.5rem);
 }
 
 .kpi-card {
   background: var(--bg-card);
   border-radius: var(--radius-lg);
-  padding: 1.25rem;
+  padding: var(--spacing-card, 1.25rem);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-card);
   display: flex;
   align-items: flex-start;
-  gap: 1rem;
+  gap: var(--gap-layout, 1rem);
 }
 
 .kpi-icon {

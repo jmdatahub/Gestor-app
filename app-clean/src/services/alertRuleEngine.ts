@@ -27,10 +27,11 @@ export async function evaluateAlertRules(userId: string): Promise<void> {
 async function evaluateRule(userId: string, rule: AlertRule): Promise<void> {
   try {
     // Respect trigger_mode=once: skip if already triggered at least once
-    if (rule.trigger_mode === 'once' && rule.last_triggered_at) return
+    const triggerMode = rule.trigger_mode ?? 'repeat'
+    if (triggerMode === 'once' && rule.last_triggered_at) return
 
     // Dedup window: 24h for repeat rules (prevents spam on every page load)
-    const dedupHours = rule.trigger_mode === 'repeat' ? 24 : 0
+    const dedupHours = triggerMode === 'repeat' ? 24 : 0
     if (dedupHours > 0) {
       const dedupDate = new Date()
       dedupDate.setHours(dedupDate.getHours() - dedupHours)
@@ -177,10 +178,11 @@ async function getSavingsProgress(userId: string, rule: AlertRule): Promise<numb
 
   if (goalId) query = query.eq('id', goalId)
 
-  const { data } = await query.limit(1).single()
-  if (!data || !data.target_amount) return null
+  const { data } = await query.limit(1)
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row || !row.target_amount) return null
 
-  return (data.current_amount / data.target_amount) * 100
+  return (row.current_amount / row.target_amount) * 100
 }
 
 async function getInvestmentDrop(userId: string, rule: AlertRule): Promise<number | null> {
