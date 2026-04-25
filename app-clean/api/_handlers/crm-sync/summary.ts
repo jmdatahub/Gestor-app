@@ -15,7 +15,7 @@ const CRM_SYNC_SECRET = process.env.CRM_SYNC_SECRET || 'crm_sync_sk_live_CHANGEM
 // Se puede filtrar por nombre o por ID. Aquí usamos el nombre para facilitar la config.
 const TARGET_ORG_NAME = process.env.CRM_SYNC_ORG_NAME || 'Soul IA'
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function summaryHandler(req: VercelRequest, res: VercelResponse) {
   // Solo GET permitido
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })

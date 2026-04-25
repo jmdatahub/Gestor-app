@@ -1,1 +1,11 @@
 .vercel
+
+# Environment secrets — never commit these
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# Allow only the template
+!.env.example

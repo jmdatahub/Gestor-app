@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { supabase, guard, handleError, pickBody, requireId,
-  auditCreate, auditUpdate, isTrashList, handleTrashOps } from './_shared.js'
+  auditCreate, auditUpdate, isTrashList, handleTrashOps } from '../../crm-sync/_shared.js'
 
 const FIELDS = ['account_id', 'kind', 'amount', 'frequency', 'day_of_month', 'day_of_week', 'next_occurrence', 'is_active', 'description', 'category'] as const
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function recurringHandler(req: VercelRequest, res: VercelResponse) {
   const ctx = await guard(req, res, ['GET', 'POST', 'PATCH', 'DELETE'])
   if (!ctx) return
   const { orgId, userId, actorEmail } = ctx

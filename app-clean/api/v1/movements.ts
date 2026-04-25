@@ -11,6 +11,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { applySecurityHeaders, sanitizeString } from './_security'
 
 // ============================================================
 // Configuration
@@ -87,11 +88,17 @@ async function validateToken(authHeader: string | undefined): Promise<TokenValid
 
     const { data, error } = await supabase
       .from('api_tokens')
-      .select('user_id, organization_id, scopes')
+      .select('user_id, organization_id, scopes, expires_at, is_active')
       .eq('token_hash', tokenHash)
       .single()
 
     if (error || !data) return null
+
+    // Reject revoked tokens
+    if (data.is_active === false) return null
+
+    // Reject expired tokens
+    if (data.expires_at && new Date(data.expires_at) < new Date()) return null
 
     void supabase.rpc('update_token_last_used', { p_token_hash: tokenHash }).then(() => {})
 
@@ -119,6 +126,8 @@ function validateMovement(m: any, index: number): ValidationError[] {
     errors.push({ field: `${prefix}amount`, message: 'Required' })
   } else if (isNaN(Number(m.amount)) || Number(m.amount) <= 0) {
     errors.push({ field: `${prefix}amount`, message: 'Must be a positive number' })
+  } else if (Number(m.amount) > 10_000_000) {
+    errors.push({ field: `${prefix}amount`, message: 'Amount exceeds maximum allowed value (10,000,000)' })
   }
 
   if (!m.date) {
@@ -150,6 +159,14 @@ function validateMovement(m: any, index: number): ValidationError[] {
     errors.push({ field: `${prefix}subscription_end_date`, message: 'Invalid format. Use YYYY-MM-DD' })
   }
 
+  if (m.description && typeof m.description === 'string' && m.description.length > 500) {
+    errors.push({ field: `${prefix}description`, message: 'Must be 500 characters or fewer' })
+  }
+
+  if (m.provider && typeof m.provider === 'string' && m.provider.length > 200) {
+    errors.push({ field: `${prefix}provider`, message: 'Must be 200 characters or fewer' })
+  }
+
   return errors
 }
 
@@ -166,10 +183,10 @@ function prepareMovement(m: MovementInput, userId: string, tokenOrgId: string | 
     kind: m.kind,
     amount: Number(m.amount),
     date: m.date,
-    description: m.description?.trim() || null,
+    description: sanitizeString(m.description?.trim(), 500) || null,
     category_id: m.category_id || null,
-    provider: m.provider?.trim() || null,
-    payment_method: m.payment_method?.trim() || null,
+    provider: sanitizeString(m.provider?.trim(), 200) || null,
+    payment_method: sanitizeString(m.payment_method?.trim(), 100) || null,
     tax_rate: m.tax_rate !== undefined ? Number(m.tax_rate) : null,
     tax_amount: m.tax_amount !== undefined ? Number(m.tax_amount) : null,
     is_subscription: Boolean(m.is_subscription),
@@ -182,14 +199,20 @@ function prepareMovement(m: MovementInput, userId: string, tokenOrgId: string | 
 // ============================================================
 // Main Handler
 // ============================================================
+const MAX_BATCH_SIZE = 100
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS
+  // Security headers
+  applySecurityHeaders(res)
+
+  // CORS — public API, allow any origin but restrict methods/headers
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Max-Age', '86400')
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).end()
+    return res.status(204).end()
   }
 
   // Check configuration
@@ -284,14 +307,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         query = query.eq('account_id', account_id)
       }
       if (search) {
-        query = query.ilike('description', `%${search}%`)
+        // Limit search length to prevent excessively large LIKE patterns
+        const safeSearch = String(search).slice(0, 100)
+        query = query.ilike('description', `%${safeSearch}%`)
       }
 
       const { data, count, error } = await query
 
       if (error) {
         console.error('API GET Error:', error)
-        return res.status(500).json({ error: 'Database error', message: error.message })
+        return res.status(500).json({ error: 'Database error', message: 'Failed to fetch movements.' })
       }
 
       return res.status(200).json({ 
@@ -323,6 +348,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Support both single object and array
       const movements: MovementInput[] = Array.isArray(body) ? body : [body]
 
+      if (movements.length > MAX_BATCH_SIZE) {
+        return res.status(400).json({
+          error: 'Batch too large',
+          message: `Maximum ${MAX_BATCH_SIZE} movements per request`
+        })
+      }
+
       // Validate all movements
       const allErrors: ValidationError[] = []
       movements.forEach((m, i) => {
@@ -349,15 +381,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (error) {
         console.error('API POST Error:', error)
-        
-        // Provide helpful error messages
-        let message = error.message
-        if (error.code === '23503') {
-          message = 'Foreign key error: account_id or category_id does not exist'
-        } else if (error.code === '23505') {
-          message = 'Duplicate entry detected'
+
+        // Map known DB constraint codes to client-safe messages (no raw DB detail)
+        let message = 'Insert failed. Check that account_id and category_id exist and belong to you.'
+        if (error.code === '23505') {
+          message = 'Duplicate entry detected.'
         }
-        
+
         return res.status(400).json({ error: 'Insert failed', message })
       }
 

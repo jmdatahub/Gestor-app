@@ -32,6 +32,7 @@ import { PendingInvitations } from '../components/invitations/PendingInvitations
 import { BudgetWidget } from '../components/BudgetWidget'
 import { SubscriptionAlertsWidget } from '../components/domain/SubscriptionAlertsWidget'
 import { UiBanner } from '../components/ui/UiBanner'
+import { ClassifyMovementsModal } from '../components/domain/ClassifyMovementsModal'
 
 import { StatCard } from '../components/shared/StatCard'
 import { Panel } from '../components/shared/Panel'
@@ -76,6 +77,7 @@ export default function Dashboard() {
   const { data: topAccounts = [], isLoading: isTopAccountsLoading } = useTopAccounts(userId, workspaceId, settings.rollupAccountsByParent)
   const { data: pendingCount = 0 } = usePendingRecurringCount(userId)
   const { data: uncategorizedCount = 0 } = usePendingClassificationCount(userId, workspaceId)
+  const [showClassifyModal, setShowClassifyModal] = useState(false)
 
   const { data: trendData = [] } = useMonthlyTrend(userId, workspaceId, 6)
   const { data: dailyData = [] } = useDailySpending(userId, workspaceId, 126)
@@ -212,12 +214,14 @@ export default function Dashboard() {
           title={`${uncategorizedCount} ${uncategorizedCount === 1 ? 'movimiento sin clasificar' : 'movimientos sin clasificar'}`}
           description="Asígnales una categoría para mejorar tus estadísticas."
           action={
-            <button className="btn btn-danger" style={{ whiteSpace: 'nowrap' }} onClick={() => navigate('/app/movements')}>
+            <button className="btn btn-danger" style={{ whiteSpace: 'nowrap' }} onClick={() => setShowClassifyModal(true)}>
               Clasificar
             </button>
           }
         />
       )}
+
+      <ClassifyMovementsModal isOpen={showClassifyModal} onClose={() => setShowClassifyModal(false)} />
 
       <div className="stat-grid stat-grid--4" style={{ marginBottom: 20 }}>
         <StatCard

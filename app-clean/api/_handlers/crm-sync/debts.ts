@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { supabase, guard, handleError, pickBody, requireId,
-  auditCreate, auditUpdate, isTrashList, handleTrashOps } from './_shared.js'
+  auditCreate, auditUpdate, isTrashList, handleTrashOps } from '../../crm-sync/_shared.js'
 
 const FIELDS = ['direction', 'counterparty_name', 'total_amount', 'remaining_amount', 'due_date', 'description', 'is_closed'] as const
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function debtsHandler(req: VercelRequest, res: VercelResponse) {
   const ctx = await guard(req, res, ['GET', 'POST', 'PATCH', 'DELETE'])
   if (!ctx) return
   const { orgId, userId, actorEmail } = ctx

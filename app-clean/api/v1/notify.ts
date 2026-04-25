@@ -1,5 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { applySecurityHeaders, sanitizeString } from './_security'
+
+const ALLOWED_ALERT_TYPES = new Set([
+  'spending_limit', 'rule_pending', 'savings_goal_progress',
+  'investment_drop', 'debt_due', 'general'
+])
+const MAX_TITLE_LEN = 200
+const MAX_MESSAGE_LEN = 1000
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -55,6 +63,8 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<void> 
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  applySecurityHeaders(res)
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -70,14 +80,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Invalid token' })
   }
 
-  const { type, title, message } = (req.body ?? {}) as Record<string, string>
+  const raw = (req.body ?? {}) as Record<string, unknown>
+  const type = sanitizeString(raw.type, 50)
+  const title = sanitizeString(raw.title, MAX_TITLE_LEN)
+  const message = sanitizeString(raw.message, MAX_MESSAGE_LEN)
+
   if (!type || !title || !message) {
     return res.status(400).json({ error: 'Missing required fields: type, title, message' })
   }
 
+  if (!ALLOWED_ALERT_TYPES.has(type)) {
+    return res.status(400).json({ error: `Invalid type. Allowed: ${[...ALLOWED_ALERT_TYPES].join(', ')}` })
+  }
+
+  // Get telegram_chat_id from profile
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('telegram_chat_id, telegram_notifications_enabled')
+    .select('telegram_chat_id')
     .eq('id', user.id)
     .single()
 
@@ -85,8 +104,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ sent: false, reason: 'no_telegram_linked' })
   }
 
-  // NULL is treated as enabled (default); only explicit false disables
-  if (profile.telegram_notifications_enabled === false) {
+  const chatId = profile.telegram_chat_id
+
+  // Check if the user opted out via token scope tg_notif:off
+  // (stored in api_tokens.scopes alongside tg_chat:{chatId})
+  const { data: tokens } = await supabaseAdmin
+    .from('api_tokens')
+    .select('scopes')
+    .eq('user_id', user.id)
+
+  const linkedToken = (tokens ?? []).find(
+    t => Array.isArray(t.scopes) && t.scopes.includes(`tg_chat:${chatId}`)
+  )
+  const notificationsDisabled = linkedToken?.scopes?.includes('tg_notif:off') === true
+
+  if (notificationsDisabled) {
     return res.status(200).json({ sent: false, reason: 'notifications_disabled' })
   }
 
@@ -96,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const text = buildMessage(type, title, message)
-  await sendTelegramMessage(profile.telegram_chat_id, text)
+  await sendTelegramMessage(chatId, text)
 
   return res.status(200).json({ sent: true })
 }

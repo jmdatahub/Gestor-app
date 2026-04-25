@@ -372,3 +372,31 @@ export async function getPendingClassificationCount(userId: string, organization
   return count || 0
 }
 
+// Fetch movements pending classification (category_id is null OR category is "Otros")
+export async function fetchPendingClassificationMovements(userId: string, organizationId?: string | null): Promise<Movement[]> {
+  let catQuery = supabase.from('categories').select('id').ilike('name', 'otros')
+  if (organizationId) catQuery = catQuery.eq('organization_id', organizationId)
+  else catQuery = catQuery.eq('user_id', userId).is('organization_id', null)
+
+  const { data: otrosCats } = await catQuery
+  const otrosIds = otrosCats?.map(c => c.id) || []
+
+  let query = supabase.from('movements').select(`
+    *,
+    account:accounts(id, name),
+    category:categories(id, name, color)
+  `).order('date', { ascending: false })
+
+  if (organizationId) query = query.eq('organization_id', organizationId)
+  else query = query.eq('user_id', userId).is('organization_id', null)
+
+  if (otrosIds.length > 0) {
+    query = query.or(`category_id.is.null,category_id.in.(${otrosIds.join(',')})`)
+  } else {
+    query = query.is('category_id', null)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}

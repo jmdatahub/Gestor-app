@@ -6,12 +6,12 @@ import { ExportMenu } from '../../components/shared/ExportMenu'
 // import { downloadFile } from '../../services/exportService'
 // import { UiDropdown, UiDropdownItem } from '../../components/ui/UiDropdown'
 import { supabase } from '../../lib/supabaseClient'
-import { 
-  getAllUsers, 
-  getUserCount, 
-  getSuspendedCount, 
+import {
+  getAllUsers,
+  getUserCount,
+  getSuspendedCount,
   getOrganizationCount,
-  suspendUser, 
+  suspendUser,
   unsuspendUser,
   deleteUserProfile,
   checkIsSuperAdmin,
@@ -23,19 +23,23 @@ import {
   permanentDeleteOrganization,
   purgeExpiredOrganizations,
   checkDatabaseHealth,
+  getPendingUsers,
+  getPendingCount,
+  approveUser,
+  rejectUser,
   type UserProfile,
   type AdminOrganization
 } from '../../services/adminService'
 import { useI18n } from '../../hooks/useI18n'
 import { 
-  Users, 
-  Shield, 
-  Activity, 
-  Search, 
-  Filter, 
-  MoreVertical, 
-  Trash2, 
-  UserX, 
+  Users,
+  Shield,
+  Activity,
+  Search,
+  Filter,
+  MoreVertical,
+  Trash2,
+  UserX,
   UserCheck,
   RefreshCw,
   Building,
@@ -47,7 +51,10 @@ import {
   AlertTriangle,
   Edit2,
   Undo2,
-  Send
+  Send,
+  Clock,
+  UserPlus,
+  XCircle
 } from 'lucide-react'
 
 const SUPER_ADMIN_EMAIL = 'mp.jorge00@gmail.com'
@@ -66,7 +73,11 @@ export default function AdminPanel() {
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [loadingOrgs, setLoadingOrgs] = useState(false)
   const [profilesTableExists, setProfilesTableExists] = useState(false)
-  const [activeTab, setActiveTab] = useState<'users' | 'orgs' | 'trash'>('users')
+  const [activeTab, setActiveTab] = useState<'users' | 'orgs' | 'trash' | 'approvals'>('approvals')
+  const [pendingUsers, setPendingUsers] = useState<UserProfile[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
+  const [loadingPending, setLoadingPending] = useState(false)
+  const [approvalAction, setApprovalAction] = useState<{ userId: string; type: 'approve' | 'reject' } | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'suspended'>('all')
@@ -138,9 +149,7 @@ export default function AdminPanel() {
         if (user.email === SUPER_ADMIN_EMAIL) {
           const isHealthy = await loadStats()
           if (isHealthy) {
-            await loadUsers()
-            await loadOrganizations()
-            await loadTrash() // Load deleted organizations
+            await Promise.all([loadUsers(), loadOrganizations(), loadTrash(), loadPendingUsers()])
           }
         }
       }
@@ -237,6 +246,43 @@ export default function AdminPanel() {
       alert('Error al eliminar: ' + (error.message || 'Error desconocido'))
     } finally {
       setDeletingOrg(false)
+    }
+  }
+
+  const loadPendingUsers = async () => {
+    setLoadingPending(true)
+    try {
+      const [data, count] = await Promise.all([getPendingUsers(), getPendingCount()])
+      setPendingUsers(data)
+      setPendingCount(count)
+    } catch (error) {
+      console.error('Error loading pending users:', error)
+    } finally {
+      setLoadingPending(false)
+    }
+  }
+
+  const handleApproveUser = async (userId: string) => {
+    setApprovalAction({ userId, type: 'approve' })
+    try {
+      await approveUser(userId)
+      await Promise.all([loadPendingUsers(), loadStats()])
+    } catch (error: any) {
+      alert('Error al aprobar usuario: ' + (error.message || 'Error desconocido'))
+    } finally {
+      setApprovalAction(null)
+    }
+  }
+
+  const handleRejectUser = async (userId: string) => {
+    setApprovalAction({ userId, type: 'reject' })
+    try {
+      await rejectUser(userId)
+      await Promise.all([loadPendingUsers(), loadStats()])
+    } catch (error: any) {
+      alert('Error al rechazar usuario: ' + (error.message || 'Error desconocido'))
+    } finally {
+      setApprovalAction(null)
     }
   }
 
@@ -528,6 +574,13 @@ export default function AdminPanel() {
         telegram: user.telegram_chat_id ? 'Conectado' : 'Sin conectar',
         date: user.created_at ? new Date(user.created_at).toLocaleString('es-ES') : '-'
       }))
+    } else if (activeTab === 'approvals') {
+      return pendingUsers.map(user => ({
+        id: user.id,
+        email: user.email,
+        name: user.display_name || 'Sin nombre',
+        date: user.created_at ? new Date(user.created_at).toLocaleString('es-ES') : '-'
+      }))
     } else {
       return organizations.map(org => ({
         id: org.id,
@@ -537,7 +590,7 @@ export default function AdminPanel() {
         date: org.created_at ? new Date(org.created_at).toLocaleString('es-ES') : '-'
       }))
     }
-  }, [activeTab, filteredUsers, organizations])
+  }, [activeTab, filteredUsers, organizations, pendingUsers])
 
 
   // Conditional returns (after all hooks)
@@ -578,8 +631,8 @@ export default function AdminPanel() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => { loadStats(); loadUsers(); loadOrganizations() }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#1e293b', border: '1px solid #334155', borderRadius: 10, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <RefreshCw size={16} className={loadingUsers || loadingOrgs ? 'animate-spin' : ''} /> Actualizar
+          <button onClick={() => { loadStats(); loadUsers(); loadOrganizations(); loadPendingUsers() }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: '#1e293b', border: '1px solid #334155', borderRadius: 10, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            <RefreshCw size={16} className={loadingUsers || loadingOrgs || loadingPending ? 'animate-spin' : ''} /> Actualizar
           </button>
           
           <ExportMenu 
@@ -599,7 +652,26 @@ export default function AdminPanel() {
       */}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setActiveTab('approvals')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px',
+            background: activeTab === 'approvals' ? '#f59e0b' : '#1e293b',
+            border: `1px solid ${activeTab === 'approvals' ? '#f59e0b' : '#334155'}`,
+            borderRadius: 10, color: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            position: 'relative'
+          }}
+        >
+          <Clock size={16} /> Aprobaciones
+          {pendingCount > 0 && (
+            <span style={{
+              marginLeft: 2, fontSize: 11, fontWeight: 700,
+              background: activeTab === 'approvals' ? 'rgba(0,0,0,0.25)' : '#f59e0b',
+              color: 'white', padding: '1px 7px', borderRadius: 20, minWidth: 20, textAlign: 'center'
+            }}>{pendingCount}</span>
+          )}
+        </button>
         <button
           onClick={() => setActiveTab('users')}
           style={{
@@ -641,11 +713,13 @@ export default function AdminPanel() {
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <h3 style={{ color: 'white', fontSize: 16, fontWeight: 700, margin: 0 }}>
+              {activeTab === 'approvals' && '⏳ Solicitudes Pendientes'}
               {activeTab === 'users' && 'Gestión de Usuarios'}
               {activeTab === 'orgs' && 'Gestión de Organizaciones'}
               {activeTab === 'trash' && '🗑️ Papelera'}
             </h3>
             <p style={{ color: '#64748b', fontSize: 13, margin: '4px 0 0' }}>
+              {activeTab === 'approvals' && 'Aprueba o rechaza nuevos registros de usuarios'}
               {activeTab === 'users' && 'Administra permisos y estados'}
               {activeTab === 'orgs' && 'Visualiza todas las organizaciones del sistema'}
               {activeTab === 'trash' && 'Organizaciones eliminadas (se borran permanentemente después de 7 días)'}
@@ -707,6 +781,84 @@ export default function AdminPanel() {
               <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Ejecuta la migración de base de datos.</p>
               <code style={{ display: 'inline-block', padding: '8px 16px', background: '#0f172a', borderRadius: 8, color: '#f59e0b', fontSize: 12, border: '1px solid rgba(245,158,11,0.2)' }}>MIG_005_profiles_table.sql</code>
             </div>
+          ) : activeTab === 'approvals' ? (
+            /* APPROVALS TAB */
+            loadingPending ? (
+              <div style={{ padding: 64, textAlign: 'center' }}>
+                <div style={{ width: 40, height: 40, margin: '0 auto', border: '3px solid #334155', borderTopColor: '#f59e0b', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+              </div>
+            ) : pendingUsers.length === 0 ? (
+              <div style={{ padding: 64, textAlign: 'center' }}>
+                <div style={{ width: 64, height: 64, margin: '0 auto 16px', background: 'rgba(34,197,94,0.1)', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserCheck size={32} color="#22c55e" />
+                </div>
+                <h4 style={{ color: 'white', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Sin solicitudes pendientes</h4>
+                <p style={{ color: '#64748b', fontSize: 13 }}>Todos los registros han sido revisados.</p>
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'rgba(30,41,59,0.5)' }}>
+                    <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Usuario</th>
+                    <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Registro</th>
+                    <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingUsers.map((user, idx) => {
+                    const isActing = approvalAction?.userId === user.id
+                    return (
+                      <tr key={user.id} style={{ borderTop: '1px solid rgba(51,65,85,0.3)', background: idx % 2 === 0 ? 'transparent' : 'rgba(30,41,59,0.2)' }}>
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg, #f59e0b, #d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: 14 }}>
+                              {getInitials(user.email)}
+                            </div>
+                            <div>
+                              <span style={{ color: 'white', fontWeight: 600, fontSize: 14, display: 'block' }}>{user.display_name || (user.email ? user.email.split('@')[0] : 'Sin nombre')}</span>
+                              <span style={{ color: '#64748b', fontSize: 12 }}>{user.email || 'Sin email'}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '16px 24px', color: '#94a3b8', fontSize: 13 }}>{formatDate(user.created_at)}</td>
+                        <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={() => handleApproveUser(user.id)}
+                              disabled={!!approvalAction}
+                              style={{
+                                padding: '7px 14px', background: 'rgba(34,197,94,0.15)',
+                                border: '1px solid rgba(34,197,94,0.3)', borderRadius: 8,
+                                color: '#22c55e', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                                display: 'inline-flex', alignItems: 'center', gap: 5,
+                                opacity: approvalAction ? 0.6 : 1
+                              }}
+                            >
+                              <UserPlus size={14} />
+                              {isActing && approvalAction?.type === 'approve' ? 'Aprobando...' : 'Aprobar'}
+                            </button>
+                            <button
+                              onClick={() => handleRejectUser(user.id)}
+                              disabled={!!approvalAction}
+                              style={{
+                                padding: '7px 14px', background: 'rgba(239,68,68,0.1)',
+                                border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8,
+                                color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                                display: 'inline-flex', alignItems: 'center', gap: 5,
+                                opacity: approvalAction ? 0.6 : 1
+                              }}
+                            >
+                              <XCircle size={14} />
+                              {isActing && approvalAction?.type === 'reject' ? 'Rechazando...' : 'Rechazar'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )
           ) : activeTab === 'users' ? (
             /* USERS TABLE */
             loadingUsers ? (

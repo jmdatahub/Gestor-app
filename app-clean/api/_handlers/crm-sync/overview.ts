@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { supabase, requireOrg, onlyGet, handleError } from './_shared.js'
+import { supabase, requireOrg, onlyGet, handleError } from '../../crm-sync/_shared.js'
 
 const USER_ACTIVITY_TABLES = [
   { name: 'movements',       label: 'Movimiento' },
@@ -46,7 +46,7 @@ async function handleUserActivity(req: VercelRequest, res: VercelResponse, orgId
   return res.status(200).json({ email, items: out.slice(0, lim) })
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function overviewHandler(req: VercelRequest, res: VercelResponse) {
   if (!onlyGet(req, res)) return
   const orgId = await requireOrg(req, res)
   if (!orgId) return

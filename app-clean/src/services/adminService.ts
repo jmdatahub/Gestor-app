@@ -6,6 +6,7 @@ export interface UserProfile {
   display_name: string | null
   is_suspended: boolean
   is_super_admin: boolean
+  is_approved: boolean
   created_at: string
   telegram_chat_id: string | null
 }
@@ -89,6 +90,64 @@ export async function deleteUserProfile(userId: string): Promise<void> {
     .eq('id', userId)
 
   if (error) throw error
+}
+
+// Get pending approval users
+export async function getPendingUsers(): Promise<UserProfile[]> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('is_approved', false)
+      .eq('is_super_admin', false)
+      .order('created_at', { ascending: false })
+
+    if (error) return []
+    return (data || []) as UserProfile[]
+  } catch {
+    return []
+  }
+}
+
+// Get pending approval count
+export async function getPendingCount(): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_approved', false)
+      .eq('is_super_admin', false)
+
+    if (error) return 0
+    return count || 0
+  } catch {
+    return 0
+  }
+}
+
+// Approve a user
+export async function approveUser(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ is_approved: true })
+    .eq('id', userId)
+
+  if (error) throw error
+}
+
+// Reject a user (calls server endpoint to delete auth user with service role)
+export async function rejectUser(userId: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin
+  const res = await fetch(`${siteUrl}/api/v1/reject-user`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token || ''}`
+    },
+    body: JSON.stringify({ userId })
+  })
+  if (!res.ok) throw new Error('Error al rechazar usuario')
 }
 
 // Get suspended user count

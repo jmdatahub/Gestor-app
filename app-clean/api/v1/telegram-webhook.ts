@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { applySecurityHeaders } from './_security'
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -151,17 +152,25 @@ async function buildCategoriesKeyboard(userId: string, targetOrgId: string | nul
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  applySecurityHeaders(res)
+
   // Only accept POST
   if (req.method !== 'POST') return res.status(200).send('OK')
 
   // Verify Telegram webhook secret (set when calling setWebhook with secret_token).
   // Without this, any caller could send forged updates to the unauthenticated endpoint.
+  // An empty/unset webhookSecret disables the webhook entirely (fail-closed).
   if (!webhookSecret) {
-    return res.status(503).json({ error: 'Webhook secret not configured' })
+    return res.status(503).json({ error: 'Webhook not configured' })
   }
   const incomingSecret = req.headers['x-telegram-bot-api-secret-token']
   const incomingValue = Array.isArray(incomingSecret) ? incomingSecret[0] : incomingSecret
-  if (incomingValue !== webhookSecret) {
+  // Constant-time comparison to prevent timing attacks
+  if (
+    !incomingValue ||
+    incomingValue.length !== webhookSecret.length ||
+    !crypto.timingSafeEqual(Buffer.from(incomingValue), Buffer.from(webhookSecret))
+  ) {
     console.warn('[telegram-webhook] Rejected request with invalid/missing secret token')
     return res.status(401).json({ error: 'Unauthorized' })
   }
@@ -337,11 +346,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Gestión de notificaciones: /notifications [on|off]
+    // Preference stored as scope 'tg_notif:off' in api_tokens — no schema migration required
     if (text.startsWith('/notifications')) {
       const chatIdStr = chatId.toString()
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, telegram_notifications_enabled')
+        .select('id')
         .eq('telegram_chat_id', chatIdStr)
         .single()
 
@@ -350,21 +360,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).send('OK')
       }
 
+      const { data: userTokens } = await supabase
+        .from('api_tokens')
+        .select('token_hash, scopes')
+        .eq('user_id', profile.id)
+
+      const linkedToken = (userTokens ?? []).find(
+        (t: { scopes: string[] }) => Array.isArray(t.scopes) && t.scopes.includes(`tg_chat:${chatIdStr}`)
+      )
+
+      if (!linkedToken) {
+        await sendMessage(chatId, '⚠️ No se encontró el token vinculado. Vuelve a usar /link.')
+        return res.status(200).send('OK')
+      }
+
       const arg = text.split(/\s+/)[1]?.toLowerCase()
+      const currentScopes: string[] = linkedToken.scopes ?? []
+      const isDisabled = currentScopes.includes('tg_notif:off')
 
       if (arg === 'on') {
-        await supabase.from('profiles').update({ telegram_notifications_enabled: true }).eq('id', profile.id)
+        await supabase
+          .from('api_tokens')
+          .update({ scopes: currentScopes.filter((s: string) => s !== 'tg_notif:off') })
+          .eq('token_hash', linkedToken.token_hash)
         await sendMessage(chatId, '🔔 <b>Notificaciones activadas.</b>\nRecibirás alertas de Gestor aquí.')
       } else if (arg === 'off') {
-        await supabase.from('profiles').update({ telegram_notifications_enabled: false }).eq('id', profile.id)
+        await supabase
+          .from('api_tokens')
+          .update({ scopes: [...currentScopes.filter((s: string) => s !== 'tg_notif:off'), 'tg_notif:off'] })
+          .eq('token_hash', linkedToken.token_hash)
         await sendMessage(chatId, '🔕 <b>Notificaciones desactivadas.</b>\nNo recibirás más alertas aquí.\n\n<i>Puedes reactivarlas con /notifications on</i>')
       } else {
-        const enabled = profile.telegram_notifications_enabled !== false
-        const status = enabled ? '🔔 <b>Activadas</b>' : '🔕 <b>Desactivadas</b>'
-        await sendMessage(
-          chatId,
-          `${status}\n\nUsa:\n/notifications on — activar\n/notifications off — desactivar`
-        )
+        const status = isDisabled ? '🔕 <b>Desactivadas</b>' : '🔔 <b>Activadas</b>'
+        await sendMessage(chatId, `${status}\n\nUsa:\n/notifications on — activar\n/notifications off — desactivar`)
       }
       return res.status(200).send('OK')
     }
@@ -409,7 +437,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const { error } = await supabase.from('categories').insert(newCats)
       if (error) {
-        await sendMessage(chatId, '❌ Error: ' + error.message)
+        console.error('[telegram-webhook] /magia insert error:', error)
+        await sendMessage(chatId, '❌ Error al reiniciar las categorías. Inténtalo de nuevo.')
       } else {
         const orgInfo = targetOrgId ? 'Org: Soul IA' : 'Entorno Personal'
         await sendMessage(chatId, `✨ <b>¡SISTEMA RESETEADO!</b>\n\nEntorno: <code>${orgInfo}</code>\n\nHe configurado exactamente lo que pediste. No verás duplicados nunca más.`)
@@ -475,11 +504,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const sign = amountMatch[1] // '+' o '-' o ''
     const amountStr = amountMatch[2].replace(',', '.')
     const amount = Number(amountStr)
+
+    // Reject unreasonable amounts
+    if (amount <= 0 || amount > 10_000_000) {
+      await sendMessage(chatId, '⚠️ El importe no es válido. Debe estar entre 0.01 y 10,000,000.')
+      return res.status(200).send('OK')
+    }
+
     // Si empieza con '+' es un ingreso, en cualquier otro caso es un gasto
     const kind: 'income' | 'expense' = sign === '+' ? 'income' : 'expense'
 
     // La descripción será el resto del texto (quitamos el número y el signo)
-    let description = text.replace(amountMatch[0], ' ').replace(/^[+-]/, '').trim()
+    let description = text.replace(amountMatch[0], ' ').replace(/^[+-]/, '').trim().slice(0, 500)
     if (!description) description = '📱'
 
     // Buscar una cuenta que pertenezca ESPECÍFICAMENTE al workspace elegido (targetOrgId)
@@ -516,8 +552,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single()
 
     if (insertError || !createdMovement) {
-      console.error(insertError)
-      await sendMessage(chatId, '🔥 Falló al guardar el gasto en la BBDD: ' + insertError?.message)
+      console.error('[telegram-webhook] Insert error:', insertError)
+      await sendMessage(chatId, '🔥 No se pudo guardar el movimiento. Inténtalo de nuevo.')
       return res.status(200).send('OK')
     }
 

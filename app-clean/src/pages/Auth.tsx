@@ -93,22 +93,22 @@ export default function Auth() {
       } else {
         // Registration - send verification email
         const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin
-        const { error } = await supabase.auth.signUp({ 
-          email, 
+        const { data: signUpData, error } = await supabase.auth.signUp({
+          email,
           password,
           options: {
             emailRedirectTo: `${siteUrl}/auth`
           }
         })
         if (error) throw error
-        
+
         // Notify admin about new pending user
-        if (data.user) {
+        if (signUpData?.user) {
           const siteApiUrl = import.meta.env.VITE_SITE_URL || window.location.origin
           fetch(`${siteApiUrl}/api/v1/notify-new-user`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: data.user.id })
+            body: JSON.stringify({ userId: signUpData.user.id })
           }).catch(() => {}) // fire-and-forget
         }
         // Show success message - user needs to confirm email and await admin approval
