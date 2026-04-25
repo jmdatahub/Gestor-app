@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code (user-local agent settings — keep .claude/launch.json shareable)
+.claude/settings.local.json
+
+# Vite PWA dev artifacts
+**/dev-dist/

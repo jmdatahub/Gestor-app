@@ -118,27 +118,16 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     }
   }, [settings.theme])
 
-  // Apply density to document (preset + fine-grained percentage)
+  // Apply density to document — CSS rules in base.css handle the variable values per preset
   useEffect(() => {
     const root = document.documentElement
     root.setAttribute('data-density', settings.density)
-    
-    // Apply fine-grained density based on percentage (0-100)
-    // Range: 0 = ultra-compact, 50 = normal, 100 = ultra-comfortable
-    const pct = settings.densityPercent ?? 50
-    const factor = pct / 50 // 0.5 at 25%, 1.0 at 50%, 1.5 at 75%
-    
-    // Calculate dynamic values based on percentage
-    const spacingPage = Math.round(14 + (factor * 6)) // 14-26px
-    const spacingCard = Math.round(12 + (factor * 5)) // 12-22px
-    const controlHeight = Math.round(34 + (factor * 6)) // 34-46px
-    const tableRowPad = Math.round(8 + (factor * 4)) // 8-16px
-    
-    root.style.setProperty('--spacing-page', `${spacingPage}px`)
-    root.style.setProperty('--spacing-card', `${spacingCard}px`)
-    root.style.setProperty('--control-height', `${controlHeight}px`)
-    root.style.setProperty('--table-row-pad', `${tableRowPad}px`)
-  }, [settings.density, settings.densityPercent])
+    // Clear any previously-set inline overrides so the [data-density] CSS rules take effect
+    root.style.removeProperty('--spacing-page')
+    root.style.removeProperty('--spacing-card')
+    root.style.removeProperty('--control-height')
+    root.style.removeProperty('--table-row-pad')
+  }, [settings.density])
 
   const updateSettings = (partial: Partial<AppSettings>) => {
     console.log('[SettingsContext] Updating settings with:', partial)

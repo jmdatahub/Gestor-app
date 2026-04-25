@@ -44,16 +44,17 @@ export function StatCard({
   return (
     <div
       className={`stat-card stat-card--${tone}${clickable ? ' stat-card--clickable' : ''}`}
-      role={clickable ? 'button' : undefined}
+      role={clickable ? 'button' : 'group'}
+      aria-label={clickable ? label : undefined}
       tabIndex={clickable ? 0 : undefined}
       onClick={onClick}
-      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick!() } : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick!() } } : undefined}
       style={clickable ? { cursor: 'pointer' } : undefined}
     >
-      <span className="stat-card__accent" />
+      <span className="stat-card__accent" aria-hidden="true" />
       <div className="stat-card__head">
         <span className="stat-card__label">{label}</span>
-        {icon && <span className="stat-card__icon">{icon}</span>}
+        {icon && <span className="stat-card__icon" aria-hidden="true">{icon}</span>}
       </div>
       <div className="stat-card__value">{value}</div>
       {(trend || helper) && (
@@ -63,7 +64,7 @@ export function StatCard({
         </div>
       )}
       {sparkData.length > 1 && (
-        <div className="stat-card__sparkline">
+        <div className="stat-card__sparkline" aria-hidden="true">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={sparkData} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
               <defs>

@@ -19,7 +19,7 @@ export async function searchProviders(
 ): Promise<Provider[]> {
   if (!query || query.length < 1) return []
 
-  let dbQuery = supabase
+  const dbQuery = supabase
     .from('providers')
     .select('*')
     .eq('user_id', userId)

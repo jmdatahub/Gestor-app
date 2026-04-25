@@ -103,7 +103,7 @@ async function buildCategoriesKeyboard(userId: string, targetOrgId: string | nul
   const PAGE_SIZE = 6
 
   // Fetcheamos categorías del usuario (Personales + Organización actual)
-  let catQuery = supabase.from('categories').select('id, name, organization_id').eq('user_id', userId).eq('kind', kind)
+  const catQuery = supabase.from('categories').select('id, name, organization_id').eq('user_id', userId).eq('kind', kind)
   const { data: allCats } = await catQuery.order('name', { ascending: true })
 
   // Filtramos y eliminamos duplicados visuales (si tiene "Comida" en personal y org, solo una)
@@ -177,6 +177,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // Asegurar respuesta rápida a TG para apagar el "loading" del botón
       await answerCallbackQuery(callbackId)
+
+      // Admin: approve/reject new user registration
+      if (data.startsWith('app:') || data.startsWith('rej:')) {
+        const colonIdx = data.indexOf(':')
+        const action = data.substring(0, colonIdx)
+        const targetUserId = data.substring(colonIdx + 1)
+        const chatIdStr = chatId.toString()
+        const { data: adminProf } = await supabase.from('profiles').select('is_super_admin').eq('telegram_chat_id', chatIdStr).single()
+        if (!adminProf?.is_super_admin) {
+          await sendMessage(chatId, '⛔ No tienes permisos para esta acción.')
+          return res.status(200).send('OK')
+        }
+        const { data: targetProf } = await supabase.from('profiles').select('email, telegram_chat_id').eq('id', targetUserId).single()
+        const targetEmail = targetProf?.email || targetUserId
+
+        if (action === 'app') {
+          await supabase.from('profiles').update({ is_approved: true }).eq('id', targetUserId)
+          await editMessageText(chatId, body.callback_query.message.message_id, `✅ <b>Usuario aprobado</b>\n\n👤 ${targetEmail}\nYa puede iniciar sesión.`)
+          if (targetProf?.telegram_chat_id) {
+            await sendMessage(targetProf.telegram_chat_id, '✅ <b>¡Tu cuenta ha sido aprobada!</b>\n\nYa puedes iniciar sesión en la app.')
+          }
+        } else {
+          await supabase.auth.admin.deleteUser(targetUserId)
+          await editMessageText(chatId, body.callback_query.message.message_id, `❌ <b>Solicitud rechazada</b>\n\n👤 ${targetEmail}\nLa cuenta ha sido eliminada.`)
+        }
+        return res.status(200).send('OK')
+      }
 
       const chatIdStr = chatId.toString()
       const { data: profile } = await supabase.from('profiles').select('id').eq('telegram_chat_id', chatIdStr).single()
@@ -284,13 +311,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       newScopes.push(`tg_chat:${chatIdStr}`)
       await supabase.from('api_tokens').update({ scopes: newScopes }).eq('token_hash', tokenHash)
 
-      await sendMessage(chatId, '✅ ¡Cuenta vinculada!')
+      await sendMessage(
+        chatId,
+        `✅ <b>¡Cuenta vinculada!</b>\n\nA partir de ahora recibirás notificaciones aquí cuando se genere una alerta en Gestor.\n\n<i>Usa /notifications para gestionar tus preferencias.</i>`
+      )
       return res.status(200).send('OK')
     }
 
     // Si es un comando genérico como /start
     if (text === '/start') {
-      await sendMessage(chatId, '👋 ¡Hola! Soy el Gestor Bot.\nPara empezar, envíame tu clave usando:\n/link tú_token')
+      await sendMessage(
+        chatId,
+        `👋 <b>¡Hola! Soy el Gestor Bot.</b>\n\nPuedo ayudarte a:\n• Registrar gastos e ingresos escribiendo el importe\n• Recibir alertas automáticas de tu cuenta\n\n<b>Comandos disponibles:</b>\n/link &lt;token&gt; — Vincular tu cuenta\n/notifications — Gestionar notificaciones\n/help — Ver esta ayuda\n\n<i>Para empezar, usa: /link tu_token</i>`
+      )
+      return res.status(200).send('OK')
+    }
+
+    // Alias de /start
+    if (text === '/help') {
+      await sendMessage(
+        chatId,
+        `📖 <b>Comandos del Gestor Bot</b>\n\n/link &lt;token&gt; — Vincular tu cuenta de Gestor\n/notifications — Activar o desactivar alertas\n/help — Ver esta ayuda\n\n<b>Registro rápido:</b>\nEscribe directamente el importe y la descripción:\n<code>25 mercadona</code> → gasto\n<code>+1000 nómina</code> → ingreso`
+      )
+      return res.status(200).send('OK')
+    }
+
+    // Gestión de notificaciones: /notifications [on|off]
+    if (text.startsWith('/notifications')) {
+      const chatIdStr = chatId.toString()
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, telegram_notifications_enabled')
+        .eq('telegram_chat_id', chatIdStr)
+        .single()
+
+      if (!profile) {
+        await sendMessage(chatId, '⚠️ Primero vincula tu cuenta con /link')
+        return res.status(200).send('OK')
+      }
+
+      const arg = text.split(/\s+/)[1]?.toLowerCase()
+
+      if (arg === 'on') {
+        await supabase.from('profiles').update({ telegram_notifications_enabled: true }).eq('id', profile.id)
+        await sendMessage(chatId, '🔔 <b>Notificaciones activadas.</b>\nRecibirás alertas de Gestor aquí.')
+      } else if (arg === 'off') {
+        await supabase.from('profiles').update({ telegram_notifications_enabled: false }).eq('id', profile.id)
+        await sendMessage(chatId, '🔕 <b>Notificaciones desactivadas.</b>\nNo recibirás más alertas aquí.\n\n<i>Puedes reactivarlas con /notifications on</i>')
+      } else {
+        const enabled = profile.telegram_notifications_enabled !== false
+        const status = enabled ? '🔔 <b>Activadas</b>' : '🔕 <b>Desactivadas</b>'
+        await sendMessage(
+          chatId,
+          `${status}\n\nUsa:\n/notifications on — activar\n/notifications off — desactivar`
+        )
+      }
       return res.status(200).send('OK')
     }
 
@@ -416,7 +491,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const { data: accountsData } = await accountQuery.limit(1)
 
-    let categoryQuery = supabase.from('categories').select('id').eq('user_id', userId).eq('kind', kind)
+    const categoryQuery = supabase.from('categories').select('id').eq('user_id', userId).eq('kind', kind)
     const { data: categories } = await categoryQuery.limit(1)
 
     if (!accountsData || accountsData.length === 0) {

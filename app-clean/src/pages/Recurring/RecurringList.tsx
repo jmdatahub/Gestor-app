@@ -85,7 +85,7 @@ export default function RecurringList() {
 
     try {
       // Calculate initial next_occurrence
-      let nextOccurrence = new Date(startDate)
+      const nextOccurrence = new Date(startDate)
       
       if (frequency === 'weekly') {
         const currentDay = nextOccurrence.getDay()

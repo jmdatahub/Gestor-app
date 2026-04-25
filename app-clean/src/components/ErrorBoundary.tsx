@@ -34,10 +34,10 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.props.fallback) return this.props.fallback
 
     return (
-      <div className="page-container fade-in">
+      <div className="page-container fade-in" role="alert" aria-live="assertive">
         <div className="panel" style={{ maxWidth: 560, margin: '40px auto' }}>
           <div className="panel-body" style={{ textAlign: 'center', padding: 32 }}>
-            <div style={{ display: 'inline-flex', padding: 16, borderRadius: '50%', background: 'var(--surface-2)', marginBottom: 16 }}>
+            <div style={{ display: 'inline-flex', padding: 16, borderRadius: '50%', background: 'var(--surface-2)', marginBottom: 16 }} aria-hidden="true">
               <AlertTriangle size={32} className="text-danger" />
             </div>
             <h2 style={{ marginBottom: 8 }}>Ha ocurrido un error</h2>
@@ -45,11 +45,11 @@ export class ErrorBoundary extends Component<Props, State> {
               {error.message || 'No hemos podido cargar esta sección.'}
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-              <button className="btn btn-primary" onClick={this.handleReset}>
-                <RefreshCw size={16} />
+              <button className="btn btn-primary" onClick={this.handleReset} type="button">
+                <RefreshCw size={16} aria-hidden="true" />
                 <span style={{ marginLeft: 6 }}>Reintentar</span>
               </button>
-              <button className="btn btn-secondary" onClick={() => window.location.reload()}>
+              <button className="btn btn-secondary" onClick={() => window.location.reload()} type="button">
                 Recargar página
               </button>
             </div>

@@ -23,7 +23,7 @@ const DEFAULT_METHODS = [
 
 // Get all payment methods for user
 export async function getPaymentMethods(userId: string, organizationId?: string | null): Promise<PaymentMethod[]> {
-  let query = supabase
+  const query = supabase
     .from('payment_methods')
     .select('*')
     .eq('user_id', userId)

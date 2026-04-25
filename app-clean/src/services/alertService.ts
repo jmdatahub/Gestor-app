@@ -1,6 +1,8 @@
 import { supabase } from '../lib/supabaseClient'
 
 // Types
+export type AlertSeverity = 'info' | 'warning' | 'danger'
+
 export interface Alert {
   id: string
   user_id: string
@@ -8,6 +10,9 @@ export interface Alert {
   title: string
   message: string
   is_read: boolean
+  severity: AlertSeverity
+  snoozed_until: string | null
+  action_url: string | null
   metadata: Record<string, unknown> | null
   created_at: string
 }
@@ -17,15 +22,19 @@ export interface CreateAlertInput {
   type: Alert['type']
   title: string
   message: string
+  severity?: AlertSeverity
+  action_url?: string | null
   metadata?: Record<string, unknown> | null
 }
 
-// Get all alerts for user
+// Get all alerts for user (excluding currently snoozed)
 export async function getAlerts(userId: string): Promise<Alert[]> {
+  const now = new Date().toISOString()
   const { data, error } = await supabase
     .from('alerts')
     .select('*')
     .eq('user_id', userId)
+    .or(`snoozed_until.is.null,snoozed_until.lte.${now}`)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -35,13 +44,15 @@ export async function getAlerts(userId: string): Promise<Alert[]> {
   return data || []
 }
 
-// Get unread count
+// Get unread count (excluding snoozed)
 export async function getUnreadCount(userId: string): Promise<number> {
+  const now = new Date().toISOString()
   const { count, error } = await supabase
     .from('alerts')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('is_read', false)
+    .or(`snoozed_until.is.null,snoozed_until.lte.${now}`)
 
   if (error) {
     console.error('Error counting unread alerts:', error)
@@ -56,7 +67,8 @@ export async function createAlert(input: CreateAlertInput): Promise<Alert> {
     .from('alerts')
     .insert([{
       ...input,
-      is_read: false
+      is_read: false,
+      severity: input.severity ?? 'info',
     }])
     .select()
     .single()
@@ -68,10 +80,10 @@ export async function createAlert(input: CreateAlertInput): Promise<Alert> {
   return data
 }
 
-// Check if similar alert exists recently (to avoid duplicates)
+// Check if similar alert exists recently (deduplication)
 export async function hasRecentAlert(
-  userId: string, 
-  type: string, 
+  userId: string,
+  type: string,
   daysBack: number = 3
 ): Promise<boolean> {
   const date = new Date()
@@ -90,6 +102,31 @@ export async function hasRecentAlert(
     return false
   }
   return (data?.length || 0) > 0
+}
+
+// Check if similar alert for a specific entity exists recently
+export async function hasRecentAlertForEntity(
+  userId: string,
+  type: string,
+  entityKey: string,
+  entityId: string,
+  daysBack: number = 3
+): Promise<boolean> {
+  const date = new Date()
+  date.setDate(date.getDate() - daysBack)
+
+  const { data, error } = await supabase
+    .from('alerts')
+    .select('id, metadata')
+    .eq('user_id', userId)
+    .eq('type', type)
+    .gte('created_at', date.toISOString())
+
+  if (error) return false
+
+  return (data || []).some(
+    (a) => (a.metadata as Record<string, unknown>)?.[entityKey] === entityId
+  )
 }
 
 // Mark as read
@@ -119,6 +156,32 @@ export async function markAllAsRead(userId: string): Promise<void> {
   }
 }
 
+// Snooze an alert until a future datetime
+export async function snoozeAlert(alertId: string, until: Date): Promise<void> {
+  const { error } = await supabase
+    .from('alerts')
+    .update({ snoozed_until: until.toISOString() })
+    .eq('id', alertId)
+
+  if (error) {
+    console.error('Error snoozing alert:', error)
+    throw error
+  }
+}
+
+// Remove snooze (wake up alert immediately)
+export async function unsnoozeAlert(alertId: string): Promise<void> {
+  const { error } = await supabase
+    .from('alerts')
+    .update({ snoozed_until: null })
+    .eq('id', alertId)
+
+  if (error) {
+    console.error('Error unsnoozing alert:', error)
+    throw error
+  }
+}
+
 // Delete alert
 export async function deleteAlert(alertId: string): Promise<void> {
   const { error } = await supabase
@@ -129,6 +192,35 @@ export async function deleteAlert(alertId: string): Promise<void> {
   if (error) {
     console.error('Error deleting alert:', error)
     throw error
+  }
+}
+
+// Get alert statistics for a user
+export async function getAlertStats(userId: string): Promise<{
+  total: number
+  unread: number
+  bySeverity: { info: number; warning: number; danger: number }
+  thisWeek: number
+}> {
+  const now = new Date().toISOString()
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data } = await supabase
+    .from('alerts')
+    .select('severity, is_read, created_at, snoozed_until')
+    .eq('user_id', userId)
+    .or(`snoozed_until.is.null,snoozed_until.lte.${now}`)
+
+  const alerts = data || []
+  return {
+    total: alerts.length,
+    unread: alerts.filter(a => !a.is_read).length,
+    bySeverity: {
+      info: alerts.filter(a => a.severity === 'info').length,
+      warning: alerts.filter(a => a.severity === 'warning').length,
+      danger: alerts.filter(a => a.severity === 'danger').length,
+    },
+    thisWeek: alerts.filter(a => a.created_at >= weekAgo).length,
   }
 }
 
@@ -154,4 +246,44 @@ export function getAlertTypeLabel(type: Alert['type']): string {
     case 'debt_due': return 'Deuda'
     default: return 'General'
   }
+}
+
+// Severity helpers
+export function getSeverityColor(severity: AlertSeverity): string {
+  switch (severity) {
+    case 'danger': return '#ef4444'
+    case 'warning': return '#f59e0b'
+    case 'info': return '#3b82f6'
+  }
+}
+
+export function getSeverityLabel(severity: AlertSeverity): string {
+  switch (severity) {
+    case 'danger': return 'Crítico'
+    case 'warning': return 'Advertencia'
+    case 'info': return 'Información'
+  }
+}
+
+export function getSeverityOrder(severity: AlertSeverity): number {
+  switch (severity) {
+    case 'danger': return 0
+    case 'warning': return 1
+    case 'info': return 2
+  }
+}
+
+// Snooze duration presets
+export const SNOOZE_PRESETS = [
+  { label: '1 hora', hours: 1 },
+  { label: '8 horas', hours: 8 },
+  { label: '1 día', hours: 24 },
+  { label: '3 días', hours: 72 },
+  { label: '1 semana', hours: 168 },
+] as const
+
+export function getSnoozeUntil(hours: number): Date {
+  const d = new Date()
+  d.setTime(d.getTime() + hours * 60 * 60 * 1000)
+  return d
 }

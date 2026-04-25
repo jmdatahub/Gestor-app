@@ -137,7 +137,7 @@ export async function getMonthlyCategoryBreakdown(
   // Aggregate by category
   const categoryTotals: Record<string, number> = {}
   for (const m of (movements || [])) {
-    // @ts-ignore
+    // @ts-expect-error supabase join sometimes types `category` as an array even though the FK is single
     const cat = m.category?.name || 'Sin categoría'
     categoryTotals[cat] = (categoryTotals[cat] || 0) + m.amount
   }
@@ -572,7 +572,7 @@ export async function getFinancialDistribution(
 
   // 2. Get Investments Value (Only Personal for now)
   let investmentsAssetsValue = 0
-  let investmentSubItems: { [key: string]: number } = {}
+  const investmentSubItems: { [key: string]: number } = {}
   let goalsTotal = 0
   let goalsSubItems: FinancialDistributionSubItem[] = []
 

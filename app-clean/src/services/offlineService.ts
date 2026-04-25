@@ -127,22 +127,25 @@ export async function syncPendingChanges(): Promise<{ success: number; failed: n
       let error: any = null
       
       switch (change.operation) {
-        case 'insert':
+        case 'insert': {
           const insertResult = await supabase.from(change.table).insert(change.data)
           error = insertResult.error
           break
-        case 'update':
+        }
+        case 'update': {
           const updateResult = await supabase.from(change.table)
             .update(change.data)
             .eq('id', change.data.id)
           error = updateResult.error
           break
-        case 'delete':
+        }
+        case 'delete': {
           const deleteResult = await supabase.from(change.table)
             .delete()
             .eq('id', change.data.id)
           error = deleteResult.error
           break
+        }
       }
       
       if (error) throw error

@@ -92,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // --- 5. Traer categorías para agrupar byCategory ---
     const categoryIds = [...new Set(allMovements.map(m => m.category_id).filter(Boolean))]
-    let categoryMap: Record<string, { name: string; type: string }> = {}
+    const categoryMap: Record<string, { name: string; type: string }> = {}
 
     if (categoryIds.length > 0) {
       const { data: cats } = await supabase
