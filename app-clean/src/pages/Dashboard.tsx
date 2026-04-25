@@ -1,465 +1,444 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { fetchAccountsSummary, type AccountWithBalance } from '../services/accountService'
-import { getAccountBalancesSummary, getFinancialDistribution, type FinancialDistribution } from '../services/summaryService'
-import { fetchMonthlyMovements, calculateMonthlySummary, getPendingClassificationCount } from '../services/movementService'
 
 import { warmup as warmupCache } from '../services/catalogCache'
-import { generatePendingMovementsForUser, getPendingMovementsCount } from '../services/recurringService'
-import { ArrowUpDown, PiggyBank, TrendingUp, Wallet, Plus, ArrowRight, Layers, Bell, Clock } from 'lucide-react'
+import {
+  ArrowRight,
+  Bell,
+  Clock,
+  Layers,
+  Plus,
+  PiggyBank,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  Activity,
+  Sparkles,
+  CreditCard,
+  LineChart,
+  ReceiptText,
+} from 'lucide-react'
 import { useI18n } from '../hooks/useI18n'
 import { useSettings } from '../context/SettingsContext'
 import { SkeletonDashboard } from '../components/Skeleton'
-import { NetWorthInfo, NetWorthChart, useNetWorth } from '../components/ChartSection'
+
+import { useAccountsSummary, useFinancialDistribution, useTopAccounts } from '../hooks/queries/useDashboardAccounts'
+import { useMonthlyMovementsSummary, usePendingClassificationCount, usePendingRecurringCount } from '../hooks/queries/useDashboardMovements'
+import { useMonthlyTrend, useDailySpending, useMonthTopCategories } from '../hooks/queries/useDashboardTrend'
 
 import { useWorkspace } from '../context/WorkspaceContext'
 import { PendingInvitations } from '../components/invitations/PendingInvitations'
 import { BudgetWidget } from '../components/BudgetWidget'
 import { SubscriptionAlertsWidget } from '../components/domain/SubscriptionAlertsWidget'
+import { UiBanner } from '../components/ui/UiBanner'
 
-interface AccountSummary {
-  totalBalance: number
-  accountCount: number
-}
+import { StatCard } from '../components/shared/StatCard'
+import { Panel } from '../components/shared/Panel'
+import { EmptyState } from '../components/shared/EmptyState'
+import { AreaTrendChart } from '../components/charts/AreaTrendChart'
+import { HeatmapCalendar } from '../components/charts/HeatmapCalendar'
+import { DonutChart } from '../components/charts/DonutChart'
+import { CategoryBarList } from '../components/charts/CategoryBarList'
+import { HealthGauge } from '../components/charts/HealthGauge'
 
-interface MonthlySummary {
-  income: number
-  expense: number
-  balance: number
+const WORKSPACE_ROLES: Record<string, { label: string; className: string }> = {
+  owner: { label: 'Propietario', className: 'pill pill--violet' },
+  admin: { label: 'Admin', className: 'pill pill--primary' },
+  member: { label: 'Miembro', className: 'pill' },
+  viewer: { label: 'Visor', className: 'pill' },
 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const { settings } = useSettings()
   const { currentWorkspace, workspaces, isLoading: workspaceLoading, userRole, switchWorkspace, refreshWorkspaces } = useWorkspace()
-  const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [accountsSummary, setAccountsSummary] = useState<AccountSummary>({ totalBalance: 0, accountCount: 0 })
-  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary>({ income: 0, expense: 0, balance: 0 })
-  const [financialOverview, setFinancialOverview] = useState<FinancialDistribution | null>(null)
-  const [topAccounts, setTopAccounts] = useState<AccountWithBalance[]>([])
-  const [pendingCount, setPendingCount] = useState(0)
-  const [uncategorizedCount, setUncategorizedCount] = useState(0)
 
-  // Initial load when workspace changes
+  const workspaceId = currentWorkspace?.id || null
+  const locale = language === 'es' ? 'es-ES' : 'en-US'
+
   useEffect(() => {
-    if (!workspaceLoading) {
-      loadDashboardData()
-    }
-  }, [settings.rollupAccountsByParent, currentWorkspace?.id, workspaceLoading])
-  
-  // Auto-refresh every 5 minutes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!loading) {
-        loadDashboardData()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUserEmail(user.email || null)
+        setUserId(user.id)
+        warmupCache(user.id, workspaceId)
       }
-    }, 5 * 60 * 1000) // 5 minutes
-    
-    return () => clearInterval(interval)
-  }, [loading])
-  
-  // Handler for when invitation is accepted - refresh workspaces and dashboard
+    })
+  }, [workspaceId])
+
+  const { data: accountsSummary = { totalBalance: 0, accountCount: 0 }, isLoading: isAccountsLoading } = useAccountsSummary(userId, workspaceId)
+  const { data: monthlySummary = { income: 0, expense: 0, balance: 0 }, isLoading: isMonthlyLoading } = useMonthlyMovementsSummary(userId, workspaceId)
+  const { data: financialOverview, isLoading: isFinancialLoading } = useFinancialDistribution(userId, workspaceId)
+  const { data: topAccounts = [], isLoading: isTopAccountsLoading } = useTopAccounts(userId, workspaceId, settings.rollupAccountsByParent)
+  const { data: pendingCount = 0 } = usePendingRecurringCount(userId)
+  const { data: uncategorizedCount = 0 } = usePendingClassificationCount(userId, workspaceId)
+
+  const { data: trendData = [] } = useMonthlyTrend(userId, workspaceId, 6)
+  const { data: dailyData = [] } = useDailySpending(userId, workspaceId, 126)
+
+  const today = new Date()
+  const { data: categorySlices = [] } = useMonthTopCategories(userId, workspaceId, today.getFullYear(), today.getMonth() + 1, 'expense')
+
+  const loading = isAccountsLoading || isMonthlyLoading || isFinancialLoading || isTopAccountsLoading || !userId
+
   const handleInvitationAccepted = async () => {
     await refreshWorkspaces()
-    await loadDashboardData()
   }
 
-  const loadDashboardData = async () => {
-    // Only set loading if it's an initial fetch or workspace switch, to avoid flicker on minor updates if possible
-    // But safely:
-    setLoading(true)
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    
-    // Set user info for invitations
-    setUserEmail(user.email || null)
-    setUserId(user.id)
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount)
 
-    try {
-      const workspaceId = currentWorkspace?.id || null // Org ID or NULL for personal
-
-      // Warmup catalog cache for faster subsequent loads (invalidate if workspace changed?)
-      warmupCache(user.id, workspaceId)
-
-      const [accounts, movements, accountList, financialData] = await Promise.all([
-        fetchAccountsSummary(user.id, workspaceId),
-        fetchMonthlyMovements(user.id, workspaceId),
-        getAccountBalancesSummary(user.id, { includeChildrenRollup: settings.rollupAccountsByParent }, workspaceId),
-        getFinancialDistribution(user.id, workspaceId)
-      ])
-      
-      // Generate pending movements from recurring rules (runs in background)
-      generatePendingMovementsForUser(user.id).then(generated => {
-        if (generated > 0) {
-          console.log(`Generated ${generated} pending movements from recurring rules`)
-        }
-        // Update pending count
-        getPendingMovementsCount(user.id).then(count => setPendingCount(count))
-      }).catch(err => console.error('Error generating recurring:', err))
-
-      // Update uncategorized count
-      getPendingClassificationCount(user.id, workspaceId).then(count => setUncategorizedCount(count)).catch(err => console.error(err))
-
-      if (accounts) {
-        setAccountsSummary(accounts)
-      }
-
-      if (financialData) {
-        setFinancialOverview(financialData)
-      }
-
-      if (accountList) {
-        // Sort by balance desc and take top 5
-        const sorted = [...accountList].sort((a, b) => b.balance - a.balance).slice(0, 5)
-        setTopAccounts(sorted)
-      }
-
-      const summary = calculateMonthlySummary(movements || [])
-      setMonthlySummary(summary)
-
-    } catch (error) {
-      console.error('Error loading dashboard:', error)
-    } finally {
-      setLoading(false)
+  const { incomeTrend, expenseTrend, savingsRate, healthScore, healthDescription } = useMemo(() => {
+    if (!trendData || trendData.length < 2) {
+      return { incomeTrend: 0, expenseTrend: 0, savingsRate: 0, healthScore: 0, healthDescription: 'Añade movimientos para calcular tu salud financiera.' }
     }
-  }
+    const [prev, current] = [trendData[trendData.length - 2], trendData[trendData.length - 1]]
+    const incomeTrend = prev.income > 0 ? ((current.income - prev.income) / prev.income) * 100 : 0
+    const expenseTrend = prev.expense > 0 ? ((current.expense - prev.expense) / prev.expense) * 100 : 0
+    const savingsRate = current.income > 0 ? ((current.income - current.expense) / current.income) * 100 : 0
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount)
-  }
+    let score = 50
+    if (savingsRate > 30) score += 25
+    else if (savingsRate > 15) score += 15
+    else if (savingsRate > 5) score += 5
+    else if (savingsRate < 0) score -= 25
 
-  // Financial Overview Logic (Lifted State)
-  const { 
-      chartType, setChartType, 
-      drillLevel, setDrillLevel, 
-      currentData, currentTotal, 
-      activeConfig 
-  } = useNetWorth(financialOverview)
+    if (expenseTrend < -5) score += 10
+    else if (expenseTrend > 10) score -= 10
+
+    if (incomeTrend > 5) score += 10
+    else if (incomeTrend < -10) score -= 10
+
+    score = Math.max(0, Math.min(100, score))
+    const desc = savingsRate >= 20
+      ? 'Estás ahorrando de forma excelente este mes.'
+      : savingsRate >= 10
+        ? 'Buen ritmo de ahorro, sigue así.'
+        : savingsRate >= 0
+          ? 'Tu balance es positivo pero el margen es ajustado.'
+          : 'Este mes estás gastando más de lo que ingresas.'
+
+    return { incomeTrend, expenseTrend, savingsRate, healthScore: score, healthDescription: desc }
+  }, [trendData])
+
+  const incomeSparkline = useMemo(() => trendData.map(t => t.income), [trendData])
+  const expenseSparkline = useMemo(() => trendData.map(t => t.expense), [trendData])
+  const netSparkline = useMemo(() => trendData.map(t => t.net), [trendData])
+
+  const monthLabel = useMemo(() => {
+    const m = new Date().toLocaleString(locale, { month: 'long' })
+    return m.charAt(0).toUpperCase() + m.slice(1)
+  }, [locale])
+
+  const pieCenterTotal = useMemo(
+    () => categorySlices.reduce((sum, c) => sum + c.value, 0),
+    [categorySlices],
+  )
 
   if (loading || workspaceLoading) {
     return <SkeletonDashboard />
   }
 
+  const roleMeta = userRole ? WORKSPACE_ROLES[userRole] : null
+
   return (
-    <div className="page-container">
-      {/* Header with Workspace Indicator */}
-      <div className="page-header">
+    <div className="page-container fade-in">
+      <header className="page-header" style={{ alignItems: 'flex-start' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
             <h1 className="page-title" style={{ margin: 0 }}>
               {currentWorkspace ? currentWorkspace.name : t('dashboard.title')}
             </h1>
-            {currentWorkspace && userRole && (
-              <span style={{
-                padding: '4px 10px',
-                fontSize: '11px',
-                fontWeight: 600,
-                borderRadius: '20px',
-                background: userRole === 'owner' ? 'rgba(139, 92, 246, 0.2)' : 
-                           userRole === 'admin' ? 'rgba(59, 130, 246, 0.2)' : 
-                           'rgba(100, 116, 139, 0.2)',
-                color: userRole === 'owner' ? '#a78bfa' : 
-                       userRole === 'admin' ? '#60a5fa' : 
-                       '#94a3b8',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                {userRole === 'owner' ? 'Propietario' : 
-                 userRole === 'admin' ? 'Administrador' : 
-                 userRole === 'member' ? 'Miembro' : 'Visor'}
-              </span>
-            )}
+            {roleMeta && <span className={roleMeta.className}>{roleMeta.label}</span>}
           </div>
           <p className="page-subtitle">
-            {currentWorkspace 
-              ? `Estadísticas financieras de ${currentWorkspace.name}`
-              : t('dashboard.subtitle')
-            }
+            {currentWorkspace
+              ? `Vista financiera de ${currentWorkspace.name}`
+              : t('dashboard.subtitle')}
           </p>
         </div>
-        
-        {/* Workspace Switcher */}
+
         {workspaces.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <select
               value={currentWorkspace?.id || 'personal'}
               onChange={(e) => switchWorkspace(e.target.value === 'personal' ? null : e.target.value)}
-              style={{
-                padding: '8px 12px',
-                paddingRight: '32px',
-                background: 'var(--bg-sidebar)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '8px',
-                color: '#f8fafc',
-                fontSize: '14px',
-                fontWeight: 500,
-                cursor: 'pointer',
-                appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 8px center'
-              }}
+              className="ui-control"
+              style={{ maxWidth: 220 }}
             >
               <option value="personal">🏠 Personal</option>
               {workspaces.map(ws => (
-                <option key={ws.org_id} value={ws.org_id}>
-                  🏢 {ws.organization.name}
-                </option>
+                <option key={ws.org_id} value={ws.org_id}>🏢 {ws.organization.name}</option>
               ))}
             </select>
           </div>
         )}
-      </div>
+      </header>
 
-      {/* Pending Invitations Banner */}
-      <PendingInvitations 
-        userEmail={userEmail} 
+      <PendingInvitations
+        userEmail={userEmail}
         userId={userId}
         onInvitationAccepted={handleInvitationAccepted}
       />
 
-      {/* Subscription Alerts Widget */}
       {userId && (
         <div className="mb-6">
           <SubscriptionAlertsWidget userId={userId} organizationId={currentWorkspace?.id} />
         </div>
       )}
 
-      {/* Pending Recurring Movements Banner */}
       {pendingCount > 0 && (
-        <div 
-          style={{
-            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.1) 100%)',
-            border: '1px solid rgba(245, 158, 11, 0.3)',
-            borderRadius: '12px',
-            padding: '16px 20px',
-            marginBottom: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: 'rgba(245, 158, 11, 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Clock size={20} style={{ color: '#f59e0b' }} />
-            </div>
-            <div>
-              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                {pendingCount} {pendingCount === 1 ? 'movimiento pendiente' : 'movimientos pendientes'}
-              </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                Generados automáticamente por tus reglas recurrentes
-              </div>
-            </div>
-          </div>
-          <button 
-            className="btn btn-warning"
-            onClick={() => navigate('/app/recurring/pending')}
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            <Bell size={16} />
-            Revisar
-          </button>
-        </div>
+        <UiBanner
+          type="warning"
+          icon={<Clock size={20} />}
+          title={`${pendingCount} ${pendingCount === 1 ? 'movimiento pendiente' : 'movimientos pendientes'}`}
+          description="Generados automáticamente por tus reglas recurrentes"
+          action={
+            <button className="btn btn-warning" onClick={() => navigate('/app/recurring/pending')} style={{ whiteSpace: 'nowrap' }}>
+              <Bell size={16} /> Revisar
+            </button>
+          }
+        />
       )}
 
-      {/* Uncategorized Movements Banner */}
       {uncategorizedCount > 0 && (
-        <div 
-          style={{
-            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(248, 113, 113, 0.1) 100%)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: '12px',
-            padding: '16px 20px',
-            marginBottom: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: 'rgba(239, 68, 68, 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Bell size={20} style={{ color: '#ef4444' }} />
-            </div>
-            <div>
-              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                {uncategorizedCount} {uncategorizedCount === 1 ? 'movimiento sin clasificar' : 'movimientos sin clasificar'}
-              </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                Faltan por asignar a una categoría específica o están marcados como "Otros".
-              </div>
-            </div>
-          </div>
-          <button 
-            className="btn"
-            style={{
-              backgroundColor: '#ef4444',
-              color: 'white',
-              border: 'none',
-              whiteSpace: 'nowrap'
-            }}
-            onClick={() => navigate('/app/movements')}
-          >
-            Clasificar
-          </button>
-        </div>
+        <UiBanner
+          type="danger"
+          icon={<Bell size={20} />}
+          title={`${uncategorizedCount} ${uncategorizedCount === 1 ? 'movimiento sin clasificar' : 'movimientos sin clasificar'}`}
+          description="Asígnales una categoría para mejorar tus estadísticas."
+          action={
+            <button className="btn btn-danger" style={{ whiteSpace: 'nowrap' }} onClick={() => navigate('/app/movements')}>
+              Clasificar
+            </button>
+          }
+        />
       )}
 
-      {/* KPI Grid */}
-      <div className="kpi-grid mb-6">
-        <div className="kpi-card">
-          <div className="kpi-icon kpi-icon-primary">
-            <Wallet size={24} />
-          </div>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('dashboard.balance')}</div>
-            <div className="kpi-value">{formatCurrency(accountsSummary.totalBalance)}</div>
-          </div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-icon kpi-icon-success">
-            <TrendingUp size={24} />
-          </div>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('dashboard.income')} ({(() => { const m = new Date().toLocaleString('es-ES', { month: 'long' }); return m.charAt(0).toUpperCase() + m.slice(1); })()})</div>
-            <div className="kpi-value" style={{ color: 'var(--success)' }}>{formatCurrency(monthlySummary.income)}</div>
-          </div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-icon kpi-icon-danger">
-            <ArrowUpDown size={24} />
-          </div>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('dashboard.expenses')} ({(() => { const m = new Date().toLocaleString('es-ES', { month: 'long' }); return m.charAt(0).toUpperCase() + m.slice(1); })()})</div>
-            <div className="kpi-value" style={{ color: 'var(--danger)' }}>{formatCurrency(monthlySummary.expense)}</div>
-          </div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-icon kpi-icon-warning">
-            <PiggyBank size={24} />
-          </div>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('accounts.title')} ({t('dashboard.quickActions')})</div>
-            <div className="kpi-value">{accountsSummary.accountCount}</div>
-          </div>
-        </div>
+      <div className="stat-grid stat-grid--4" style={{ marginBottom: 20 }}>
+        <StatCard
+          label={t('dashboard.balance')}
+          value={formatCurrency(accountsSummary.totalBalance)}
+          icon={<Wallet size={18} />}
+          tone="primary"
+          helper={`${accountsSummary.accountCount} ${accountsSummary.accountCount === 1 ? 'cuenta' : 'cuentas'}`}
+          sparkline={netSparkline}
+        />
+        <StatCard
+          label={`${t('dashboard.income')} · ${monthLabel}`}
+          value={formatCurrency(monthlySummary.income)}
+          icon={<TrendingUp size={18} />}
+          tone="success"
+          trend={{ value: incomeTrend }}
+          sparkline={incomeSparkline}
+        />
+        <StatCard
+          label={`${t('dashboard.expenses')} · ${monthLabel}`}
+          value={formatCurrency(monthlySummary.expense)}
+          icon={<TrendingDown size={18} />}
+          tone="danger"
+          trend={{ value: expenseTrend, invert: true }}
+          sparkline={expenseSparkline}
+        />
+        <StatCard
+          label="Ahorro neto · mes"
+          value={formatCurrency(monthlySummary.income - monthlySummary.expense)}
+          icon={<PiggyBank size={18} />}
+          tone={monthlySummary.income - monthlySummary.expense >= 0 ? 'neutral' : 'warning'}
+          helper={`${savingsRate.toFixed(0)}% tasa de ahorro`}
+          sparkline={netSparkline}
+        />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
-        {/* Quick Actions */}
-        <div className="section-card">
-          <h2 className="section-title">{t('dashboard.quickActions')}</h2>
-          <div className="flex gap-3 flex-wrap">
-            <button className="btn btn-primary" onClick={() => navigate('/app/movements')}>
-              <Plus size={18} />
-              {t('common.create')}
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/app/accounts')}>
-              <Wallet size={18} />
-              {t('accounts.title')}
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/app/summary')}>
-              <TrendingUp size={18} />
-              {t('nav.summary')}
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/app/settings')}>
-               Ajustes
-            </button>
-          </div>
+      <div className="dash-grid" style={{ marginBottom: 20 }}>
+        <div className="col-8">
+          <Panel
+            title="Evolución financiera"
+            subtitle="Ingresos vs gastos últimos 6 meses"
+            icon={<LineChart size={16} style={{ color: 'var(--primary)' }} />}
+            actions={
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/app/summary')}>
+                Resumen completo <ArrowRight size={14} />
+              </button>
+            }
+          >
+            {trendData.length > 0 ? (
+              <AreaTrendChart data={trendData} showNet height={280} locale={locale} />
+            ) : (
+              <EmptyState
+                icon={<LineChart size={28} />}
+                title="Aún no hay historial"
+                description="Cuando registres movimientos verás aquí la evolución mensual."
+              />
+            )}
+          </Panel>
         </div>
 
-        {/* Top Accounts */}
-        <div className="section-card !p-10">
-           <div className="flex justify-between items-center" style={{ marginBottom: '1rem' }}>
-            <h2 className="section-title" style={{ margin: 0 }}>Top Cuentas</h2>
-            <button className="btn btn-ghost" onClick={() => navigate('/app/summary')}>
-              Ver todas
-              <ArrowRight size={16} />
-            </button>
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {topAccounts.length === 0 ? (
-               <p className="text-muted">No hay cuentas</p>
-            ) : (
-              topAccounts.map(acc => (
-                <div key={acc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.875rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)' }} />
-                    <span style={{ color: 'var(--text-primary)' }}>{acc.name}</span>
-                    {settings.rollupAccountsByParent && (acc as any).child_ids && (acc as any).child_ids.length > 0 && (
-                        <Layers size={12} style={{ opacity: 0.5 }} />
-                    )}
-                  </div>
-                  <span style={{ fontWeight: 600, color: acc.balance >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
-                    {formatCurrency(acc.balance)}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+        <div className="col-4">
+          <Panel title="Salud financiera" subtitle="Basado en tus últimos 30 días" icon={<Activity size={16} style={{ color: 'var(--success)' }} />}>
+            <HealthGauge score={healthScore} description={healthDescription} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+              <div className="cat-row" style={{ padding: '6px 0' }}>
+                <span className="cat-row__name">Tasa de ahorro</span>
+                <span className="cat-row__amount" style={{ color: savingsRate >= 15 ? 'var(--success)' : savingsRate >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
+                  {savingsRate.toFixed(1)}%
+                </span>
+              </div>
+              <div className="cat-row" style={{ padding: '6px 0' }}>
+                <span className="cat-row__name">Variación gastos</span>
+                <span className="cat-row__amount" style={{ color: expenseTrend <= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                  {expenseTrend > 0 ? '+' : ''}{expenseTrend.toFixed(1)}%
+                </span>
+              </div>
+              <div className="cat-row" style={{ padding: '6px 0' }}>
+                <span className="cat-row__name">Variación ingresos</span>
+                <span className="cat-row__amount" style={{ color: incomeTrend >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                  {incomeTrend > 0 ? '+' : ''}{incomeTrend.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+          </Panel>
         </div>
-        
-        {/* Budget Progress Section */}
-        {userId && (
-          <BudgetWidget userId={userId} />
+
+        <div className="col-5">
+          <Panel
+            title={`Gastos · ${monthLabel}`}
+            subtitle="Distribución por categoría"
+            icon={<ReceiptText size={16} style={{ color: 'var(--danger)' }} />}
+            actions={
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/app/insights')}>
+                Insights <ArrowRight size={14} />
+              </button>
+            }
+          >
+            {categorySlices.length > 0 ? (
+              <>
+                <DonutChart
+                  data={categorySlices.slice(0, 7)}
+                  centerLabel="Total"
+                  centerValue={formatCurrency(pieCenterTotal)}
+                  locale={locale}
+                />
+                <div style={{ marginTop: 12 }}>
+                  <CategoryBarList data={categorySlices} max={5} locale={locale} />
+                </div>
+              </>
+            ) : (
+              <EmptyState icon={<ReceiptText size={28} />} title="Sin gastos este mes" description="Cuando registres gastos, los verás aquí desglosados." compact />
+            )}
+          </Panel>
+        </div>
+
+        <div className="col-7">
+          <Panel
+            title="Patrón de gasto"
+            subtitle="Intensidad diaria últimas 18 semanas"
+            icon={<Sparkles size={16} style={{ color: 'var(--chart-violet)' }} />}
+          >
+            {dailyData.length > 0 ? (
+              <HeatmapCalendar data={dailyData} weeks={18} locale={locale} tone="danger" />
+            ) : (
+              <EmptyState icon={<Sparkles size={28} />} title="Sin datos de gasto" compact />
+            )}
+          </Panel>
+        </div>
+
+        <div className="col-6">
+          <Panel
+            title="Top cuentas"
+            subtitle="Por balance disponible"
+            icon={<CreditCard size={16} style={{ color: 'var(--primary)' }} />}
+            actions={
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/app/accounts')}>
+                Ver todas <ArrowRight size={14} />
+              </button>
+            }
+          >
+            {topAccounts.length === 0 ? (
+              <EmptyState icon={<Wallet size={28} />} title="Sin cuentas" description="Crea tu primera cuenta para empezar." compact />
+            ) : (
+              <div>
+                {topAccounts.map(acc => (
+                  <div className="cat-row" key={acc.id}>
+                    <span className="cat-row__dot" style={{ background: (acc as any).color || 'var(--primary)' }} />
+                    <span className="cat-row__name">
+                      {acc.name}
+                      {settings.rollupAccountsByParent && (acc as any).child_ids && (acc as any).child_ids.length > 0 && (
+                        <Layers size={12} style={{ opacity: 0.5, marginLeft: 6, verticalAlign: 'middle' }} />
+                      )}
+                    </span>
+                    <span className="cat-row__amount" style={{ color: acc.balance >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
+                      {formatCurrency(acc.balance)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <div className="col-6">
+          <Panel title="Acciones rápidas" icon={<Plus size={16} style={{ color: 'var(--primary)' }} />}>
+            <div className="flex gap-3 flex-wrap">
+              <button className="btn btn-primary" onClick={() => navigate('/app/movements')}>
+                <Plus size={18} /> Nuevo movimiento
+              </button>
+              <button className="btn btn-secondary" onClick={() => navigate('/app/accounts')}>
+                <Wallet size={18} /> {t('accounts.title')}
+              </button>
+              <button className="btn btn-secondary" onClick={() => navigate('/app/summary')}>
+                <TrendingUp size={18} /> {t('nav.summary')}
+              </button>
+              <button className="btn btn-secondary" onClick={() => navigate('/app/insights')}>
+                <LineChart size={18} /> Insights
+              </button>
+              <button className="btn btn-secondary" onClick={() => navigate('/app/settings')}>Ajustes</button>
+            </div>
+          </Panel>
+
+          {userId && <div style={{ marginTop: 20 }}><BudgetWidget userId={userId} /></div>}
+        </div>
+
+        {financialOverview && (
+          <div className="col-12">
+            <Panel
+              title="Distribución de patrimonio"
+              subtitle="Reparto entre liquidez, ahorro, inversión y deuda"
+              icon={<PiggyBank size={16} style={{ color: 'var(--chart-teal)' }} />}
+            >
+              <NetWorthSection overview={financialOverview} locale={locale} />
+            </Panel>
+          </div>
         )}
       </div>
+    </div>
+  )
+}
 
-      {/* 
-         Bottom Section: Net Worth Split 
-      */}
-      {financialOverview && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
-            <NetWorthInfo 
-                drillLevel={drillLevel}
-                setDrillLevel={setDrillLevel}
-                currentData={currentData}
-                currentTotal={currentTotal}
-                formatCurrency={formatCurrency}
-            />
+function NetWorthSection({ overview, locale }: { overview: any; locale: string }) {
+  const slices = (overview?.distribution ?? [])
+    .filter((d: any) => d.value > 0)
+    .map((d: any) => ({ name: d.label ?? d.name, value: d.value, color: d.color }))
 
-            <NetWorthChart 
-                drillLevel={drillLevel}
-                setDrillLevel={setDrillLevel}
-                currentData={currentData}
-                currentTotal={currentTotal}
-                formatCurrency={formatCurrency}
-                chartType={chartType}
-                setChartType={setChartType}
-                activeConfig={activeConfig}
-            />
-        </div>
-      )}
+  const total = slices.reduce((s: number, d: any) => s + d.value, 0)
+  const fmt = (n: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 360px) 1fr', gap: 24, alignItems: 'center' }}>
+      <DonutChart
+        data={slices}
+        centerLabel="Patrimonio"
+        centerValue={fmt(total)}
+        height={260}
+        locale={locale}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <CategoryBarList data={slices} max={8} locale={locale} />
+      </div>
     </div>
   )
 }

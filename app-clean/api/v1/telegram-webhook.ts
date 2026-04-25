@@ -4,7 +4,15 @@ import crypto from 'crypto'
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-const telegramToken = process.env.TELEGRAM_BOT_TOKEN || '8469161392:AAETrQWLWzOnCFwmVTxWHsdm20_n_JJQxik'
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN || ''
+const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET || ''
+
+if (!telegramToken) {
+  console.error('[telegram-webhook] Missing TELEGRAM_BOT_TOKEN env var - bot operations will fail.')
+}
+if (!webhookSecret) {
+  console.error('[telegram-webhook] Missing TELEGRAM_WEBHOOK_SECRET env var - webhook will reject all requests.')
+}
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false }
@@ -145,6 +153,18 @@ async function buildCategoriesKeyboard(userId: string, targetOrgId: string | nul
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only accept POST
   if (req.method !== 'POST') return res.status(200).send('OK')
+
+  // Verify Telegram webhook secret (set when calling setWebhook with secret_token).
+  // Without this, any caller could send forged updates to the unauthenticated endpoint.
+  if (!webhookSecret) {
+    return res.status(503).json({ error: 'Webhook secret not configured' })
+  }
+  const incomingSecret = req.headers['x-telegram-bot-api-secret-token']
+  const incomingValue = Array.isArray(incomingSecret) ? incomingSecret[0] : incomingSecret
+  if (incomingValue !== webhookSecret) {
+    console.warn('[telegram-webhook] Rejected request with invalid/missing secret token')
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
 
   try {
     const body = req.body

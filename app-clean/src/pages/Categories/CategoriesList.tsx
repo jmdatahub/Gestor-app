@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { fetchCategories, type Category } from '../../services/movementService'
 import { getTextColorClass, getCategoryPillStyle, getDefaultCategoryColor } from '../../utils/categoryColors'
-import { Plus, Edit2, X, Tag } from 'lucide-react'
+import { Plus, Edit2, Tag, TrendingUp, TrendingDown } from 'lucide-react'
 import { UiSelect } from '../../components/ui/UiSelect'
 import { UiField } from '../../components/ui/UiField'
-import { UiCard, UiCardBody } from '../../components/ui/UiCard'
 import { UiInput } from '../../components/ui/UiInput'
-import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { UiModal, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { Panel } from '../../components/shared/Panel'
+import { EmptyState } from '../../components/shared/EmptyState'
+import { StatCard } from '../../components/shared/StatCard'
 
 export default function CategoriesList() {
   const { currentWorkspace } = useWorkspace()  // Add workspace context
@@ -110,81 +112,106 @@ export default function CategoriesList() {
     }
   }
 
-  if (loading) {
-     return (
-       <div className="d-flex items-center justify-center" style={{ minHeight: '200px' }}>
-         <div className="spinner"></div>
-      </div>
-    )
-  }
+  const { expenseCategories, incomeCategories } = useMemo(() => ({
+    expenseCategories: categories.filter(c => c.kind === 'expense'),
+    incomeCategories: categories.filter(c => c.kind === 'income'),
+  }), [categories])
+
+  const renderCategoryRow = (cat: Category) => (
+    <div key={cat.id} className="cat-row">
+      <span
+        className={`px-2 py-1 rounded text-xs font-bold ${getTextColorClass(cat.color)}`}
+        style={{ ...getCategoryPillStyle(cat.color), minWidth: 40, textAlign: 'center' }}
+      >
+        {cat.name.slice(0, 2).toUpperCase()}
+      </span>
+      <span className="cat-row__name">{cat.name}</span>
+      <button
+        className="btn btn-icon btn-secondary"
+        onClick={() => handleOpenEdit(cat)}
+        title="Editar"
+        style={{ padding: 6 }}
+      >
+        <Edit2 size={14} />
+      </button>
+    </div>
+  )
 
   return (
-    <div className="page-container">
-      {/* Header */}
+    <div className="page-container fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Categorías</h1>
           <p className="page-subtitle">Organiza tus movimientos por categorías con colores</p>
         </div>
         <button className="btn btn-primary" onClick={handleOpenCreate}>
-          <Plus size={20} />
-          Nueva categoría
+          <Plus size={18} />
+          <span style={{ marginLeft: 6 }}>Nueva categoría</span>
         </button>
       </div>
 
-      {/* Categories Grid */}
-      {categories.length === 0 ? (
-        <UiCard className="p-8 d-flex flex-col items-center justify-center text-center">
-          <div className="mb-4 text-secondary opacity-50">
-            <Tag size={48} />
-          </div>
-          <p className="text-secondary mb-4">No tienes categorías creadas</p>
-          <button className="btn btn-primary" onClick={handleOpenCreate}>
-            Crear primera categoría
-          </button>
-        </UiCard>
+      {!loading && categories.length > 0 && (
+        <div className="stat-grid mb-4">
+          <StatCard
+            label="Categorías totales"
+            value={categories.length}
+            tone="primary"
+            icon={<Tag size={18} />}
+          />
+          <StatCard
+            label="Gastos"
+            value={expenseCategories.length}
+            tone="danger"
+            icon={<TrendingDown size={18} />}
+          />
+          <StatCard
+            label="Ingresos"
+            value={incomeCategories.length}
+            tone="success"
+            icon={<TrendingUp size={18} />}
+          />
+        </div>
+      )}
+
+      {loading ? (
+        <div className="d-flex items-center justify-center" style={{ minHeight: 200 }}>
+          <div className="spinner" />
+        </div>
+      ) : categories.length === 0 ? (
+        <Panel>
+          <EmptyState
+            icon={<Tag size={32} />}
+            title="Sin categorías"
+            description="Crea tu primera categoría para empezar a organizar tus movimientos."
+            action={
+              <button className="btn btn-primary" onClick={handleOpenCreate}>
+                <Plus size={16} />
+                <span style={{ marginLeft: 6 }}>Crear categoría</span>
+              </button>
+            }
+          />
+        </Panel>
       ) : (
-        <UiCard>
-            <UiCardBody noPadding>
-                <div className="table-container">
-                    <table className="table w-full">
-                        <thead>
-                        <tr>
-                            <th>Color</th>
-                            <th>Nombre</th>
-                            <th>Tipo</th>
-                            <th style={{ textAlign: 'right' }}>Acciones</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {categories.map((cat) => (
-                            <tr key={cat.id}>
-                            <td style={{ width: '100px' }}>
-                                <span
-                                className={`px-2 py-1 rounded text-xs font-bold ${getTextColorClass(cat.color)}`}
-                                style={getCategoryPillStyle(cat.color)}
-                                >
-                                {cat.name.slice(0, 2).toUpperCase()}
-                                </span>
-                            </td>
-                            <td style={{ fontWeight: 500 }}>{cat.name}</td>
-                            <td>
-                                <span className={`badge ${cat.kind === 'income' ? 'badge-success' : 'badge-danger'}`}>
-                                {cat.kind === 'income' ? 'Ingreso' : 'Gasto'}
-                                </span>
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                                <button className="btn btn-icon btn-secondary" onClick={() => handleOpenEdit(cat)} title="Editar">
-                                <Edit2 size={16} />
-                                </button>
-                            </td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                </div>
-            </UiCardBody>
-        </UiCard>
+        <div className="dash-grid">
+          <div className="col-6">
+            <Panel title="Gastos" subtitle={`${expenseCategories.length} categorías`} icon={<TrendingDown size={16} />}>
+              {expenseCategories.length === 0 ? (
+                <EmptyState compact title="Sin categorías de gasto" />
+              ) : (
+                <div>{expenseCategories.map(renderCategoryRow)}</div>
+              )}
+            </Panel>
+          </div>
+          <div className="col-6">
+            <Panel title="Ingresos" subtitle={`${incomeCategories.length} categorías`} icon={<TrendingUp size={16} />}>
+              {incomeCategories.length === 0 ? (
+                <EmptyState compact title="Sin categorías de ingreso" />
+              ) : (
+                <div>{incomeCategories.map(renderCategoryRow)}</div>
+              )}
+            </Panel>
+          </div>
+        </div>
       )}
 
       {/* Create/Edit Modal */}

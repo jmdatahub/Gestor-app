@@ -1,72 +1,71 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import Auth from './pages/Auth'
+import { SkeletonDashboard } from './components/Skeleton'
+
+// App Components
 import AppLayout from './layouts/AppLayout'
-import Dashboard from './pages/Dashboard'
-import DebtsList from './pages/Debts/DebtsList'
-import DebtDetail from './pages/Debts/DebtDetail'
-import OrganizationsList from './pages/Organizations/OrganizationsList'
-import OrganizationDetail from './pages/Organizations/OrganizationDetail'
-import MovementsList from './pages/Movements/MovementsList'
-import CategoriesList from './pages/Categories/CategoriesList'
-import SavingsList from './pages/Savings/SavingsList'
-import SavingsDetail from './pages/Savings/SavingsDetail'
-import RecurringList from './pages/Recurring/RecurringList'
-import PendingMovements from './pages/Recurring/PendingMovements'
-import ExportPage from './pages/Export/ExportPage'
-import InvestmentsList from './pages/Investments/InvestmentsList'
-import InvestmentDetail from './pages/Investments/InvestmentDetail'
-import AlertsList from './pages/Alerts/AlertsList'
-import AccountsList from './pages/Accounts/AccountsList'
-import AccountDetail from './pages/Accounts/AccountDetail'
-import InsightsPage from './pages/Insights/InsightsPage'
-import SummaryPage from './pages/Summary/SummaryPage'
-import SettingsPage from './pages/Settings/SettingsPage'
-import AdminPanel from './pages/Admin/AdminPanel'
-import ProfileSettings from './pages/Profile/ProfileSettings'
+
+// Lazy Pages
+const Auth = lazy(() => import('./pages/Auth'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const DebtsList = lazy(() => import('./pages/Debts/DebtsList'))
+const DebtDetail = lazy(() => import('./pages/Debts/DebtDetail'))
+const OrganizationsList = lazy(() => import('./pages/Organizations/OrganizationsList'))
+const OrganizationDetail = lazy(() => import('./pages/Organizations/OrganizationDetail'))
+const MovementsList = lazy(() => import('./pages/Movements/MovementsList'))
+const CategoriesList = lazy(() => import('./pages/Categories/CategoriesList'))
+const SavingsList = lazy(() => import('./pages/Savings/SavingsList'))
+const SavingsDetail = lazy(() => import('./pages/Savings/SavingsDetail'))
+const RecurringList = lazy(() => import('./pages/Recurring/RecurringList'))
+const PendingMovements = lazy(() => import('./pages/Recurring/PendingMovements'))
+const ExportPage = lazy(() => import('./pages/Export/ExportPage'))
+const InvestmentsList = lazy(() => import('./pages/Investments/InvestmentsList'))
+const InvestmentDetail = lazy(() => import('./pages/Investments/InvestmentDetail'))
+const AlertsList = lazy(() => import('./pages/Alerts/AlertsList'))
+const AccountsList = lazy(() => import('./pages/Accounts/AccountsList'))
+const AccountDetail = lazy(() => import('./pages/Accounts/AccountDetail'))
+const InsightsPage = lazy(() => import('./pages/Insights/InsightsPage'))
+const SummaryPage = lazy(() => import('./pages/Summary/SummaryPage'))
+const SettingsPage = lazy(() => import('./pages/Settings/SettingsPage'))
+const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'))
+const ProfileSettings = lazy(() => import('./pages/Profile/ProfileSettings'))
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/auth" element={<Auth />} />
-        <Route path="/app" element={<AppLayout />}>
-          <Route index element={<Navigate to="/app/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="organizations" element={<OrganizationsList />} />
-          <Route path="organizations/:id" element={<OrganizationDetail />} />
-          <Route path="summary" element={<SummaryPage />} />
-          <Route path="movements" element={<MovementsList />} />
-          <Route path="categories" element={<CategoriesList />} />
-          <Route path="accounts" element={<AccountsList />} />
-          <Route path="accounts/:id" element={<AccountDetail />} />
-          <Route path="savings" element={<SavingsList />} />
-          <Route path="savings/:id" element={<SavingsDetail />} />
-          <Route path="investments" element={<InvestmentsList />} />
-          <Route path="investments/:id" element={<InvestmentDetail />} />
-          <Route path="recurring" element={<RecurringList />} />
-          <Route path="pending" element={<PendingMovements />} />
-          <Route path="debts" element={<DebtsList />} />
-          <Route path="debts/:id" element={<DebtDetail />} />
-          <Route path="insights" element={<InsightsPage />} />
-          <Route path="alerts" element={<AlertsList />} />
-          <Route path="export" element={<ExportPage />} />
-          <Route path="admin" element={<AdminPanel />} />
-          <Route path="profile" element={<ProfileSettings />} />
-          <Route path="settings" element={<SettingsPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/app" replace />} />
-      </Routes>
+      <Suspense fallback={<SkeletonDashboard />}>
+        <Routes>
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/app" element={<AppLayout />}>
+            <Route index element={<Navigate to="/app/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="organizations" element={<OrganizationsList />} />
+            <Route path="organizations/:id" element={<OrganizationDetail />} />
+            <Route path="summary" element={<SummaryPage />} />
+            <Route path="movements" element={<MovementsList />} />
+            <Route path="categories" element={<CategoriesList />} />
+            <Route path="accounts" element={<AccountsList />} />
+            <Route path="accounts/:id" element={<AccountDetail />} />
+            <Route path="savings" element={<SavingsList />} />
+            <Route path="savings/:id" element={<SavingsDetail />} />
+            <Route path="investments" element={<InvestmentsList />} />
+            <Route path="investments/:id" element={<InvestmentDetail />} />
+            <Route path="recurring" element={<RecurringList />} />
+            <Route path="pending" element={<PendingMovements />} />
+            <Route path="debts" element={<DebtsList />} />
+            <Route path="debts/:id" element={<DebtDetail />} />
+            <Route path="insights" element={<InsightsPage />} />
+            <Route path="alerts" element={<AlertsList />} />
+            <Route path="export" element={<ExportPage />} />
+            <Route path="admin" element={<AdminPanel />} />
+            <Route path="profile" element={<ProfileSettings />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/app" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }
 
 export default App
-
-
-
-
-
-
-
-
-

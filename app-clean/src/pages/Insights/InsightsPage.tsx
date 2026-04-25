@@ -1,293 +1,459 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import {
   getMonthlyInsights,
   getInsightTypeLabel,
   getInsightIcon,
-  type Insight
+  type Insight,
 } from '../../services/insightService'
-import { Lightbulb, RefreshCw, BarChart2 } from 'lucide-react'
+import {
+  BarChart2,
+  Lightbulb,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  Sparkles,
+  ArrowLeftRight,
+  CalendarRange,
+} from 'lucide-react'
 import { Breadcrumbs } from '../../components/Breadcrumbs'
 import { SkeletonKPI } from '../../components/Skeleton'
-import { SpendingPieChart } from '../../components/charts/SpendingPieChart'
-import { TrendBarChart } from '../../components/charts/TrendBarChart'
 import { useI18n } from '../../hooks/useI18n'
-import { useSettings } from '../../context/SettingsContext'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { UiSelect } from '../../components/ui/UiSelect'
-import { UiCard } from '../../components/ui/UiCard'
 import { UiField } from '../../components/ui/UiField'
+import { StatCard } from '../../components/shared/StatCard'
+import { Panel } from '../../components/shared/Panel'
+import { EmptyState } from '../../components/shared/EmptyState'
+import { AreaTrendChart } from '../../components/charts/AreaTrendChart'
+import { DonutChart } from '../../components/charts/DonutChart'
+import { CategoryBarList } from '../../components/charts/CategoryBarList'
+import { HeatmapCalendar } from '../../components/charts/HeatmapCalendar'
+import { ComparisonBars } from '../../components/charts/ComparisonBars'
+import {
+  useMonthlyTrend,
+  useDailySpending,
+  useMonthTopCategories,
+} from '../../hooks/queries/useDashboardTrend'
+
+function prevMonth(year: number, month: number) {
+  return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 }
+}
+
+function severityTone(severity: Insight['severity']): 'success' | 'warning' | 'neutral' {
+  if (severity === 'success') return 'success'
+  if (severity === 'warning') return 'warning'
+  return 'neutral'
+}
 
 export default function InsightsPage() {
   const { t, language } = useI18n()
-  const { settings } = useSettings()
+  const { currentWorkspace } = useWorkspace()
   const locale = language === 'es' ? 'es-ES' : 'en-US'
+  const currency = 'EUR'
+  const workspaceId = currentWorkspace?.id || null
+
   const now = new Date()
+  const [userId, setUserId] = useState<string | null>(null)
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [insights, setInsights] = useState<Insight[]>([])
-  const [loading, setLoading] = useState(true)
-  
-  // Chart Data State
-  const [pieData, setPieData] = useState<{name: string, value: number}[]>([])
-  const [trendData, setTrendData] = useState<{period: string, income: number, expense: number}[]>([])
+  const [loadingInsights, setLoadingInsights] = useState(true)
 
   useEffect(() => {
-    loadInsights()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUserId(user.id)
+    })
   }, [])
 
-  const loadInsights = async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    try {
-      const data = await getMonthlyInsights(user.id, year, month, t, locale)
-      setInsights(data)
-      await loadChartData(user.id)
-    } catch (error) {
-      console.error('Error loading insights:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadChartData = async (userId: string) => {
-    // 1. Pie Chart: Expenses by Category for current month
-    const startOfMonth = new Date(year, month - 1, 1).toISOString().split('T')[0]
-    const endOfMonth = new Date(year, month, 0).toISOString().split('T')[0]
-
-    const { data: movements } = await supabase
-      .from('movements')
-      .select('amount, category:categories(name)')
-      .eq('user_id', userId)
-      .eq('type', 'expense')
-      .gte('date', startOfMonth)
-      .lte('date', endOfMonth)
-
-    const catMap: Record<string, number> = {}
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const safeMovements = (movements || []) as any[]
-    
-    safeMovements.forEach(m => {
-      const catName = Array.isArray(m.category) ? m.category[0]?.name : m.category?.name || 'Otros'
-      catMap[catName] = (catMap[catName] || 0) + m.amount
-    })
-
-    const newPieData = Object.entries(catMap)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 6) // Top 6 categories
-
-    setPieData(newPieData)
-
-    // 2. Bar Chart: Last 6 months trend
-    const trend = []
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const m = d.getMonth() + 1
-      const y = d.getFullYear()
-      const s = new Date(y, m - 1, 1).toISOString().split('T')[0]
-      const e = new Date(y, m, 0).toISOString().split('T')[0]
-
-      const { data: montlyMovs } = await supabase
-        .from('movements')
-        .select('type, amount')
-        .eq('user_id', userId)
-        .gte('date', s)
-        .lte('date', e)
-        .neq('type', 'transfer_out') // Exclude transfers
-        .neq('type', 'transfer_in')
-
-      const income = montlyMovs?.filter(x => x.type === 'income').reduce((acc, curr) => acc + curr.amount, 0) || 0
-      const expense = montlyMovs?.filter(x => x.type === 'expense').reduce((acc, curr) => acc + curr.amount, 0) || 0
-      
-      trend.push({
-        period: `${m}/${y}`,
-        income,
-        expense
+  useEffect(() => {
+    if (!userId) return
+    let cancelled = false
+    setLoadingInsights(true)
+    getMonthlyInsights(userId, year, month, t, locale)
+      .then((data) => {
+        if (!cancelled) setInsights(data)
       })
+      .catch((err) => console.error('Error loading insights:', err))
+      .finally(() => {
+        if (!cancelled) setLoadingInsights(false)
+      })
+    return () => {
+      cancelled = true
     }
-    setTrendData(trend)
-  }
+  }, [userId, year, month, t, locale])
 
-  const handleRefresh = () => {
-    loadInsights()
-  }
+  const { data: trend6 = [] } = useMonthlyTrend(userId, workspaceId, 6)
+  const { data: trend12 = [] } = useMonthlyTrend(userId, workspaceId, 12)
+  const { data: daily = [] } = useDailySpending(userId, workspaceId, 126)
 
-  const getSeverityStyle = (severity: Insight['severity']) => {
-    switch (severity) {
-      case 'success':
-        return { 
-          borderLeft: '4px solid var(--success)',
-          background: 'linear-gradient(to right, rgba(16, 185, 129, 0.05), transparent)' 
-        }
-      case 'warning':
-        return { 
-          borderLeft: '4px solid var(--warning)',
-          background: 'linear-gradient(to right, rgba(245, 158, 11, 0.05), transparent)' 
-        }
-      default:
-        return { 
-          borderLeft: '4px solid var(--primary)',
-          background: 'linear-gradient(to right, rgba(99, 102, 241, 0.05), transparent)' 
-        }
-    }
-  }
+  const { data: currentCats = [], isLoading: catsLoading } = useMonthTopCategories(
+    userId,
+    workspaceId,
+    year,
+    month,
+    'expense',
+  )
+  const prev = useMemo(() => prevMonth(year, month), [year, month])
+  const { data: prevCats = [] } = useMonthTopCategories(
+    userId,
+    workspaceId,
+    prev.year,
+    prev.month,
+    'expense',
+  )
 
-  const getSeverityBadge = (severity: Insight['severity']) => {
-    switch (severity) {
-      case 'success': return 'badge-success'
-      case 'warning': return 'badge-warning'
-      default: return 'badge-primary'
-    }
-  }
+  const selectedMonthKey = useMemo(
+    () => `${year}-${String(month).padStart(2, '0')}`,
+    [year, month],
+  )
+  const prevMonthKey = useMemo(
+    () => `${prev.year}-${String(prev.month).padStart(2, '0')}`,
+    [prev],
+  )
+
+  const currentMonthTrend = useMemo(
+    () => trend12.find((p) => p.periodKey === selectedMonthKey),
+    [trend12, selectedMonthKey],
+  )
+  const prevMonthTrend = useMemo(
+    () => trend12.find((p) => p.periodKey === prevMonthKey),
+    [trend12, prevMonthKey],
+  )
+
+  const currentIncome = currentMonthTrend?.income ?? 0
+  const currentExpense = currentMonthTrend?.expense ?? 0
+  const currentNet = currentIncome - currentExpense
+  const prevIncome = prevMonthTrend?.income ?? 0
+  const prevExpense = prevMonthTrend?.expense ?? 0
+
+  const incomeTrend = prevIncome > 0 ? ((currentIncome - prevIncome) / prevIncome) * 100 : 0
+  const expenseTrend = prevExpense > 0 ? ((currentExpense - prevExpense) / prevExpense) * 100 : 0
+  const savingsRate = currentIncome > 0 ? (currentNet / currentIncome) * 100 : 0
+  const prevSavingsRate = prevIncome > 0 ? ((prevIncome - prevExpense) / prevIncome) * 100 : 0
+  const savingsRateTrend = prevSavingsRate !== 0 ? savingsRate - prevSavingsRate : 0
+
+  const topCurrentNames = useMemo(() => currentCats.slice(0, 6).map((c) => c.name), [currentCats])
+  const categoryCompare = useMemo(() => {
+    const prevMap = new Map(prevCats.map((c) => [c.name, c.value]))
+    const currMap = new Map(currentCats.map((c) => [c.name, c.value]))
+    return topCurrentNames.map((name) => ({
+      period: name.length > 14 ? name.slice(0, 13) + '…' : name,
+      current: currMap.get(name) ?? 0,
+      previous: prevMap.get(name) ?? 0,
+    }))
+  }, [topCurrentNames, currentCats, prevCats])
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount)
+
+  const incomeSparkline = useMemo(() => trend6.map((p) => p.income), [trend6])
+  const expenseSparkline = useMemo(() => trend6.map((p) => p.expense), [trend6])
+  const netSparkline = useMemo(() => trend6.map((p) => p.net), [trend6])
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i)
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i + 1,
-    label: new Date(2000, i, 1).toLocaleString(language === 'es' ? 'es-ES' : 'en-US' , { month: 'long' }).replace(/^\w/, c => c.toUpperCase())
+    label: new Date(2000, i, 1)
+      .toLocaleString(locale, { month: 'long' })
+      .replace(/^\w/, (c) => c.toUpperCase()),
   }))
 
+  const handleRefresh = () => {
+    if (!userId) return
+    setLoadingInsights(true)
+    getMonthlyInsights(userId, year, month, t, locale)
+      .then(setInsights)
+      .finally(() => setLoadingInsights(false))
+  }
+
+  const periodLabel = `${months[month - 1]?.label} ${year}`
+  const prevPeriodLabel = `${months[prev.month - 1]?.label} ${prev.year}`
 
   return (
     <div className="page-container fade-in">
       <div className="page-header">
         <div>
-          <Breadcrumbs items={[
-            { label: 'Insights', icon: <BarChart2 size={16} /> }
-          ]} />
+          <Breadcrumbs items={[{ label: 'Insights', icon: <BarChart2 size={16} /> }]} />
           <h1 className="page-title mt-2">{t('insights.title')}</h1>
           <p className="page-subtitle">{t('insights.subtitle')}</p>
         </div>
         <div className="d-flex gap-2">
-           <button 
-            className="btn btn-secondary btn-icon" 
+          <button
+            className="btn btn-secondary btn-icon"
             onClick={handleRefresh}
-            disabled={loading}
+            disabled={loadingInsights}
             title="Actualizar análisis"
           >
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={18} className={loadingInsights ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <UiCard className="mb-6 p-4">
-        <div className="d-flex flex-wrap gap-4 items-end">
-          <div className="flex-1" style={{ minWidth: '120px' }}>
+      <Panel
+        className="mb-4"
+        padding="tight"
+        icon={<CalendarRange size={16} />}
+        title="Periodo de análisis"
+        subtitle={`Comparando ${periodLabel} vs ${prevPeriodLabel}`}
+        actions={
+          <button
+            className="btn btn-primary"
+            onClick={handleRefresh}
+            disabled={loadingInsights}
+          >
+            {t('insights.analyzePeriod')}
+          </button>
+        }
+      >
+        <div className="d-flex flex-wrap gap-3 items-end">
+          <div style={{ flex: '0 0 140px' }}>
             <UiField label={t('summary.year')} className="mb-0">
-                <UiSelect
-                    value={year.toString()}
-                    onChange={(val) => setYear(parseInt(val))}
-                    options={years.map(y => ({ value: y.toString(), label: y.toString() }))}
-                />
+              <UiSelect
+                value={year.toString()}
+                onChange={(val) => setYear(parseInt(val))}
+                options={years.map((y) => ({ value: y.toString(), label: y.toString() }))}
+              />
             </UiField>
           </div>
-          <div className="flex-1" style={{ minWidth: '150px' }}>
-             <UiField label={t('summary.month')} className="mb-0">
-                <UiSelect
-                    value={month.toString()}
-                    onChange={(val) => setMonth(parseInt(val))}
-                    options={months.map(m => ({ value: m.value.toString(), label: m.label }))}
-                />
+          <div style={{ flex: '0 0 180px' }}>
+            <UiField label={t('summary.month')} className="mb-0">
+              <UiSelect
+                value={month.toString()}
+                onChange={(val) => setMonth(parseInt(val))}
+                options={months.map((m) => ({ value: m.value.toString(), label: m.label }))}
+              />
             </UiField>
           </div>
-          <div>
-            <button 
-                className="btn btn-primary h-[38px]" 
-                onClick={handleRefresh}
-                disabled={loading}
-                style={{ marginTop: 'auto' }}
-            >
-                {t('insights.analyzePeriod')}
-            </button>
-          </div>
         </div>
-      </UiCard>
+      </Panel>
 
-      {/* Loading State */}
-      {loading && (
-         <div className="kpi-grid">
-          <SkeletonKPI />
-          <SkeletonKPI />
-          <SkeletonKPI />
-          <SkeletonKPI />
-        </div>
-      )}
+      <div className="stat-grid mb-4">
+        <StatCard
+          label="Ingresos"
+          value={formatCurrency(currentIncome)}
+          tone="success"
+          icon={<TrendingUp size={18} />}
+          trend={{ value: incomeTrend, label: 'vs mes anterior' }}
+          helper={`Anterior: ${formatCurrency(prevIncome)}`}
+          sparkline={incomeSparkline}
+        />
+        <StatCard
+          label="Gastos"
+          value={formatCurrency(currentExpense)}
+          tone="danger"
+          icon={<TrendingDown size={18} />}
+          trend={{ value: expenseTrend, label: 'vs mes anterior', invert: true }}
+          helper={`Anterior: ${formatCurrency(prevExpense)}`}
+          sparkline={expenseSparkline}
+        />
+        <StatCard
+          label="Balance"
+          value={formatCurrency(currentNet)}
+          tone={currentNet >= 0 ? 'primary' : 'danger'}
+          icon={<Wallet size={18} />}
+          helper={currentNet >= 0 ? 'Superávit del mes' : 'Déficit del mes'}
+          sparkline={netSparkline}
+        />
+        <StatCard
+          label="Tasa de ahorro"
+          value={`${savingsRate.toFixed(1)}%`}
+          tone={savingsRate >= 20 ? 'success' : savingsRate >= 0 ? 'warning' : 'danger'}
+          icon={<Sparkles size={18} />}
+          trend={savingsRateTrend !== 0 ? { value: savingsRateTrend, label: 'pp vs mes anterior' } : undefined}
+          helper={savingsRate >= 20 ? 'Muy saludable' : savingsRate >= 10 ? 'Aceptable' : 'Revisar gastos'}
+        />
+      </div>
 
-      {/* Charts Section (New) */}
-      {!loading && (
-        <div className="kpi-grid mb-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))' }}>
-          <UiCard className="p-4">
-            <h3 className="text-base font-bold text-gray-800 mb-4">{t('insights.spendingByCategory')}</h3>
-            {pieData.length > 0 ? (
-              <SpendingPieChart data={pieData} />
+      <div className="dash-grid mb-4">
+        <div className="col-8">
+          <Panel
+            title="Evolución mensual"
+            subtitle="Ingresos, gastos y neto en los últimos 12 meses"
+            icon={<BarChart2 size={16} />}
+          >
+            {trend12.length === 0 ? (
+              <EmptyState
+                compact
+                icon={<BarChart2 size={24} />}
+                title="Sin datos"
+                description="Añade movimientos para ver tu evolución."
+              />
             ) : (
-              <div className="h-64 d-flex items-center justify-center text-secondary">
-                {t('insights.noDataSpending')}
-              </div>
+              <AreaTrendChart data={trend12} showNet height={300} currency={currency} locale={locale} />
             )}
-          </UiCard>
-          <UiCard className="p-4">
-            <h3 className="text-base font-bold text-gray-800 mb-4">{t('insights.incomeVsExpense')}</h3>
-            <TrendBarChart data={trendData} />
-          </UiCard>
+          </Panel>
         </div>
-      )}
-
-      {/* Empty state */}
-      {!loading && insights.length === 0 && (
-        <UiCard className="p-12 text-center">
-          <div className="d-flex justify-center mb-4">
-            <div className="p-4 bg-gray-100 rounded-full">
-              <Lightbulb size={32} className="text-secondary" />
+        <div className="col-4">
+          <Panel
+            title="Comparativa rápida"
+            subtitle={`${periodLabel} vs ${prevPeriodLabel}`}
+            icon={<ArrowLeftRight size={16} />}
+          >
+            <div className="cat-row" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <span className="cat-row__name">Ingresos</span>
+              <span className="cat-row__amount" style={{ color: 'var(--chart-positive)' }}>
+                {formatCurrency(currentIncome)}
+              </span>
             </div>
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 mb-2">{t('insights.noInsights')}</h3>
-          <p className="text-secondary max-w-md mx-auto">
-            {t('insights.noInsightsDesc')}
-          </p>
-        </UiCard>
-      )}
-
-      {/* Insights list */}
-      {!loading && insights.length > 0 && (
-        <>
-          <h2 className="text-xl font-bold mb-4">{t('insights.detailedAnalysis')}</h2>
-          <div className="d-grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))' }}>
-            {insights.map((insight) => (
-              <UiCard 
-                key={insight.id} 
-                className="transition-all hover:shadow-md"
-                style={{
-                  ...getSeverityStyle(insight.severity),
-                  display: 'flex',
-                  alignItems: 'start',
-                  gap: '1rem',
-                  padding: '1.5rem'
-                }}
+            <div className="cat-row" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <span className="cat-row__name">Gastos</span>
+              <span className="cat-row__amount" style={{ color: 'var(--chart-negative)' }}>
+                {formatCurrency(currentExpense)}
+              </span>
+            </div>
+            <div className="cat-row" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <span className="cat-row__name">Balance</span>
+              <span
+                className="cat-row__amount"
+                style={{ color: currentNet >= 0 ? 'var(--chart-positive)' : 'var(--chart-negative)' }}
               >
-                <div 
-                  className="d-flex items-center justify-center bg-white shadow-sm border border-gray-100 rounded-xl"
-                  style={{ width: 48, height: 48, fontSize: '1.5rem', flexShrink: 0 }}
-                >
-                  {getInsightIcon(insight.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="d-flex items-center gap-2 mb-2">
-                    <span className={`badge ${getSeverityBadge(insight.severity)}`}>
+                {formatCurrency(currentNet)}
+              </span>
+            </div>
+            <div className="cat-row">
+              <span className="cat-row__name">Δ Gastos</span>
+              <span
+                className="cat-row__amount"
+                style={{ color: expenseTrend > 0 ? 'var(--chart-negative)' : 'var(--chart-positive)' }}
+              >
+                {expenseTrend > 0 ? '+' : ''}
+                {expenseTrend.toFixed(1)}%
+              </span>
+            </div>
+            <div className="cat-row">
+              <span className="cat-row__name">Δ Ingresos</span>
+              <span
+                className="cat-row__amount"
+                style={{ color: incomeTrend >= 0 ? 'var(--chart-positive)' : 'var(--chart-negative)' }}
+              >
+                {incomeTrend > 0 ? '+' : ''}
+                {incomeTrend.toFixed(1)}%
+              </span>
+            </div>
+          </Panel>
+        </div>
+      </div>
+
+      <div className="dash-grid mb-4">
+        <div className="col-5">
+          <Panel
+            title="Distribución de gastos"
+            subtitle={periodLabel}
+          >
+            {catsLoading ? (
+              <div style={{ height: 280 }} className="skeleton rounded" />
+            ) : currentCats.length === 0 ? (
+              <EmptyState
+                compact
+                title={t('insights.noDataSpending')}
+                description="Sin gastos registrados este mes."
+              />
+            ) : (
+              <>
+                <DonutChart
+                  data={currentCats}
+                  height={240}
+                  currency={currency}
+                  locale={locale}
+                  centerLabel="Total"
+                  centerValue={formatCurrency(currentExpense)}
+                  thickness="medium"
+                />
+                <CategoryBarList
+                  data={currentCats}
+                  max={5}
+                  currency={currency}
+                  locale={locale}
+                />
+              </>
+            )}
+          </Panel>
+        </div>
+        <div className="col-7">
+          <Panel
+            title="Comparativa por categoría"
+            subtitle={`Top gastos ${periodLabel} vs ${prevPeriodLabel}`}
+            icon={<ArrowLeftRight size={16} />}
+          >
+            {categoryCompare.length === 0 ? (
+              <EmptyState
+                compact
+                title="Sin datos comparativos"
+                description="Necesitamos al menos un mes con gastos para comparar."
+              />
+            ) : (
+              <ComparisonBars
+                data={categoryCompare}
+                currentLabel={periodLabel}
+                previousLabel={prevPeriodLabel}
+                currency={currency}
+                locale={locale}
+                tone="negative"
+                height={280}
+              />
+            )}
+          </Panel>
+        </div>
+      </div>
+
+      <Panel
+        className="mb-4"
+        title="Patrón de gasto diario"
+        subtitle="Mapa de calor de los últimos 126 días"
+      >
+        {daily.length === 0 ? (
+          <EmptyState compact title="Sin datos" description="Añade movimientos para ver tu patrón diario." />
+        ) : (
+          <HeatmapCalendar data={daily} weeks={18} tone="danger" currency={currency} locale={locale} />
+        )}
+      </Panel>
+
+      <Panel
+        title={t('insights.detailedAnalysis')}
+        icon={<Lightbulb size={16} />}
+        subtitle="Detectamos patrones relevantes en tu actividad financiera"
+      >
+        {loadingInsights ? (
+          <div className="stat-grid">
+            <SkeletonKPI />
+            <SkeletonKPI />
+            <SkeletonKPI />
+            <SkeletonKPI />
+          </div>
+        ) : insights.length === 0 ? (
+          <EmptyState
+            icon={<Lightbulb size={28} />}
+            title={t('insights.noInsights')}
+            description={t('insights.noInsightsDesc')}
+          />
+        ) : (
+          <div className="d-grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+            {insights.map((insight) => {
+              const tone = severityTone(insight.severity)
+              return (
+                <div key={insight.id} className={`stat-card stat-card--${tone}`} style={{ gap: 10 }}>
+                  <span className="stat-card__accent" />
+                  <div className="stat-card__head">
+                    <span className="stat-card__label">
                       {getInsightTypeLabel(insight.type, t)}
                     </span>
-                    <span className="text-xs text-muted ml-auto">{insight.period}</span>
+                    <span className="stat-card__icon">{getInsightIcon(insight.type)}</span>
                   </div>
-                  <h3 className="font-bold text-gray-800 mb-1">{insight.title}</h3>
-                  <p className="text-sm text-secondary leading-relaxed">{insight.description}</p>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                    {insight.title}
+                  </div>
+                  <div className="muted-sm" style={{ lineHeight: 1.5 }}>{insight.description}</div>
+                  <div className="stat-card__meta">
+                    <span className="muted-sm">{insight.period}</span>
+                  </div>
                 </div>
-              </UiCard>
-            ))}
+              )
+            })}
           </div>
-        </>
-      )}
+        )}
+      </Panel>
     </div>
   )
 }

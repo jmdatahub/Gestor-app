@@ -30,6 +30,8 @@ import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../compon
 import { Plus, Edit2, Power, PowerOff, ArrowRightLeft, CreditCard, Wallet, PiggyBank, TrendingUp, AlertTriangle } from 'lucide-react'
 import { Breadcrumbs } from '../../components/Breadcrumbs'
 import { SkeletonList } from '../../components/Skeleton'
+import { StatCard } from '../../components/shared/StatCard'
+import { EmptyState } from '../../components/shared/EmptyState'
 import { formatISODateString } from '../../utils/date'
 import { useToast } from '../../components/Toast'
 
@@ -289,54 +291,47 @@ export default function AccountsList() {
         </div>
       </div>
 
-      {/* KPI Summary */}
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-icon kpi-icon-primary">
-            <Wallet size={24} />
-          </div>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('accounts.totalBalance')}</div>
-            <div className="kpi-value">{formatCurrency(totals.total)}</div>
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-icon kpi-icon-success">
-            <PiggyBank size={24} />
-          </div>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('nav.savings')}</div>
-            <div className="kpi-value">{formatCurrency(totals.savings)}</div>
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-icon kpi-icon-warning">
-            <TrendingUp size={24} />
-          </div>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('nav.investments')}</div>
-            <div className="kpi-value">{formatCurrency(totals.broker)}</div>
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-icon kpi-icon-primary">
-            <CreditCard size={24} />
-          </div>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('accounts.active')}</div>
-            <div className="kpi-value">{totals.activeCount} / {totals.count}</div>
-          </div>
-        </div>
+      <div className="stat-grid mb-4">
+        <StatCard
+          label={t('accounts.totalBalance')}
+          value={formatCurrency(totals.total)}
+          tone={totals.total >= 0 ? 'primary' : 'danger'}
+          icon={<Wallet size={18} />}
+        />
+        <StatCard
+          label={t('nav.savings')}
+          value={formatCurrency(totals.savings)}
+          tone="success"
+          icon={<PiggyBank size={18} />}
+        />
+        <StatCard
+          label={t('nav.investments')}
+          value={formatCurrency(totals.broker)}
+          tone="warning"
+          icon={<TrendingUp size={18} />}
+        />
+        <StatCard
+          label={t('accounts.active')}
+          value={`${totals.activeCount} / ${totals.count}`}
+          tone="neutral"
+          icon={<CreditCard size={18} />}
+        />
       </div>
 
-      {/* Accounts List (Hierarchical) */}
       {accounts.length === 0 ? (
-        <UiCard className="p-4 d-flex flex-col items-center justify-center text-center">
-            <CreditCard size={48} className="text-secondary mb-4" />
-            <p className="text-secondary">{t('accounts.empty')}</p>
-            <button className="btn btn-primary mt-4" onClick={() => setShowCreateModal(true)}>
-                {t('accounts.createFirst')}
-            </button>
+        <UiCard>
+          <UiCardBody>
+            <EmptyState
+              icon={<CreditCard size={32} />}
+              title={t('accounts.empty')}
+              action={
+                <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+                  <Plus size={16} />
+                  <span style={{ marginLeft: 6 }}>{t('accounts.createFirst')}</span>
+                </button>
+              }
+            />
+          </UiCardBody>
         </UiCard>
       ) : (
         <UiCard>

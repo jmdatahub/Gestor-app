@@ -245,26 +245,18 @@ export async function addContribution(input: AddContributionInput): Promise<Savi
 
 // Recalculate current_amount from contributions
 export async function recalculateCurrentAmount(goalId: string): Promise<void> {
-  // Get sum of contributions - CORRECT TABLE NAME
-  const { data: contributions, error: fetchError } = await supabase
-    .from('savings_contributions')  // CORRECT: not savings_goal_contributions
-    .select('amount')
-    .eq('goal_id', goalId)
+  const [contribRes, goalRes] = await Promise.all([
+    supabase.from('savings_contributions').select('amount').eq('goal_id', goalId),
+    supabase.from('savings_goals').select('target_amount').eq('id', goalId).single(),
+  ])
 
-  if (fetchError) {
-    console.error('[savingsService] Error fetching contributions for sum:', fetchError)
+  if (contribRes.error) {
+    console.error('[savingsService] Error fetching contributions for sum:', contribRes.error)
     return
   }
 
-  const total = contributions?.reduce((sum, c) => sum + c.amount, 0) || 0
-
-  // Get target amount to check if completed
-  const { data: goal } = await supabase
-    .from('savings_goals')
-    .select('target_amount')
-    .eq('id', goalId)
-    .single()
-
+  const total = contribRes.data?.reduce((sum, c) => sum + c.amount, 0) || 0
+  const goal = goalRes.data
   const newStatus = goal && total >= goal.target_amount ? 'completed' : 'active'
 
   // Update goal with new current_amount

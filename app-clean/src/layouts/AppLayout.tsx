@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { supabase } from '../lib/supabaseClient'
 import SettingsPanel from '../components/SettingsPanel'
 import { useI18n } from '../hooks/useI18n'
@@ -43,6 +44,7 @@ const DEFAULT_WIDTH = 280
 
 export default function AppLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { t } = useI18n()
   const { isOnline, pendingChanges, isSyncing, syncNow } = useOffline()
   const { currentWorkspace, workspaces, switchWorkspace } = useWorkspace()
@@ -481,7 +483,9 @@ export default function AppLayout() {
         <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         
         <div className="p-6 flex-1 overflow-y-auto">
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
 

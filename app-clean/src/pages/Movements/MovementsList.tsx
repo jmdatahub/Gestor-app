@@ -1,19 +1,21 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { 
-  fetchMovements, 
+import {
+  fetchMovements,
   fetchMonthlyMovements,
   fetchAccounts,
-  createMovement,
-  updateMovement,
-  deleteMovement,
   getOrCreateCategory,
   calculateMonthlySummary,
   type Movement,
   type Account,
   type CreateMovementInput,
 } from '../../services/movementService'
+import {
+  useCreateMovement,
+  useUpdateMovement,
+  useDeleteMovement,
+} from '../../hooks/queries/useMovementMutations'
 import { 
   createAccount, 
   accountTypes, 
@@ -69,6 +71,7 @@ import { CategoryPicker } from '../../components/domain/CategoryPicker'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { SkeletonList } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
+import { StatCard } from '../../components/shared/StatCard'
 import { Confetti } from '../../components/Confetti'
 import { UiSwitch } from '../../components/ui/UiSwitch'
 
@@ -95,6 +98,9 @@ export default function MovementsList() {
   const { settings } = useSettings()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast() // Toast notifications
+  const createMovementMutation = useCreateMovement()
+  const updateMovementMutation = useUpdateMovement()
+  const deleteMovementMutation = useDeleteMovement()
   const [showConfetti, setShowConfetti] = useState(false)
   
   // New Fields State
@@ -363,11 +369,11 @@ export default function MovementsList() {
 
       if (editingMovement) {
         // Update existing movement
-        await updateMovement(editingMovement.id, movementData)
+        await updateMovementMutation.mutateAsync({ id: editingMovement.id, updates: movementData })
         toast.success('Movimiento actualizado', 'Los cambios se han guardado correctamente')
       } else {
         // Create new movement
-        await createMovement(movementData)
+        await createMovementMutation.mutateAsync(movementData)
         toast.success('Movimiento registrado', type === 'income' ? '¡Ingreso añadido!' : type === 'expense' ? 'Gasto registrado' : 'Inversión guardada')
         // Fire confetti for celebration! 🎉
         setShowConfetti(true)
@@ -452,7 +458,7 @@ export default function MovementsList() {
     
     try {
       const movDesc = movementToDelete.description || movementToDelete.kind
-      await deleteMovement(movementToDelete.id)
+      await deleteMovementMutation.mutateAsync(movementToDelete.id)
       // Remove from local state
       setMovements(movements.filter(m => m.id !== movementToDelete.id))
       // Recalculate summary
@@ -833,32 +839,25 @@ export default function MovementsList() {
          </div>
       </div>
 
-      {/* Monthly Summary */}
-      <div className="kpi-grid">
-        <div className="kpi-card" style={{ borderLeft: '4px solid var(--success)' }}>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('movements.income')}</div>
-            <div className="kpi-value text-success">
-              +{formatCurrency(summary.income)}
-            </div>
-          </div>
-        </div>
-        <div className="kpi-card" style={{ borderLeft: '4px solid var(--danger)' }}>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('movements.expenses')}</div>
-            <div className="kpi-value text-danger">
-              -{formatCurrency(summary.expense)}
-            </div>
-          </div>
-        </div>
-        <div className="kpi-card" style={{ borderLeft: `4px solid ${summary.balance >= 0 ? 'var(--success)' : 'var(--danger)'}` }}>
-          <div className="kpi-content">
-            <div className="kpi-label">{t('movements.balance')}</div>
-            <div className="kpi-value" style={{ color: summary.balance >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-              {summary.balance >= 0 ? '+' : ''}{formatCurrency(summary.balance)}
-            </div>
-          </div>
-        </div>
+      <div className="stat-grid mb-4">
+        <StatCard
+          label={t('movements.income')}
+          value={`+${formatCurrency(summary.income)}`}
+          tone="success"
+          icon={<TrendingUp size={18} />}
+        />
+        <StatCard
+          label={t('movements.expenses')}
+          value={`-${formatCurrency(summary.expense)}`}
+          tone="danger"
+          icon={<TrendingDown size={18} />}
+        />
+        <StatCard
+          label={t('movements.balance')}
+          value={`${summary.balance >= 0 ? '+' : ''}${formatCurrency(summary.balance)}`}
+          tone={summary.balance >= 0 ? 'primary' : 'danger'}
+          icon={<Wallet size={18} />}
+        />
       </div>
 
       {/* Movements List */}

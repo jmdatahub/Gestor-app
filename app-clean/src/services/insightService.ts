@@ -57,38 +57,44 @@ export async function getMonthlyInsights(
     // Get movements for both months (excluding transfers)
     const { data: currentMovements } = await supabase
       .from('movements')
-      .select('type, amount, category')
+      .select('kind, amount, category:categories(name)')
       .eq('user_id', userId)
-      .eq('status', 'confirmed')
-      .not('type', 'in', '(transfer_in,transfer_out)')
+      .not('kind', 'in', '(transfer_in,transfer_out)')
       .gte('date', currentRange.start)
       .lte('date', currentRange.end)
 
     const { data: prevMovements } = await supabase
       .from('movements')
-      .select('type, amount, category')
+      .select('kind, amount, category:categories(name)')
       .eq('user_id', userId)
-      .eq('status', 'confirmed')
-      .not('type', 'in', '(transfer_in,transfer_out)')
+      .not('kind', 'in', '(transfer_in,transfer_out)')
       .gte('date', prevRange.start)
       .lte('date', prevRange.end)
 
+    type MovementRow = { kind: string; amount: number; category: { name?: string } | { name?: string }[] | null }
+    const currentRows = (currentMovements || []) as unknown as MovementRow[]
+    const prevRows = (prevMovements || []) as unknown as MovementRow[]
+    const catName = (row: MovementRow) => {
+      const c = Array.isArray(row.category) ? row.category[0] : row.category
+      return c?.name || ''
+    }
+
     // Calculate totals
-    const currentExpenses = (currentMovements || [])
-      .filter(m => m.type === 'expense')
-      .reduce((sum, m) => sum + m.amount, 0)
-    
-    const prevExpenses = (prevMovements || [])
-      .filter(m => m.type === 'expense')
-      .reduce((sum, m) => sum + m.amount, 0)
+    const currentExpenses = currentRows
+      .filter(m => m.kind === 'expense')
+      .reduce((sum, m) => sum + Number(m.amount || 0), 0)
 
-    const currentIncome = (currentMovements || [])
-      .filter(m => m.type === 'income')
-      .reduce((sum, m) => sum + m.amount, 0)
+    const prevExpenses = prevRows
+      .filter(m => m.kind === 'expense')
+      .reduce((sum, m) => sum + Number(m.amount || 0), 0)
 
-    const prevIncome = (prevMovements || [])
-      .filter(m => m.type === 'income')
-      .reduce((sum, m) => sum + m.amount, 0)
+    const currentIncome = currentRows
+      .filter(m => m.kind === 'income')
+      .reduce((sum, m) => sum + Number(m.amount || 0), 0)
+
+    const prevIncome = prevRows
+      .filter(m => m.kind === 'income')
+      .reduce((sum, m) => sum + Number(m.amount || 0), 0)
 
     // a) Total spending insight
     if (prevExpenses > 0 && currentExpenses > 0) {
@@ -136,16 +142,20 @@ export async function getMonthlyInsights(
     const currentByCategory: Record<string, number> = {}
     const prevByCategory: Record<string, number> = {}
 
-    ;(currentMovements || [])
-      .filter(m => m.type === 'expense' && m.category)
+    currentRows
+      .filter(m => m.kind === 'expense')
       .forEach(m => {
-        currentByCategory[m.category] = (currentByCategory[m.category] || 0) + m.amount
+        const name = catName(m)
+        if (!name) return
+        currentByCategory[name] = (currentByCategory[name] || 0) + Number(m.amount || 0)
       })
 
-    ;(prevMovements || [])
-      .filter(m => m.type === 'expense' && m.category)
+    prevRows
+      .filter(m => m.kind === 'expense')
       .forEach(m => {
-        prevByCategory[m.category] = (prevByCategory[m.category] || 0) + m.amount
+        const name = catName(m)
+        if (!name) return
+        prevByCategory[name] = (prevByCategory[name] || 0) + Number(m.amount || 0)
       })
 
     let maxIncrease = 0

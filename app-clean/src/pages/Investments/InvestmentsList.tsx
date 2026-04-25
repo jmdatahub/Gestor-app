@@ -16,7 +16,6 @@ import {
 } from '../../services/investmentService'
 import { getAccountsWithBalances, type AccountWithBalance } from '../../services/accountService'
 import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2, Eye, X, Pencil } from 'lucide-react'
-import ExcelJS from 'exceljs'
 import { useI18n } from '../../hooks/useI18n'
 import { useSettings } from '../../context/SettingsContext'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'

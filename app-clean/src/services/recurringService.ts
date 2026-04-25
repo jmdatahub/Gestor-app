@@ -154,55 +154,62 @@ export async function generatePendingMovementsForUser(userId: string): Promise<n
 
   if (!rules || rules.length === 0) return 0
 
-  let generated = 0
+  // Batch fetch all existing movements for these rules at the relevant dates in a single query.
+  const ruleIds = rules.map(r => r.id)
+  const { data: existingMovements } = await supabase
+    .from('movements')
+    .select('recurring_rule_id, date')
+    .in('recurring_rule_id', ruleIds)
+
+  const existingKeys = new Set(
+    (existingMovements || []).map(m => `${m.recurring_rule_id}|${m.date}`)
+  )
+
+  // Build inserts and rule updates in memory; run them in two batched calls.
+  const inserts: Record<string, unknown>[] = []
+  const ruleUpdates: { id: string; next_occurrence: string }[] = []
 
   for (const rule of rules) {
-    // Check if movement already exists for this rule and date
-    const { data: existing } = await supabase
-      .from('movements')
-      .select('id')
-      .eq('recurring_rule_id', rule.id)
-      .eq('date', rule.next_occurrence)
-      .single()
-
-    if (!existing) {
-      // Create pending movement
-      const { error: insertError } = await supabase
-        .from('movements')
-        .insert([{
-          user_id: userId,
-          organization_id: rule.organization_id || null,
-          account_id: rule.account_id,
-          kind: rule.kind,
-          amount: rule.amount,
-          date: rule.next_occurrence,
-          description: rule.description ? `(Recurrente) ${rule.description}` : '(Recurrente) Movimiento automático',
-          category_id: rule.category,
-          status: 'pending',
-          recurring_rule_id: rule.id
-        }])
-
-      if (insertError) {
-        console.error('Error creating pending movement:', insertError)
-        continue
-      }
-
-      generated++
+    if (!existingKeys.has(`${rule.id}|${rule.next_occurrence}`)) {
+      inserts.push({
+        user_id: userId,
+        organization_id: rule.organization_id || null,
+        account_id: rule.account_id,
+        kind: rule.kind,
+        amount: rule.amount,
+        date: rule.next_occurrence,
+        description: rule.description ? `(Recurrente) ${rule.description}` : '(Recurrente) Movimiento automático',
+        category_id: rule.category,
+        status: 'pending',
+        recurring_rule_id: rule.id,
+      })
     }
 
-    // Update next_occurrence to next date
     const nextDate = calculateNextOccurrence(
       rule.frequency,
       rule.day_of_week,
       rule.day_of_month,
       new Date(rule.next_occurrence)
     )
-
-    await supabase
-      .from('recurring_rules')
-      .update({ next_occurrence: nextDate.toISOString().split('T')[0] })
-      .eq('id', rule.id)
+    ruleUpdates.push({ id: rule.id, next_occurrence: nextDate.toISOString().split('T')[0] })
   }
+
+  let generated = 0
+  if (inserts.length) {
+    const { error: insertError } = await supabase.from('movements').insert(inserts)
+    if (insertError) {
+      console.error('Error creating pending movements:', insertError)
+    } else {
+      generated = inserts.length
+    }
+  }
+
+  // Update next_occurrence in parallel (one tiny PATCH per rule, but no awaits in series).
+  await Promise.all(
+    ruleUpdates.map(u =>
+      supabase.from('recurring_rules').update({ next_occurrence: u.next_occurrence }).eq('id', u.id)
+    )
+  )
 
   return generated
 }

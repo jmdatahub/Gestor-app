@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs'
 import { supabase } from '../lib/supabaseClient'
 import { buildAccountTree, flattenAccountTree, getUserAccounts, type Account } from './accountService'
 import { getAccountBalancesSummary } from './summaryService'
@@ -131,6 +130,7 @@ export async function exportMovementsToExcel(userId: string, filters: MovementFi
   const { data, error } = await query
   if (error) throw error
 
+  const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Movements')
   
@@ -219,6 +219,7 @@ export async function exportAccountsToExcel(userId: string) {
   const accountMap = new Map<string, any>()
   data.forEach(a => accountMap.set(a.id, a))
 
+  const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Accounts')
   
@@ -289,6 +290,7 @@ export async function exportCategoriesToExcel(userId: string) {
 
   if (error && error.code !== '42P01') throw error // Ignore table not found if that was the logic
 
+  const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Categories')
   
@@ -334,6 +336,7 @@ export async function exportSavingsToExcel(userId: string) {
 
   if (contribError) throw contribError
 
+  const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   
   // Goals sheet
@@ -386,6 +389,7 @@ export async function exportDebtsToExcel(userId: string) {
 
   if (movError) throw movError
 
+  const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   
   // Debts sheet
@@ -469,6 +473,7 @@ export async function exportRecurringToExcel(userId: string) {
 
   if (error) throw error
 
+  const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('RecurringRules')
   
@@ -508,6 +513,7 @@ interface ExportAllOptions {
 }
 
 export async function exportAllToExcel(userId: string, options: ExportAllOptions = {}) {
+  const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
 
   // 1. Fetch Accounts with full data (for path building)

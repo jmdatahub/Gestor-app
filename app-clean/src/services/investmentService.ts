@@ -98,29 +98,30 @@ export async function createInvestment(input: CreateInvestmentInput): Promise<In
     throw error
   }
 
-  // Add initial price history entry
-  await addPriceHistoryEntry(data.id, input.user_id, input.current_price, new Date().toISOString().split('T')[0])
+  // Run side-effects in parallel: initial price history + funding-account expense.
+  const today = new Date().toISOString().split('T')[0]
+  const sideEffects: Promise<unknown>[] = [
+    addPriceHistoryEntry(data.id, input.user_id, input.current_price, today),
+  ]
 
-  // If funding account specified, create expense
   if (fund_from_account_id) {
     const totalCost = input.quantity * input.buy_price
     if (totalCost > 0) {
-      try {
-        await createMovement({
+      sideEffects.push(
+        createMovement({
           user_id: input.user_id,
           account_id: fund_from_account_id,
           kind: 'expense',
           amount: totalCost,
-          date: new Date().toISOString().split('T')[0],
+          date: today,
           description: `Inversión: ${input.name}`,
-          category_id: null // Could map to 'Inversión' category if it exists
-        })
-      } catch (err) {
-        console.error('Error creating expense for investment:', err)
-      }
+          category_id: null,
+        }).catch(err => console.error('Error creating expense for investment:', err))
+      )
     }
   }
 
+  await Promise.all(sideEffects)
   return data
 }
 

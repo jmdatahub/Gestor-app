@@ -222,25 +222,149 @@ export async function getNetWorthSummary(
   }
 }
 
-// Get balance history for last N months
+// Get balance history for last N months (single batched query)
 export async function getBalanceHistory(
   userId: string,
   monthsBack: number,
   organizationId?: string | null
 ): Promise<MonthlySummary[]> {
-  const results: MonthlySummary[] = []
   const now = new Date()
-
-  for (let i = monthsBack - 1; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const year = date.getFullYear()
-    const month = date.getMonth() + 1
-
-    const summary = await getMonthlySummary(userId, year, month, {}, organizationId)
-    results.push(summary)
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  const start = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1)
+  const toIso = (d: Date) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
   }
 
-  return results
+  let query = supabase
+    .from('movements')
+    .select('date, kind, amount')
+    .not('kind', 'in', '(transfer_in,transfer_out)')
+    .gte('date', toIso(start))
+    .lte('date', toIso(end))
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data: movements } = await query
+
+  const buckets = new Map<string, MonthlySummary>()
+  for (let i = 0; i < monthsBack; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1 - i), 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    buckets.set(key, {
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      income: 0,
+      expenses: 0,
+      net: 0,
+      savingsChange: 0,
+    })
+  }
+
+  for (const m of (movements || [])) {
+    const key = String(m.date).slice(0, 7)
+    const bucket = buckets.get(key)
+    if (!bucket) continue
+    const amount = Number(m.amount) || 0
+    if (m.kind === 'income') bucket.income += amount
+    else if (m.kind === 'expense') bucket.expenses += amount
+  }
+
+  const contributionsByMonth = new Map<string, number>()
+  if (!organizationId) {
+    const { data: contributions } = await supabase
+      .from('savings_goal_contributions')
+      .select('date, amount')
+      .eq('user_id', userId)
+      .gte('date', toIso(start))
+      .lte('date', toIso(end))
+    for (const c of (contributions || [])) {
+      const key = String(c.date).slice(0, 7)
+      contributionsByMonth.set(key, (contributionsByMonth.get(key) ?? 0) + Number(c.amount || 0))
+    }
+  }
+
+  for (const [key, bucket] of buckets.entries()) {
+    bucket.net = bucket.income - bucket.expenses
+    bucket.savingsChange = contributionsByMonth.get(key) ?? 0
+  }
+
+  return Array.from(buckets.values())
+}
+
+// Fetch N months of summary + category breakdown in a single batch (fixes annual-view N+1)
+export async function getYearlyBreakdown(
+  userId: string,
+  year: number,
+  organizationId?: string | null,
+): Promise<{ months: MonthlySummary[]; categories: CategorySummary[] }> {
+  const start = `${year}-01-01`
+  const end = `${year}-12-31`
+
+  let query = supabase
+    .from('movements')
+    .select('date, kind, amount, category:categories(name,color)')
+    .not('kind', 'in', '(transfer_in,transfer_out)')
+    .gte('date', start)
+    .lte('date', end)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  } else {
+    query = query.eq('user_id', userId).is('organization_id', null)
+  }
+
+  const { data } = await query
+  type Row = { date: string; kind: string; amount: number; category: { name?: string; color?: string } | { name?: string; color?: string }[] | null }
+  const rows = (data || []) as unknown as Row[]
+
+  const months: MonthlySummary[] = []
+  for (let i = 0; i < 12; i++) {
+    months.push({
+      year,
+      month: i + 1,
+      income: 0,
+      expenses: 0,
+      net: 0,
+      savingsChange: 0,
+    })
+  }
+
+  const catTotals = new Map<string, { total: number; color?: string }>()
+
+  for (const row of rows) {
+    const m = Number(String(row.date).slice(5, 7)) - 1
+    const amount = Number(row.amount) || 0
+    if (row.kind === 'income') months[m].income += amount
+    else if (row.kind === 'expense') {
+      months[m].expenses += amount
+      const cat = Array.isArray(row.category) ? row.category[0] : row.category
+      const name = cat?.name || 'Sin categoría'
+      const existing = catTotals.get(name) ?? { total: 0, color: cat?.color }
+      existing.total += amount
+      if (!existing.color && cat?.color) existing.color = cat.color
+      catTotals.set(name, existing)
+    }
+  }
+
+  for (const m of months) m.net = m.income - m.expenses
+
+  const categories: CategorySummary[] = Array.from(catTotals.entries())
+    .map(([name, v], i) => ({
+      categoryId: name,
+      categoryName: name,
+      color: v.color || getCategoryColor(i),
+      total: v.total,
+    }))
+    .sort((a, b) => b.total - a.total)
+
+  return { months, categories }
 }
 
 // Weekly summary interface

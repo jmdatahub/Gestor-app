@@ -20,14 +20,6 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
-// Debug log for config issues
-console.log('API Config:', {
-  hasUrl: !!supabaseUrl,
-  urlPrefix: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'MISSING',
-  hasServiceKey: !!supabaseServiceKey,
-  keyPrefix: supabaseServiceKey ? supabaseServiceKey.substring(0, 20) + '...' : 'MISSING'
-})
-
 if (!supabaseUrl || !supabaseServiceKey) {
   console.error('FATAL: Missing Supabase configuration. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.')
 }
@@ -85,20 +77,13 @@ interface TokenValidationResult {
 }
 
 async function validateToken(authHeader: string | undefined): Promise<TokenValidationResult | null> {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log('API Auth: No Bearer header found')
-    return null
-  }
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
 
   const rawToken = authHeader.replace('Bearer ', '').trim()
-  if (!rawToken.startsWith('sk_live_')) {
-    console.log('API Auth: Token does not start with sk_live_')
-    return null
-  }
+  if (!rawToken.startsWith('sk_live_')) return null
 
   try {
     const tokenHash = await hashToken(rawToken)
-    console.log('API Auth: Looking for token hash:', tokenHash.substring(0, 16) + '...')
 
     const { data, error } = await supabase
       .from('api_tokens')
@@ -106,19 +91,8 @@ async function validateToken(authHeader: string | undefined): Promise<TokenValid
       .eq('token_hash', tokenHash)
       .single()
 
-    if (error) {
-      console.log('API Auth: Query error:', error.message, error.code)
-      return null
-    }
-    
-    if (!data) {
-      console.log('API Auth: No token found matching hash')
-      return null
-    }
+    if (error || !data) return null
 
-    console.log('API Auth: Token valid for user:', data.user_id, 'org:', data.organization_id)
-
-    // Update last_used_at (fire and forget, don't block)
     void supabase.rpc('update_token_last_used', { p_token_hash: tokenHash }).then(() => {})
 
     return {
@@ -127,7 +101,7 @@ async function validateToken(authHeader: string | undefined): Promise<TokenValid
       scopes: data.scopes || []
     }
   } catch (err) {
-    console.log('API Auth: Unexpected error:', err)
+    console.error('[api/v1/movements] validateToken error:', err)
     return null
   }
 }

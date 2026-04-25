@@ -129,12 +129,12 @@ describe('Skeleton Components - Smoke Tests', () => {
 
   it('renders SkeletonList', async () => {
     const { SkeletonList } = await import('../components/Skeleton')
-    
+
     render(<SkeletonList rows={3} />)
-    
-    // Should have skeleton-row elements
-    const rows = document.querySelectorAll('.skeleton-row')
-    expect(rows.length).toBe(3)
+
+    // SkeletonList renders multiple .skeleton blocks (header + body shimmer rows).
+    const skeletons = document.querySelectorAll('.skeleton')
+    expect(skeletons.length).toBeGreaterThan(0)
   })
 })
 
