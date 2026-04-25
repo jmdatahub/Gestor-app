@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { 
-  getUserRecurringRules, 
-  createRecurringRule,
-  toggleRecurringRuleActive,
+import {
+  getUserRecurringRules,
   type RecurringRule,
-  type CreateRuleInput
+  type CreateRuleInput,
 } from '../../services/recurringService'
+import {
+  useCreateRecurringRule,
+  useToggleRecurringRuleActive,
+} from '../../hooks/queries/useRecurringMutations'
 import { fetchAccounts, type Account } from '../../services/movementService'
 import { Plus, Power, PowerOff, X, RefreshCw } from 'lucide-react'
 import { useI18n } from '../../hooks/useI18n'
@@ -25,6 +27,8 @@ import { CategoryPicker } from '../../components/domain/CategoryPicker'
 export default function RecurringList() {
   const { t, language } = useI18n()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
+  const createRuleMutation = useCreateRecurringRule()
+  const toggleRuleMutation = useToggleRecurringRuleActive()
   const [rules, setRules] = useState<RecurringRule[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [categories, setCategories] = useState<{ id: string; name: string; type: string }[]>([])
@@ -112,7 +116,7 @@ export default function RecurringList() {
         next_occurrence: nextOccurrence.toISOString().split('T')[0]
       }
 
-      await createRecurringRule(input)
+      await createRuleMutation.mutateAsync(input)
       setShowModal(false)
       resetForm()
       loadData()
@@ -125,7 +129,7 @@ export default function RecurringList() {
 
   const handleToggle = async (rule: RecurringRule) => {
     try {
-      await toggleRecurringRuleActive(rule.id, !rule.is_active)
+      await toggleRuleMutation.mutateAsync({ id: rule.id, isActive: !rule.is_active })
       loadData()
     } catch (error) {
       console.error('Error toggling rule:', error)

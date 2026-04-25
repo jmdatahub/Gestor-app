@@ -11,29 +11,21 @@ import { countPendingDebts } from '../services/debtService'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { HeaderWorkspaceSelector } from '../components/layout/HeaderWorkspaceSelector'
 
-import { 
-  LayoutDashboard, 
-  Wallet, 
+import {
+  LayoutDashboard,
+  Wallet,
   LogOut,
   Menu,
   X,
-  Building,
   ArrowUpDown,
-  PiggyBank,
   RefreshCw,
   WifiOff,
-  Shield,
-  Download,
-  TrendingUp,
-  Bell,
-  CreditCard,
-  Lightbulb,
-  Tag,
   BarChart3,
   Settings,
   ChevronLeft,
   ChevronRight,
-  Mail
+  SlidersHorizontal,
+  Building,
 } from 'lucide-react'
 
 // Constants
@@ -181,21 +173,11 @@ export default function AppLayout() {
     setIsCollapsed(!isCollapsed)
   }
 
-  const navItems = [
+  const primaryNavItems = [
     { key: 'nav.dashboard', path: '/app/dashboard', icon: LayoutDashboard },
-    { key: 'nav.organizations', path: '/app/organizations', icon: Building },
-    { key: 'nav.summary', path: '/app/summary', icon: BarChart3 },
-    { key: 'nav.movements', path: '/app/movements', icon: ArrowUpDown },
-    { key: 'nav.categories', path: '/app/categories', icon: Tag },
-    { key: 'nav.accounts', path: '/app/accounts', icon: CreditCard },
-    { key: 'nav.savings', path: '/app/savings', icon: PiggyBank },
-    { key: 'nav.investments', path: '/app/investments', icon: TrendingUp },
-    { key: 'nav.recurring', path: '/app/recurring', icon: RefreshCw },
-    { key: 'nav.debts', path: '/app/debts', icon: Wallet },
-    { key: 'nav.insights', path: '/app/insights', icon: Lightbulb },
-    { key: 'nav.alerts', path: '/app/alerts', icon: Bell },
-    { key: 'nav.export', path: '/app/export', icon: Download },
-    { key: 'nav.admin', path: '/app/admin', icon: Shield },
+    { key: 'nav.movements', path: '/app/movimientos', icon: ArrowUpDown },
+    { key: 'nav.patrimonio', path: '/app/patrimonio', icon: Wallet },
+    { key: 'nav.analisis', path: '/app/analisis', icon: BarChart3 },
   ]
 
   if (loading) {
@@ -292,52 +274,40 @@ export default function AppLayout() {
           </button>
         </div>
         
-        <nav className="nav-section">
-          {navItems.map((item) => (
+        <nav className="nav-section" style={{ flex: 1 }}>
+          {primaryNavItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
-              className={({ isActive }) => 
+              className={({ isActive }) =>
                 `nav-item ${isActive ? 'active' : ''}`
               }
               title={isCollapsed ? t(item.key) : ''}
             >
               <div className="nav-item-icon" style={{ position: 'relative' }}>
                 <item.icon size={20} />
-                {/* Red badge for pending invitations on Dashboard */}
                 {item.path === '/app/dashboard' && pendingInvitations > 0 && (
                   <span style={{
                     position: 'absolute',
-                    top: -4,
-                    right: -4,
-                    minWidth: 18,
-                    height: 18,
+                    top: -4, right: -4,
+                    minWidth: 18, height: 18,
                     borderRadius: '50%',
                     background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                    color: 'white',
-                    fontSize: 10,
-                    fontWeight: 700,
+                    color: 'white', fontSize: 10, fontWeight: 700,
                     animation: 'pulse 2s infinite'
                   }}>
                     {pendingInvitations}
                   </span>
                 )}
-                {/* Red badge for pending debts */}
-                {item.key === 'nav.debts' && pendingDebts > 0 && (
+                {item.path === '/app/patrimonio' && pendingDebts > 0 && (
                   <span style={{
                     position: 'absolute',
-                    top: -4,
-                    right: -4,
-                    minWidth: 16,
-                    height: 16,
+                    top: -4, right: -4,
+                    minWidth: 16, height: 16,
                     borderRadius: '50%',
                     background: '#ef4444',
-                    color: 'white',
-                    fontSize: 9,
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    color: 'white', fontSize: 9, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                     border: '1px solid var(--sidebar-bg)'
                   }}>
                     {pendingDebts}
@@ -347,16 +317,11 @@ export default function AppLayout() {
               <span className="nav-item-text transition-opacity duration-200 whitespace-nowrap">
                 {t(item.key)}
               </span>
-              {/* Text badge when not collapsed */}
               {item.path === '/app/dashboard' && pendingInvitations > 0 && !isCollapsed && (
                 <span style={{
-                  marginLeft: 'auto',
-                  padding: '2px 8px',
-                  borderRadius: 10,
+                  marginLeft: 'auto', padding: '2px 8px', borderRadius: 10,
                   background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                  color: 'white',
-                  fontSize: 11,
-                  fontWeight: 600,
+                  color: 'white', fontSize: 11, fontWeight: 600,
                   boxShadow: '0 2px 6px rgba(239,68,68,0.4)'
                 }}>
                   {pendingInvitations} 📩
@@ -364,6 +329,28 @@ export default function AppLayout() {
               )}
             </NavLink>
           ))}
+
+          {/* Separator */}
+          <div style={{
+            height: 1,
+            background: 'var(--border-color)',
+            margin: '8px 16px',
+            opacity: 0.5,
+          }} />
+
+          {/* Configuración */}
+          <NavLink
+            to="/app/config"
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            title={isCollapsed ? t('nav.config') : ''}
+          >
+            <div className="nav-item-icon">
+              <SlidersHorizontal size={20} />
+            </div>
+            <span className="nav-item-text transition-opacity duration-200 whitespace-nowrap">
+              {t('nav.config')}
+            </span>
+          </NavLink>
         </nav>
         
         <div className="sidebar-footer">
@@ -402,12 +389,12 @@ export default function AppLayout() {
           </div>
           
           <nav className="nav-section">
-            {navItems.map((item) => (
+            {primaryNavItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
                 onClick={() => setMobileMenuOpen(false)}
-                className={({ isActive }) => 
+                className={({ isActive }) =>
                   `nav-item ${isActive ? 'active' : ''}`
                 }
               >
@@ -417,6 +404,15 @@ export default function AppLayout() {
                 <span className="nav-item-text">{t(item.key)}</span>
               </NavLink>
             ))}
+            <div style={{ height: 1, background: 'var(--border-color)', margin: '8px 16px', opacity: 0.5 }} />
+            <NavLink
+              to="/app/config"
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+            >
+              <div className="nav-item-icon"><SlidersHorizontal size={20} /></div>
+              <span className="nav-item-text">{t('nav.config')}</span>
+            </NavLink>
           </nav>
           
           <div className="sidebar-footer">

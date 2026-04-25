@@ -30,6 +30,9 @@ export const translations: Record<string, Record<string, string>> = {
     'nav.alerts': 'Alertas',
     'nav.export': 'Exportar',
     'nav.logout': 'Cerrar Sesión',
+    'nav.patrimonio': 'Patrimonio',
+    'nav.analisis': 'Análisis',
+    'nav.config': 'Configuración',
     
     // Settings
     'settings.title': 'Ajustes',
@@ -379,6 +382,9 @@ export const translations: Record<string, Record<string, string>> = {
     'nav.alerts': 'Alerts',
     'nav.export': 'Export',
     'nav.logout': 'Log Out',
+    'nav.patrimonio': 'Patrimony',
+    'nav.analisis': 'Analysis',
+    'nav.config': 'Settings',
     
     // Settings
     'settings.title': 'Settings',

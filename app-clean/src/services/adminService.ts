@@ -7,6 +7,7 @@ export interface UserProfile {
   is_suspended: boolean
   is_super_admin: boolean
   created_at: string
+  telegram_chat_id: string | null
 }
 
 // Get all users (only works for super admins due to RLS)
@@ -111,6 +112,7 @@ export async function getOrganizationCount(): Promise<number> {
     const { count, error } = await supabase
       .from('organizations')
       .select('*', { count: 'exact', head: true })
+      .is('deleted_at', null)
 
     if (error) return 0
     return count || 0

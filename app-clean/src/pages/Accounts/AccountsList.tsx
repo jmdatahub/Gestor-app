@@ -4,8 +4,6 @@ import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getAccountsWithBalances,
-  createAccount,
-  updateAccount,
   createTransfer,
   toggleAccountActive,
   calculateTotalsByType,
@@ -17,6 +15,7 @@ import {
   type CreateAccountInput,
   type AccountNode
 } from '../../services/accountService'
+import { useCreateAccount, useUpdateAccount } from '../../hooks/queries/useAccountMutations'
 import { useI18n } from '../../hooks/useI18n'
 import { useSettings } from '../../context/SettingsContext'
 import { UiSelect } from '../../components/ui/UiSelect'
@@ -41,6 +40,8 @@ export default function AccountsList() {
   const { settings } = useSettings()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
+  const createAccountMutation = useCreateAccount()
+  const updateAccountMutation = useUpdateAccount()
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
   const [flatAccounts, setFlatAccounts] = useState<AccountNode[]>([])
   const [loading, setLoading] = useState(true)
@@ -100,13 +101,13 @@ export default function AccountsList() {
     if (!user) return
 
     try {
-      await createAccount({ 
-        user_id: user.id, 
+      await createAccountMutation.mutateAsync({
+        user_id: user.id,
         organization_id: currentWorkspace?.id || null,  // Include workspace
-        name, 
+        name,
         type,
         description: description || null,
-        parent_account_id: parentId || null 
+        parent_account_id: parentId || null
       })
       setShowCreateModal(false)
       resetForm()
@@ -134,10 +135,13 @@ export default function AccountsList() {
     setSubmitting(true)
 
     try {
-      await updateAccount(selectedAccount.id, { 
-        name, 
-        type, 
-        parent_account_id: parentId || null
+      await updateAccountMutation.mutateAsync({
+        id: selectedAccount.id,
+        updates: {
+          name,
+          type,
+          parent_account_id: parentId || null
+        }
       })
       setShowEditModal(false)
       setSelectedAccount(null)

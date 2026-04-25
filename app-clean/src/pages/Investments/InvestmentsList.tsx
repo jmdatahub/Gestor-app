@@ -4,16 +4,18 @@ import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getUserInvestments,
-  createInvestment,
-  updateInvestment,
-  updatePrice,
-  deleteInvestment,
   calculateTotals,
   investmentTypes,
   fetchExternalPrice,
   type Investment,
   type CreateInvestmentInput
 } from '../../services/investmentService'
+import {
+  useCreateInvestment,
+  useUpdateInvestment,
+  useDeleteInvestment,
+  useUpdateInvestmentPrice,
+} from '../../hooks/queries/useInvestmentMutations'
 import { getAccountsWithBalances, type AccountWithBalance } from '../../services/accountService'
 import { Plus, TrendingUp, TrendingDown, RefreshCw, Trash2, Eye, X, Pencil } from 'lucide-react'
 import { useI18n } from '../../hooks/useI18n'
@@ -34,6 +36,10 @@ export default function InvestmentsList() {
   const { settings } = useSettings()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
+  const createInvestmentMutation = useCreateInvestment()
+  const updateInvestmentMutation = useUpdateInvestment()
+  const deleteInvestmentMutation = useDeleteInvestment()
+  const updatePriceMutation = useUpdateInvestmentPrice()
   const locale = language === 'es' ? 'es-ES' : 'en-US'
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading, setLoading] = useState(true)
@@ -100,10 +106,15 @@ export default function InvestmentsList() {
       for (const inv of cryptoInvestments) {
         const newPriceValue = await fetchExternalPrice(inv)
         if (newPriceValue !== null && Math.abs(newPriceValue - inv.current_price) > 0.01) {
-          await updatePrice(inv.id, user.id, newPriceValue, new Date().toISOString().split('T')[0])
+          await updatePriceMutation.mutateAsync({
+            id: inv.id,
+            userId: user.id,
+            price: newPriceValue,
+            date: new Date().toISOString().split('T')[0],
+          })
         }
       }
-      
+
       setLastPriceUpdate(new Date())
       await loadData()
     } catch (error) {
@@ -154,9 +165,9 @@ export default function InvestmentsList() {
       }
 
       if (editingId) {
-        await updateInvestment(editingId, input)
+        await updateInvestmentMutation.mutateAsync({ id: editingId, updates: input })
       } else {
-        await createInvestment(input)
+        await createInvestmentMutation.mutateAsync(input)
       }
 
       setShowCreateModal(false)
@@ -178,7 +189,12 @@ export default function InvestmentsList() {
     if (!user) return
 
     try {
-      await updatePrice(selectedInvestment.id, user.id, parseFloat(newPrice), priceDate)
+      await updatePriceMutation.mutateAsync({
+        id: selectedInvestment.id,
+        userId: user.id,
+        price: parseFloat(newPrice),
+        date: priceDate,
+      })
       setShowPriceModal(false)
       setSelectedInvestment(null)
       setNewPrice('')
@@ -194,7 +210,7 @@ export default function InvestmentsList() {
     if (!confirm(t('investments.deleteConfirm', { name: inv.name }) || `¿Eliminar la inversión "${inv.name}"?`)) return
 
     try {
-      await deleteInvestment(inv.id)
+      await deleteInvestmentMutation.mutateAsync(inv.id)
       loadData()
     } catch (error) {
       console.error('Error deleting investment:', error)
@@ -262,7 +278,12 @@ export default function InvestmentsList() {
           // Calculate percentage change
           const changePercent = ((newPriceValue - inv.current_price) / inv.current_price) * 100
           
-          await updatePrice(inv.id, user.id, newPriceValue, new Date().toISOString().split('T')[0])
+          await updatePriceMutation.mutateAsync({
+            id: inv.id,
+            userId: user.id,
+            price: newPriceValue,
+            date: new Date().toISOString().split('T')[0],
+          })
           updatedCount++
           
           // Notify if significant change (>5%)

@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { 
-  getGoalsByUser, 
-  createGoal, 
-  deleteGoal,
-  addContribution,
-  type SavingsGoal 
+import {
+  getGoalsByUser,
+  type SavingsGoal,
 } from '../../services/savingsService'
+import {
+  useCreateSavingsGoal,
+  useDeleteSavingsGoal,
+  useAddSavingsContribution,
+} from '../../hooks/queries/useSavingsMutations'
 import { Plus, Target, CheckCircle2, PiggyBank, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
@@ -25,6 +27,9 @@ export default function SavingsList() {
   const { t } = useI18n()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
+  const createGoalMutation = useCreateSavingsGoal()
+  const deleteGoalMutation = useDeleteSavingsGoal()
+  const addContributionMutation = useAddSavingsContribution()
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [loading, setLoading] = useState(true)
   const [showGoalModal, setShowGoalModal] = useState(false)
@@ -78,7 +83,7 @@ export default function SavingsList() {
     }
 
     try {
-      await createGoal({
+      await createGoalMutation.mutateAsync({
         user_id: user.id,
         organization_id: currentWorkspace?.id || null,  // Include workspace
         name: goalName,
@@ -108,7 +113,7 @@ export default function SavingsList() {
     if (!user) return
 
     try {
-      await addContribution({
+      await addContributionMutation.mutateAsync({
         goal_id: selectedGoalId,
         amount: parseFloat(contribAmount),
         date: contribDate,
@@ -306,7 +311,7 @@ export default function SavingsList() {
                       className="btn btn-icon btn-ghost btn-sm text-danger/70 hover:text-danger" 
                       onClick={async () => {
                         if (confirm('¿Eliminar este objetivo de ahorro?')) {
-                          await deleteGoal(goal.id)
+                          await deleteGoalMutation.mutateAsync(goal.id)
                           loadGoals()
                         }
                       }}
@@ -378,7 +383,7 @@ export default function SavingsList() {
                             className="btn btn-icon btn-ghost btn-sm text-danger/70 hover:text-danger" 
                             onClick={async () => {
                               if (confirm('¿Eliminar este objetivo de ahorro completado?')) {
-                                await deleteGoal(goal.id)
+                                await deleteGoalMutation.mutateAsync(goal.id)
                                 loadGoals()
                               }
                             }}

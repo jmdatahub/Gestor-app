@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { fetchDebts, createDebt, type Debt, type CreateDebtInput } from '../../services/debtService'
+import { fetchDebts, type Debt, type CreateDebtInput } from '../../services/debtService'
+import { useCreateDebt } from '../../hooks/queries/useDebtMutations'
 import { Plus, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useI18n } from '../../hooks/useI18n'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
@@ -22,6 +23,7 @@ export default function DebtsList() {
   const navigate = useNavigate()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
+  const createDebtMutation = useCreateDebt()
   const [debts, setDebts] = useState<Debt[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'i_owe' | 'they_owe_me'>('i_owe')
@@ -100,7 +102,7 @@ export default function DebtsList() {
         description: description.trim() || null
       }
       
-      await createDebt(input)
+      await createDebtMutation.mutateAsync(input)
       clearTimeout(timeoutId)
       
       console.log('[DebtsList] Debt created successfully!')

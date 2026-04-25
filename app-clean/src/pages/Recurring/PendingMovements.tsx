@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
-import { 
-  getPendingMovements, 
-  acceptPendingMovement, 
-  discardPendingMovement 
-} from '../../services/recurringService'
+import { getPendingMovements } from '../../services/recurringService'
+import {
+  useAcceptPendingMovement,
+  useDiscardPendingMovement,
+} from '../../hooks/queries/useRecurringMutations'
 import { Check, X, ArrowLeft, Clock } from 'lucide-react'
 
 interface PendingMovement {
@@ -20,6 +20,8 @@ interface PendingMovement {
 
 export default function PendingMovements() {
   const navigate = useNavigate()
+  const acceptMutation = useAcceptPendingMovement()
+  const discardMutation = useDiscardPendingMovement()
   const [movements, setMovements] = useState<PendingMovement[]>([])
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
@@ -45,7 +47,7 @@ export default function PendingMovements() {
   const handleAccept = async (id: string) => {
     setProcessing(id)
     try {
-      await acceptPendingMovement(id)
+      await acceptMutation.mutateAsync(id)
       setMovements(prev => prev.filter(m => m.id !== id))
     } catch (error) {
       console.error('Error accepting:', error)
@@ -58,7 +60,7 @@ export default function PendingMovements() {
     if (!confirm('¿Descartar este movimiento pendiente?')) return
     setProcessing(id)
     try {
-      await discardPendingMovement(id)
+      await discardMutation.mutateAsync(id)
       setMovements(prev => prev.filter(m => m.id !== id))
     } catch (error) {
       console.error('Error discarding:', error)

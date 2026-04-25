@@ -46,7 +46,8 @@ import {
   ExternalLink,
   AlertTriangle,
   Edit2,
-  Undo2
+  Undo2,
+  Send
 } from 'lucide-react'
 
 const SUPER_ADMIN_EMAIL = 'mp.jorge00@gmail.com'
@@ -500,12 +501,13 @@ export default function AdminPanel() {
   const getInitials = (text: string | null) => (text || '?').charAt(0).toUpperCase()
 
   // Prepare Export Data (MUST be before conditional returns to comply with Rules of Hooks)
-  const exportColumns = activeTab === 'users' 
+  const exportColumns = activeTab === 'users'
     ? [
         { header: 'ID', key: 'id', width: 36 },
         { header: 'Email', key: 'email', width: 30 },
         { header: 'Nombre', key: 'name', width: 25 },
         { header: 'Estado', key: 'status', width: 15 },
+        { header: 'Telegram', key: 'telegram', width: 15 },
         { header: 'Fecha Registro', key: 'date', width: 20 }
       ]
     : [
@@ -523,6 +525,7 @@ export default function AdminPanel() {
         email: user.email,
         name: user.display_name || 'Sin nombre',
         status: user.is_suspended ? 'Suspendido' : 'Activo',
+        telegram: user.telegram_chat_id ? 'Conectado' : 'Sin conectar',
         date: user.created_at ? new Date(user.created_at).toLocaleString('es-ES') : '-'
       }))
     } else {
@@ -717,6 +720,7 @@ export default function AdminPanel() {
                     <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Usuario</th>
                     <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Registro</th>
                     <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Estado</th>
+                    <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Telegram</th>
                     <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Acciones</th>
                   </tr>
                 </thead>
@@ -748,6 +752,19 @@ export default function AdminPanel() {
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 20, color: '#22c55e', fontSize: 11, fontWeight: 600 }}>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }}></span>
                             Activo
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '16px 24px' }}>
+                        {user.telegram_chat_id ? (
+                          <span title={`Chat ID: ${user.telegram_chat_id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 20, color: '#22c55e', fontSize: 11, fontWeight: 600 }}>
+                            <Send size={11} />
+                            Conectado
+                          </span>
+                        ) : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.2)', borderRadius: 20, color: '#64748b', fontSize: 11, fontWeight: 600 }}>
+                            <Send size={11} />
+                            Sin conectar
                           </span>
                         )}
                       </td>

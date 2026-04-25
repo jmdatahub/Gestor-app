@@ -368,8 +368,12 @@ export default function MovementsList() {
       }
 
       if (editingMovement) {
-        // Update existing movement
-        await updateMovementMutation.mutateAsync({ id: editingMovement.id, updates: movementData })
+        // Update existing movement (pass original so the dashboard KPIs reverse + reapply optimistically)
+        await updateMovementMutation.mutateAsync({
+          id: editingMovement.id,
+          updates: movementData,
+          original: { kind: editingMovement.kind, amount: editingMovement.amount },
+        })
         toast.success('Movimiento actualizado', 'Los cambios se han guardado correctamente')
       } else {
         // Create new movement
@@ -458,7 +462,10 @@ export default function MovementsList() {
     
     try {
       const movDesc = movementToDelete.description || movementToDelete.kind
-      await deleteMovementMutation.mutateAsync(movementToDelete.id)
+      await deleteMovementMutation.mutateAsync({
+        id: movementToDelete.id,
+        original: { kind: movementToDelete.kind, amount: movementToDelete.amount },
+      })
       // Remove from local state
       setMovements(movements.filter(m => m.id !== movementToDelete.id))
       // Recalculate summary
