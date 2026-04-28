@@ -1,362 +1,122 @@
-import { supabase } from '../lib/supabaseClient'
-import { createMovement } from './movementService'
+import { api } from '../lib/apiClient'
 
-// Types
+export type InvestmentType = 'crypto' | 'stock' | 'etf' | 'bond' | 'real_estate' | 'commodity' | 'other'
+
+export const investmentTypes: Array<{ value: InvestmentType; label: string }> = [
+  { value: 'crypto', label: 'Criptomoneda' },
+  { value: 'stock', label: 'Acción' },
+  { value: 'etf', label: 'ETF' },
+  { value: 'bond', label: 'Bono' },
+  { value: 'real_estate', label: 'Inmueble' },
+  { value: 'commodity', label: 'Commodity' },
+  { value: 'other', label: 'Otro' },
+]
+
 export interface Investment {
-  id: string
-  user_id: string
-  name: string
-  type: string // crypto, collectible, stock, fund, manual, etc.
-  quantity: number
-  buy_price: number
-  current_price: number
-  currency: string
-  notes: string | null
-  account_id?: string | null // Account where the investment is held
-  created_at: string
-  updated_at: string | null
-}
-
-export interface PriceHistoryEntry {
-  id: string
-  investment_id: string
-  user_id: string
-  price: number
-  date: string
-  created_at: string
+  id: string; user_id: string; organization_id?: string | null; name: string
+  ticker?: string | null; asset_type: string; quantity: number
+  avg_buy_price: number; current_price?: number | null; currency?: string
+  notes?: string | null; created_at: string; deleted_at?: string | null
+  // Compat snake_case / alternate fields (computed from main fields)
+  type?: InvestmentType | string; account_id?: string | null
+  buy_price?: number; currentPrice?: number
+  fund_from_account_id?: string | null
 }
 
 export interface CreateInvestmentInput {
-  user_id: string
-  organization_id?: string | null  // Add organization support
-  name: string
-  type: string
-  quantity: number
-  buy_price: number
-  current_price: number
-  currency?: string
-  notes?: string | null
-  account_id?: string | null
-  fund_from_account_id?: string | null // Optional: Account to deduct funds from
+  user_id: string; organization_id?: string | null; name: string
+  ticker?: string | null; asset_type?: string; quantity: number
+  avg_buy_price?: number; current_price?: number | null; currency?: string
+  notes?: string | null; type?: InvestmentType | string; account_id?: string | null
+  buy_price?: number; fund_from_account_id?: string | null
+}
+export interface InvestmentPriceHistory {
+  id: string; investment_id: string; price: number; date: string; created_at: string
 }
 
-// Get all investments for user (filtered by organization if provided)
-export async function getUserInvestments(userId: string, organizationId: string | null = null): Promise<Investment[]> {
-  let query = supabase
-    .from('investments')
-    .select('*')
-    .eq('user_id', userId)
-  
-  // Filter by organization_id (null for personal, specific ID for org)
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.is('organization_id', null)
-  }
-  
-  const { data, error } = await query
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching investments:', error)
-    throw error
-  }
-  return data || []
-}
-
-// Get single investment
-export async function getInvestmentById(investmentId: string): Promise<Investment | null> {
-  const { data, error } = await supabase
-    .from('investments')
-    .select('*')
-    .eq('id', investmentId)
-    .single()
-
-  if (error) {
-    console.error('Error fetching investment:', error)
-    throw error
-  }
+export async function fetchInvestments(_userId: string, organizationId?: string | null): Promise<Investment[]> {
+  const params: Record<string, string> = {}
+  if (organizationId) params.org_id = organizationId
+  const { data } = await api.get<{ data: Investment[] }>('/api/v1/investments', params)
   return data
 }
 
-// Create new investment
-export async function createInvestment(input: CreateInvestmentInput): Promise<Investment> {
-  // Extract non-DB fields
-  const { fund_from_account_id, ...dbInput } = input
-
-  const { data, error } = await supabase
-    .from('investments')
-    .insert([{
-      ...dbInput,
-      currency: input.currency || 'EUR'
-    }])
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error creating investment:', error)
-    throw error
-  }
-
-  // Run side-effects in parallel: initial price history + funding-account expense.
-  const today = new Date().toISOString().split('T')[0]
-  const sideEffects: Promise<unknown>[] = [
-    addPriceHistoryEntry(data.id, input.user_id, input.current_price, today),
-  ]
-
-  if (fund_from_account_id) {
-    const totalCost = input.quantity * input.buy_price
-    if (totalCost > 0) {
-      sideEffects.push(
-        createMovement({
-          user_id: input.user_id,
-          account_id: fund_from_account_id,
-          kind: 'expense',
-          amount: totalCost,
-          date: today,
-          description: `Inversión: ${input.name}`,
-          category_id: null,
-        }).catch(err => console.error('Error creating expense for investment:', err))
-      )
-    }
-  }
-
-  await Promise.all(sideEffects)
+export async function getInvestmentById(id: string): Promise<Investment | null> {
+  const { data } = await api.get<{ data: Investment }>(`/api/v1/investments/${id}`)
   return data
 }
 
-// Update investment
-export async function updateInvestment(investmentId: string, updates: Partial<Investment>): Promise<Investment> {
-  const { data, error } = await supabase
-    .from('investments')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', investmentId)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error updating investment:', error)
-    throw error
-  }
+export async function createInvestment(inv: CreateInvestmentInput): Promise<Investment> {
+  const { data } = await api.post<{ data: Investment }>('/api/v1/investments', inv)
   return data
 }
 
-// Delete investment
-export async function deleteInvestment(investmentId: string): Promise<void> {
-  // First delete price history
-  await supabase
-    .from('investment_price_history')
-    .delete()
-    .eq('investment_id', investmentId)
-
-  // Then delete investment
-  const { error } = await supabase
-    .from('investments')
-    .delete()
-    .eq('id', investmentId)
-
-  if (error) {
-    console.error('Error deleting investment:', error)
-    throw error
-  }
-}
-
-// Update price and record history
-export async function updatePrice(investmentId: string, userId: string, newPrice: number, date: string): Promise<void> {
-  // Update current price
-  await supabase
-    .from('investments')
-    .update({ 
-      current_price: newPrice,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', investmentId)
-
-  // Add history entry
-  await addPriceHistoryEntry(investmentId, userId, newPrice, date)
-}
-
-// Add price history entry
-export async function addPriceHistoryEntry(
-  investmentId: string, 
-  userId: string, 
-  price: number, 
-  date: string
-): Promise<PriceHistoryEntry> {
-  const { data, error } = await supabase
-    .from('investment_price_history')
-    .insert([{
-      investment_id: investmentId,
-      user_id: userId,
-      price,
-      date
-    }])
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error adding price history:', error)
-    throw error
-  }
+export async function updateInvestment(id: string, updates: Partial<Investment>): Promise<Investment> {
+  const { data } = await api.patch<{ data: Investment }>(`/api/v1/investments/${id}`, updates)
   return data
 }
 
-// Get price history for investment
-export async function getPriceHistory(investmentId: string): Promise<PriceHistoryEntry[]> {
-  const { data, error } = await supabase
-    .from('investment_price_history')
-    .select('*')
-    .eq('investment_id', investmentId)
-    .order('date', { ascending: true })
-
-  if (error) {
-    console.error('Error fetching price history:', error)
-    throw error
-  }
-  return data || []
+export async function deleteInvestment(id: string): Promise<void> {
+  await api.delete(`/api/v1/investments/${id}`)
 }
 
-// Calculate totals
-export function calculateTotals(investments: Investment[]) {
-  const totalValue = investments.reduce((sum, inv) => sum + (inv.quantity * inv.current_price), 0)
-  const totalCost = investments.reduce((sum, inv) => sum + (inv.quantity * inv.buy_price), 0)
-  const totalProfitLoss = totalValue - totalCost
-  const profitLossPercent = totalCost > 0 ? ((totalProfitLoss / totalCost) * 100) : 0
+export async function fetchPriceHistory(investmentId: string): Promise<InvestmentPriceHistory[]> {
+  const { data } = await api.get<{ data: InvestmentPriceHistory[] }>(`/api/v1/investments/${investmentId}/price-history`)
+  return data
+}
 
+export async function addPriceHistory(investmentId: string, entry: { price: number; date: string }): Promise<InvestmentPriceHistory> {
+  const { data } = await api.post<{ data: InvestmentPriceHistory }>(`/api/v1/investments/${investmentId}/price-history`, entry)
+  return data
+}
+
+export async function fetchCoinPrice(ticker: string): Promise<number | null> {
+  try {
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ticker)}&vs_currencies=eur`)
+    const json = await res.json()
+    return json[ticker]?.eur ?? null
+  } catch { return null }
+}
+
+// ---- Backward-compat aliases & helpers ----
+
+export const getUserInvestments = fetchInvestments
+
+export interface InvestmentTotals {
+  totalValue: number; totalCost: number; totalGain: number; gainPercent: number
+  // Compat aliases
+  totalProfitLoss: number; profitLossPercent: number; count: number
+}
+
+export function calculateTotals(investments: Investment[]): InvestmentTotals {
+  let totalValue = 0; let totalCost = 0
+  for (const inv of investments) {
+    const price = inv.current_price ?? inv.avg_buy_price
+    const cost = (inv.buy_price ?? inv.avg_buy_price) * inv.quantity
+    totalValue += price * inv.quantity
+    totalCost += cost
+  }
+  const totalGain = totalValue - totalCost
+  const gainPercent = totalCost > 0 ? (totalGain / totalCost) * 100 : 0
   return {
-    totalValue,
-    totalCost,
-    totalProfitLoss,
-    profitLossPercent,
-    count: investments.length
+    totalValue, totalCost, totalGain, gainPercent,
+    totalProfitLoss: totalGain, profitLossPercent: gainPercent,
+    count: investments.length,
   }
 }
 
-// Investment types for dropdown
-export const investmentTypes = [
-  { value: 'crypto', label: 'Criptomoneda' },
-  { value: 'stock', label: 'Acción' },
-  { value: 'fund', label: 'Fondo de inversión' },
-  { value: 'etf', label: 'ETF' },
-  { value: 'collectible', label: 'Coleccionable' },
-  { value: 'real_estate', label: 'Inmobiliario' },
-  { value: 'manual', label: 'Otro / Manual' }
-]
-
-// Crypto name to CoinGecko ID mapping
-const CRYPTO_ID_MAP: Record<string, string> = {
-  'bitcoin': 'bitcoin',
-  'btc': 'bitcoin',
-  'ethereum': 'ethereum',
-  'eth': 'ethereum',
-  'ripple': 'ripple',
-  'xrp': 'ripple',
-  'cardano': 'cardano',
-  'ada': 'cardano',
-  'solana': 'solana',
-  'sol': 'solana',
-  'polkadot': 'polkadot',
-  'dot': 'polkadot',
-  'dogecoin': 'dogecoin',
-  'doge': 'dogecoin',
-  'litecoin': 'litecoin',
-  'ltc': 'litecoin',
-  'avalanche': 'avalanche-2',
-  'avax': 'avalanche-2',
-  'chainlink': 'chainlink',
-  'link': 'chainlink',
-  'polygon': 'matic-network',
-  'matic': 'matic-network',
+export async function updatePrice(id: string, _userId: string, price: number, date: string): Promise<Investment> {
+  const entry = await addPriceHistory(id, { price, date })
+  return updateInvestment(id, { current_price: entry.price })
 }
 
-/**
- * Fetch current price from CoinGecko API (free, no API key required)
- * Supports crypto only for now
- */
-export async function fetchExternalPrice(investment: Investment): Promise<number | null> {
-  if (investment.type !== 'crypto') {
-    // Only crypto supported for now
-    return null
+export type PriceHistoryEntry = InvestmentPriceHistory
+export const getPriceHistory = fetchPriceHistory
+
+export async function fetchExternalPrice(inv: Investment): Promise<number | null> {
+  const type = inv.type ?? inv.asset_type
+  if (type === 'crypto' && inv.ticker) {
+    return fetchCoinPrice(inv.ticker)
   }
-
-  try {
-    // Normalize investment name to lowercase and find CoinGecko ID
-    const normalizedName = investment.name.toLowerCase().trim()
-    const coinId = CRYPTO_ID_MAP[normalizedName] || normalizedName
-
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=eur`,
-      {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        }
-      }
-    )
-
-    if (!response.ok) {
-      console.warn(`CoinGecko API error: ${response.status}`)
-      return null
-    }
-
-    const data = await response.json()
-    const price = data[coinId]?.eur
-
-    if (typeof price === 'number') {
-      return price
-    }
-
-    console.warn(`Price not found for ${coinId}`)
-    return null
-  } catch (error) {
-    console.error('Error fetching external price:', error)
-    return null
-  }
-}
-
-/**
- * Fetch prices for multiple cryptos at once (more efficient)
- */
-export async function fetchMultipleCryptoPrices(names: string[]): Promise<Record<string, number>> {
-  const coinIds = names.map(name => {
-    const normalized = name.toLowerCase().trim()
-    return CRYPTO_ID_MAP[normalized] || normalized
-  })
-
-  const uniqueIds = [...new Set(coinIds)]
-  
-  try {
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${uniqueIds.join(',')}&vs_currencies=eur`,
-      {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        }
-      }
-    )
-
-    if (!response.ok) {
-      console.warn(`CoinGecko API error: ${response.status}`)
-      return {}
-    }
-
-    const data = await response.json()
-    const result: Record<string, number> = {}
-
-    names.forEach((name, index) => {
-      const coinId = coinIds[index]
-      if (data[coinId]?.eur) {
-        result[name.toLowerCase()] = data[coinId].eur
-      }
-    })
-
-    return result
-  } catch (error) {
-    console.error('Error fetching multiple prices:', error)
-    return {}
-  }
+  return null
 }

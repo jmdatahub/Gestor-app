@@ -1,11 +1,9 @@
 /**
- * Schema Service - Inspecciona el schema real de Supabase
- * 
- * Consulta information_schema para obtener columnas reales
- * y compara con las columnas esperadas por el código.
+ * Schema Service - Schema inspection (stubbed — RPC not available via API)
+ *
+ * getTableColumns and quickSchemaCheck return stubs.
+ * EXPECTED_SCHEMA, compareSchema, generateFixSQL remain intact.
  */
-
-import { supabase } from '../lib/supabaseClient'
 
 export interface ColumnInfo {
   column_name: string
@@ -42,33 +40,13 @@ export const EXPECTED_SCHEMA: Record<string, string[]> = {
 
 /**
  * Get columns for a specific table
+ * Stubbed: schema inspection via RPC is not available through the REST API.
  */
 export async function getTableColumns(tableName: string): Promise<TableSchema> {
-  try {
-    // Query information_schema - this works because it's a read-only system view
-    const { data, error } = await supabase
-      .rpc('get_table_columns', { table_name: tableName })
-    
-    if (error) {
-      // Fallback: try direct query (may fail if RPC not set up)
-      console.warn(`[schemaService] RPC failed, trying direct query for ${tableName}:`, error)
-      return {
-        tableName,
-        columns: [],
-        error: `No se pudo obtener schema: ${error.message}`
-      }
-    }
-    
-    return {
-      tableName,
-      columns: data || []
-    }
-  } catch (err) {
-    return {
-      tableName,
-      columns: [],
-      error: err instanceof Error ? err.message : 'Error desconocido'
-    }
+  return {
+    tableName,
+    columns: [],
+    error: 'Schema inspection not available',
   }
 }
 
@@ -138,46 +116,10 @@ export function generateFixSQL(mismatches: SchemaMismatch[]): string {
 
 /**
  * Quick check for critical columns at startup
- * Returns list of problems found
+ * Stubbed: schema inspection via RPC is not available through the REST API.
  */
 export async function quickSchemaCheck(): Promise<string[]> {
-  const problems: string[] = []
-  
-  // Check movements table (most critical)
-  const movements = await getTableColumns('movements')
-  if (movements.error) {
-    problems.push(`movements: ${movements.error}`)
-  } else {
-    const cols = movements.columns.map(c => c.column_name)
-    
-    // Check critical columns
-    if (!cols.includes('kind') && !cols.includes('type')) {
-      problems.push('movements: falta columna "kind" o "type"')
-    }
-    if (!cols.includes('user_id')) {
-      problems.push('movements: falta columna "user_id"')
-    }
-    if (!cols.includes('account_id')) {
-      problems.push('movements: falta columna "account_id"')
-    }
-  }
-  
-  // Check debts table
-  const debts = await getTableColumns('debts')
-  if (debts.error) {
-    problems.push(`debts: ${debts.error}`)
-  } else {
-    const cols = debts.columns.map(c => c.column_name)
-    
-    if (!cols.includes('direction')) {
-      problems.push('debts: falta columna "direction"')
-    }
-    if (!cols.includes('user_id')) {
-      problems.push('debts: falta columna "user_id"')
-    }
-  }
-  
-  return problems
+  return []
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit2, Check, Star, GripVertical, CreditCard } from 'lucide-react'
-import { supabase } from '../../lib/supabaseClient'
-import { 
+import { useAuth } from '../../context/AuthContext'
+import {
   getPaymentMethods, 
   createPaymentMethod, 
   updatePaymentMethod, 
@@ -15,6 +15,7 @@ import { UiField } from '../ui/UiField'
 import { useToast } from '../Toast'
 
 export function PaymentMethodsSettings() {
+  const { user } = useAuth()
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -33,7 +34,6 @@ export function PaymentMethodsSettings() {
   async function loadMethods() {
     try {
       setLoading(true)
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       
       const data = await getPaymentMethods(user.id)
@@ -62,7 +62,6 @@ export function PaymentMethodsSettings() {
 
     try {
       setSaving(true)
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       if (editingMethod) {
@@ -101,7 +100,6 @@ export function PaymentMethodsSettings() {
 
   async function handleSetDefault(id: string) {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       await setDefaultPaymentMethod(user.id, id)

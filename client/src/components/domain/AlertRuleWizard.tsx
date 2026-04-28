@@ -2,7 +2,7 @@
  * AlertRuleWizard - Formulario progresivo para crear reglas de alerta avanzadas
  */
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import {
   createAlertRule,
   alertRuleTypes,
@@ -35,6 +35,7 @@ interface AlertRuleWizardProps {
 type WizardStep = 'type' | 'condition' | 'options' | 'confirm'
 
 export function AlertRuleWizard({ isOpen, onClose, onSuccess }: AlertRuleWizardProps) {
+  const { user } = useAuth()
   const [step, setStep] = useState<WizardStep>('type')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -70,7 +71,6 @@ export function AlertRuleWizard({ isOpen, onClose, onSuccess }: AlertRuleWizardP
   }, [ruleType])
   
   const loadContextData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     
     try {
@@ -114,7 +114,6 @@ export function AlertRuleWizard({ isOpen, onClose, onSuccess }: AlertRuleWizardP
   }
   
   const handleSubmit = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setError('No se pudo obtener el usuario. Inicia sesión nuevamente.')
       return

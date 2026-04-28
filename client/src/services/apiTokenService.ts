@@ -1,150 +1,65 @@
-/**
- * API Token Service v2
- * Handles CRUD for API tokens with granular scopes and workspace support
- */
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 
-// All available scopes
-export const API_SCOPES = [
-  { id: 'movements:read',    label: 'Movimientos — Leer',         group: 'Movimientos' },
-  { id: 'movements:write',   label: 'Movimientos — Crear',        group: 'Movimientos' },
-  { id: 'accounts:read',     label: 'Cuentas — Leer',             group: 'Cuentas' },
-  { id: 'categories:read',   label: 'Categorías — Leer',          group: 'Categorías' },
-  { id: 'debts:read',        label: 'Deudas — Leer',              group: 'Deudas' },
-  { id: 'debts:write',       label: 'Deudas — Crear/Editar',      group: 'Deudas' },
-  { id: 'savings:read',      label: 'Ahorros — Leer',             group: 'Ahorros' },
-  { id: 'savings:write',     label: 'Ahorros — Crear/Editar',     group: 'Ahorros' },
-  { id: 'investments:read',  label: 'Inversiones — Leer',         group: 'Inversiones' },
-  { id: 'investments:write', label: 'Inversiones — Crear/Editar', group: 'Inversiones' },
-] as const
+export type ApiScope = string
 
-export type ApiScope = typeof API_SCOPES[number]['id']
+export interface ApiScopeDef {
+  id: ApiScope; label: string; group: string; description?: string
+}
 
-export const DEFAULT_SCOPES: ApiScope[] = [
-  'movements:read',
-  'movements:write',
-  'accounts:read',
-  'categories:read',
+export const API_SCOPES: ApiScopeDef[] = [
+  // Movements
+  { id: 'movements:read', label: 'Leer movimientos', group: 'Movimientos' },
+  { id: 'movements:write', label: 'Crear/editar movimientos', group: 'Movimientos' },
+  { id: 'movements:delete', label: 'Eliminar movimientos', group: 'Movimientos' },
+  // Accounts
+  { id: 'accounts:read', label: 'Leer cuentas', group: 'Cuentas' },
+  { id: 'accounts:write', label: 'Crear/editar cuentas', group: 'Cuentas' },
+  // Budgets
+  { id: 'budgets:read', label: 'Leer presupuestos', group: 'Presupuestos' },
+  { id: 'budgets:write', label: 'Crear/editar presupuestos', group: 'Presupuestos' },
+  // Reports
+  { id: 'reports:read', label: 'Leer reportes', group: 'Reportes' },
+  // Global
+  { id: 'global:access', label: 'Acceso global', group: 'Global' },
 ]
 
-// Generate a secure random token
-function generateToken(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let token = 'sk_live_'
-  for (let i = 0; i < 32; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return token
-}
-
-// Hash using Web Crypto API (same algorithm as serverless API)
-async function hashToken(token: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(token)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-}
+export const DEFAULT_SCOPES: ApiScope[] = ['movements:read', 'accounts:read', 'reports:read']
 
 export interface ApiToken {
-  id: string
-  user_id: string
-  name: string
-  token_hash: string
-  organization_id: string | null
-  scopes: ApiScope[]
-  expires_at: string | null
-  last_used_at: string | null
-  created_at: string
-  // Joined
+  id: string; user_id: string; organization_id?: string | null; name: string
+  token: string; scopes: string[]; created_at: string; last_used_at?: string | null
   organization?: { id: string; name: string } | null
 }
 
 export interface CreateApiTokenInput {
-  name: string
-  organization_id?: string | null
-  scopes?: ApiScope[]
-  expires_at?: string | null
+  name: string; scopes: string[]; organization_id?: string | null
 }
 
-/**
- * Fetch all tokens for a user (with organization name joined)
- */
-export async function getApiTokens(userId: string): Promise<ApiToken[]> {
-  const { data, error } = await supabase
-    .from('api_tokens')
-    .select(`
-      *,
-      organization:organizations(id, name)
-    `)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching API tokens:', error)
-    throw error
-  }
-  return (data || []) as ApiToken[]
+export async function fetchApiTokens(_userId: string): Promise<ApiToken[]> {
+  const { data } = await api.get<{ data: ApiToken[] }>('/api/v1/api-tokens')
+  return data
 }
 
-/**
- * Create a new API token
- * Returns the raw token (show once!) and saves the hash
- */
+// Backward compat alias
+export const getApiTokens = fetchApiTokens
+
 export async function createApiToken(
-  userId: string,
-  input: CreateApiTokenInput
+  _userId: string,
+  input: CreateApiTokenInput,
 ): Promise<{ token: string; record: ApiToken }> {
-  const rawToken = generateToken()
-  const tokenHash = await hashToken(rawToken)
-
-  const { data, error } = await supabase
-    .from('api_tokens')
-    .insert({
-      user_id: userId,
-      name: input.name,
-      token_hash: tokenHash,
-      organization_id: input.organization_id || null,
-      scopes: input.scopes || DEFAULT_SCOPES,
-      expires_at: input.expires_at || null,
-    })
-    .select(`
-      *,
-      organization:organizations(id, name)
-    `)
-    .single()
-
-  if (error) {
-    console.error('Error creating API token:', error)
-    throw error
-  }
-
-  return { token: rawToken, record: data as ApiToken }
+  const { data } = await api.post<{ data: { token: string; record: ApiToken } }>('/api/v1/api-tokens', {
+    name: input.name,
+    scopes: input.scopes,
+    organization_id: input.organization_id,
+  })
+  return data
 }
 
-/**
- * Delete/Revoke a token
- */
-export async function revokeApiToken(tokenId: string): Promise<void> {
-  const { error } = await supabase
-    .from('api_tokens')
-    .delete()
-    .eq('id', tokenId)
-
-  if (error) {
-    console.error('Error revoking API token:', error)
-    throw error
-  }
+export async function updateApiTokenScopes(id: string, scopes: string[]): Promise<ApiToken> {
+  const { data } = await api.patch<{ data: ApiToken }>(`/api/v1/api-tokens/${id}`, { scopes })
+  return data
 }
 
-/**
- * Update token scopes
- */
-export async function updateTokenScopes(tokenId: string, scopes: ApiScope[]): Promise<void> {
-  const { error } = await supabase
-    .from('api_tokens')
-    .update({ scopes })
-    .eq('id', tokenId)
-
-  if (error) throw error
+export async function revokeApiToken(id: string): Promise<void> {
+  await api.delete(`/api/v1/api-tokens/${id}`)
 }

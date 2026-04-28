@@ -1,10 +1,15 @@
-import { supabase } from '../lib/supabaseClient'
-import { 
-  getAccountsWithBalances, 
-  getRootAccountId, 
-  type AccountWithBalance 
+import { api } from '../lib/apiClient'
+import {
+  getAccountsWithBalances,
+  type AccountWithBalance
 } from './accountService'
 import { getUserInvestments, calculateTotals } from './investmentService'
+
+function getRootAccountId(accounts: AccountWithBalance[], accountId: string): string {
+  const account = accounts.find(a => a.id === accountId)
+  if (!account || !account.parent_account_id) return accountId
+  return getRootAccountId(accounts, account.parent_account_id)
+}
 
 // Types
 export interface MonthlySummary {
@@ -57,47 +62,31 @@ export async function getMonthlySummary(
   const range = getMonthRange(year, month)
 
   // Get movements for this month (excluding transfers)
-  let query = supabase
-    .from('movements')
-    .select('kind, amount')
-    .not('kind', 'in', '(transfer_in,transfer_out)')
-    .gte('date', range.start)
-    .lte('date', range.end)
+  const orgParams: Record<string, string | number> = organizationId
+    ? { orgId: organizationId }
+    : { personal: 'true' }
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data: movements } = await query
+  const { data: movements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate: range.start,
+    endDate: range.end,
+    limit: 5000,
+    ...orgParams,
+  })
 
   let income = 0
   let expenses = 0
 
   for (const m of (movements || [])) {
+    if (m.kind === 'transfer_in' || m.kind === 'transfer_out') continue
     if (m.kind === 'income') {
-      income += m.amount
+      income += Number(m.amount)
     } else if (m.kind === 'expense') {
-      expenses += m.amount
+      expenses += Number(m.amount)
     }
   }
 
-  // Get savings contributions for this month (Only for Personal currently? Or Org too if table adapted?)
-  // Table savings_goal_contributions is NOT yet adapted to shadow mode (It was NOT in MIG_003).
-  // So for now, we only query it if organizationId is NULL.
-  
-  let savingsChange = 0
-  if (!organizationId) {
-    const { data: contributions } = await supabase
-        .from('savings_goal_contributions')
-        .select('amount')
-        .eq('user_id', userId)
-        .gte('date', range.start)
-        .lte('date', range.end)
-    
-    savingsChange = (contributions || []).reduce((sum, c) => sum + c.amount, 0)
-  }
+  // savings_goal_contributions has no API endpoint — set savingsChange to 0
+  const savingsChange = 0
 
   return {
     year,
@@ -118,28 +107,24 @@ export async function getMonthlyCategoryBreakdown(
 ): Promise<CategorySummary[]> {
   const range = getMonthRange(year, month)
 
-  // Get expense movements with categories
-  let query = supabase
-    .from('movements')
-    .select('category:categories(name), amount')
-    .eq('kind', 'expense')
-    .gte('date', range.start)
-    .lte('date', range.end)
+  // Get expense movements for this month
+  const orgParams2: Record<string, string | number> = organizationId
+    ? { orgId: organizationId }
+    : { personal: 'true' }
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data: movements } = await query
+  const { data: movements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate: range.start,
+    endDate: range.end,
+    kind: 'expense',
+    limit: 5000,
+    ...orgParams2,
+  })
 
   // Aggregate by category
   const categoryTotals: Record<string, number> = {}
   for (const m of (movements || [])) {
-    // @ts-expect-error supabase join sometimes types `category` as an array even though the FK is single
-    const cat = m.category?.name || 'Sin categoría'
-    categoryTotals[cat] = (categoryTotals[cat] || 0) + m.amount
+    const cat = m.categoryName || m.category_name || 'Sin categoría'
+    categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(m.amount)
   }
 
   // Convert to array and sort
@@ -162,24 +147,21 @@ export async function getNetWorthSummary(
   organizationId?: string | null // [NEW]
 ): Promise<NetWorthSummary> {
   // Get all movements for balance calculation (including transfers)
-  let query = supabase
-    .from('movements')
-    .select('kind, amount')
+  const orgParamsNW: Record<string, string | number> = organizationId
+    ? { orgId: organizationId }
+    : { personal: 'true' }
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data: movements } = await query
+  const { data: movements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    limit: 5000,
+    ...orgParamsNW,
+  })
 
   let cashBalance = 0
   for (const m of (movements || [])) {
     if (m.kind === 'income' || m.kind === 'transfer_in') {
-      cashBalance += m.amount
+      cashBalance += Number(m.amount)
     } else if (m.kind === 'expense' || m.kind === 'transfer_out' || m.kind === 'investment') {
-      cashBalance -= m.amount
+      cashBalance -= Number(m.amount)
     }
   }
 
@@ -190,28 +172,18 @@ export async function getNetWorthSummary(
   let debtsPending = 0
 
   if (!organizationId) {
-     // Get investments value
-    const { data: investments } = await supabase
-        .from('investments')
-        .select('quantity, current_price')
-        .eq('user_id', userId)
-
+    // Get investments value
+    const { data: investments } = await api.get<{ data: any[] }>('/api/v1/investments')
     investmentsValue = (investments || []).reduce(
-        (sum, inv) => sum + (inv.quantity * inv.current_price),
-        0
+      (sum: number, inv: any) => sum + (inv.quantity * inv.current_price),
+      0
     )
 
     // Get pending debts
-    const { data: debts } = await supabase
-        .from('debts')
-        .select('remaining_amount')
-        .eq('user_id', userId)
-        .eq('is_closed', false)
-
-    debtsPending = (debts || []).reduce(
-        (sum, d) => sum + (d.remaining_amount || 0),
-        0
-    )
+    const { data: allDebts } = await api.get<{ data: any[] }>('/api/v1/debts')
+    debtsPending = (allDebts || [])
+      .filter((d: any) => !d.is_closed)
+      .reduce((sum: number, d: any) => sum + (d.remaining_amount || 0), 0)
   }
 
   return {
@@ -238,20 +210,16 @@ export async function getBalanceHistory(
     return `${y}-${m}-${day}`
   }
 
-  let query = supabase
-    .from('movements')
-    .select('date, kind, amount')
-    .not('kind', 'in', '(transfer_in,transfer_out)')
-    .gte('date', toIso(start))
-    .lte('date', toIso(end))
+  const orgParamsBH: Record<string, string | number> = organizationId
+    ? { orgId: organizationId }
+    : { personal: 'true' }
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data: movements } = await query
+  const { data: movements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate: toIso(start),
+    endDate: toIso(end),
+    limit: 5000,
+    ...orgParamsBH,
+  })
 
   const buckets = new Map<string, MonthlySummary>()
   for (let i = 0; i < monthsBack; i++) {
@@ -268,6 +236,7 @@ export async function getBalanceHistory(
   }
 
   for (const m of (movements || [])) {
+    if (m.kind === 'transfer_in' || m.kind === 'transfer_out') continue
     const key = String(m.date).slice(0, 7)
     const bucket = buckets.get(key)
     if (!bucket) continue
@@ -276,23 +245,10 @@ export async function getBalanceHistory(
     else if (m.kind === 'expense') bucket.expenses += amount
   }
 
-  const contributionsByMonth = new Map<string, number>()
-  if (!organizationId) {
-    const { data: contributions } = await supabase
-      .from('savings_goal_contributions')
-      .select('date, amount')
-      .eq('user_id', userId)
-      .gte('date', toIso(start))
-      .lte('date', toIso(end))
-    for (const c of (contributions || [])) {
-      const key = String(c.date).slice(0, 7)
-      contributionsByMonth.set(key, (contributionsByMonth.get(key) ?? 0) + Number(c.amount || 0))
-    }
-  }
-
-  for (const [key, bucket] of buckets.entries()) {
+  // savings_goal_contributions has no API endpoint — savingsChange stays 0
+  for (const [, bucket] of buckets.entries()) {
     bucket.net = bucket.income - bucket.expenses
-    bucket.savingsChange = contributionsByMonth.get(key) ?? 0
+    bucket.savingsChange = 0
   }
 
   return Array.from(buckets.values())
@@ -307,22 +263,20 @@ export async function getYearlyBreakdown(
   const start = `${year}-01-01`
   const end = `${year}-12-31`
 
-  let query = supabase
-    .from('movements')
-    .select('date, kind, amount, category:categories(name,color)')
-    .not('kind', 'in', '(transfer_in,transfer_out)')
-    .gte('date', start)
-    .lte('date', end)
+  const orgParamsYB: Record<string, string | number> = organizationId
+    ? { orgId: organizationId }
+    : { personal: 'true' }
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data } = await query
-  type Row = { date: string; kind: string; amount: number; category: { name?: string; color?: string } | { name?: string; color?: string }[] | null }
-  const rows = (data || []) as unknown as Row[]
+  const { data } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate: start,
+    endDate: end,
+    limit: 5000,
+    ...orgParamsYB,
+  })
+  type Row = { date: string; kind: string; amount: number; categoryName?: string; category_name?: string }
+  const rows = ((data || []) as unknown as Row[]).filter(
+    r => r.kind !== 'transfer_in' && r.kind !== 'transfer_out'
+  )
 
   const months: MonthlySummary[] = []
   for (let i = 0; i < 12; i++) {
@@ -344,11 +298,9 @@ export async function getYearlyBreakdown(
     if (row.kind === 'income') months[m].income += amount
     else if (row.kind === 'expense') {
       months[m].expenses += amount
-      const cat = Array.isArray(row.category) ? row.category[0] : row.category
-      const name = cat?.name || 'Sin categoría'
-      const existing = catTotals.get(name) ?? { total: 0, color: cat?.color }
+      const name = row.categoryName || row.category_name || 'Sin categoría'
+      const existing = catTotals.get(name) ?? { total: 0, color: undefined }
       existing.total += amount
-      if (!existing.color && cat?.color) existing.color = cat.color
       catTotals.set(name, existing)
     }
   }
@@ -425,20 +377,16 @@ export async function getWeeklyHistory(
   const endDate = formatLocalDate(now)
   
   // Fetch all movements in the date range
-  let query = supabase
-    .from('movements')
-    .select('date, kind, amount')
-    .not('kind', 'in', '(transfer_in,transfer_out)')
-    .gte('date', startDate)
-    .lte('date', endDate)
+  const orgParamsWH: Record<string, string | number> = organizationId
+    ? { orgId: organizationId }
+    : { personal: 'true' }
 
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data: movements } = await query
+  const { data: movements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate,
+    endDate,
+    limit: 5000,
+    ...orgParamsWH,
+  })
   
   // Aggregate movements into weeks
   for (const m of (movements || [])) {
@@ -448,12 +396,13 @@ export async function getWeeklyHistory(
     const monday = getMonday(mDate)
     const weekKey = formatLocalDate(monday)
     
+    if (m.kind === 'transfer_in' || m.kind === 'transfer_out') continue
     const week = weeklyData.get(weekKey)
     if (week) {
       if (m.kind === 'income') {
-        week.income += m.amount
+        week.income += Number(m.amount)
       } else if (m.kind === 'expense') {
-        week.expenses += m.amount
+        week.expenses += Number(m.amount)
       }
     }
   }
@@ -583,14 +532,11 @@ export async function getFinancialDistribution(
 
       userInvestments.forEach(inv => {
          const t = inv.type || 'Otros'
-         const val = inv.quantity * inv.current_price
+         const val = inv.quantity * (inv.current_price ?? inv.avg_buy_price ?? 0)
          investmentSubItems[t] = (investmentSubItems[t] || 0) + val
       })
       
-      const { data: goals } = await supabase
-        .from('savings_goals')
-        .select('name, current_amount')
-        .eq('user_id', userId)
+      const { data: goals } = await api.get<{ data: any[] }>('/api/v1/savings-goals')
       
       goalsTotal = (goals || []).reduce((sum, g) => sum + g.current_amount, 0)
       goalsSubItems = (goals || []).map(g => ({ name: g.name, value: g.current_amount, color: '#fbcfe8' }))

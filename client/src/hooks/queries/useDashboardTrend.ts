@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '../../lib/supabaseClient'
+import { api } from '../../lib/apiClient'
 
 export const trendKeys = {
   all: ['dashboard', 'trend'] as const,
@@ -52,21 +52,16 @@ export function useMonthlyTrend(userId: string | null, workspaceId: string | nul
       const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
       const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1)
 
-      let query = supabase
-        .from('movements')
-        .select('date, kind, amount')
-        .not('kind', 'in', '(transfer_in,transfer_out)')
-        .gte('date', toIso(start))
-        .lte('date', toIso(end))
+      const orgParams: Record<string, string | number> = workspaceId
+        ? { orgId: workspaceId }
+        : { personal: 'true' }
 
-      if (workspaceId) {
-        query = query.eq('organization_id', workspaceId)
-      } else {
-        query = query.eq('user_id', userId!).is('organization_id', null)
-      }
-
-      const { data, error } = await query
-      if (error) throw error
+      const { data } = await api.get<{ data: any[] }>('/api/v1/movements', {
+        startDate: toIso(start),
+        endDate: toIso(end),
+        limit: 5000,
+        ...orgParams,
+      })
 
       const buckets = new Map<string, MonthlyTrendPoint>()
       for (let i = 0; i < months; i++) {
@@ -75,7 +70,7 @@ export function useMonthlyTrend(userId: string | null, workspaceId: string | nul
         buckets.set(key, { period: monthLabel(d), periodKey: key, income: 0, expense: 0, net: 0 })
       }
 
-      for (const row of data ?? []) {
+      for (const row of (data ?? []).filter((r: any) => r.kind !== 'transfer_in' && r.kind !== 'transfer_out')) {
         const key = String(row.date).slice(0, 7) // yyyy-mm
         const bucket = buckets.get(key)
         if (!bucket) continue
@@ -101,21 +96,17 @@ export function useDailySpending(userId: string | null, workspaceId: string | nu
       const start = new Date(end)
       start.setDate(start.getDate() - (days - 1))
 
-      let query = supabase
-        .from('movements')
-        .select('date, amount, kind')
-        .eq('kind', 'expense')
-        .gte('date', toIso(start))
-        .lte('date', toIso(end))
+      const orgParamsDS: Record<string, string | number> = workspaceId
+        ? { orgId: workspaceId }
+        : { personal: 'true' }
 
-      if (workspaceId) {
-        query = query.eq('organization_id', workspaceId)
-      } else {
-        query = query.eq('user_id', userId!).is('organization_id', null)
-      }
-
-      const { data, error } = await query
-      if (error) throw error
+      const { data } = await api.get<{ data: any[] }>('/api/v1/movements', {
+        startDate: toIso(start),
+        endDate: toIso(end),
+        kind: 'expense',
+        limit: 5000,
+        ...orgParamsDS,
+      })
 
       const map = new Map<string, number>()
       for (const row of data ?? []) {
@@ -142,29 +133,23 @@ export function useMonthTopCategories(
       const start = new Date(year, month - 1, 1)
       const end = new Date(year, month, 0)
 
-      let query = supabase
-        .from('movements')
-        .select('amount, category:categories(name,color)')
-        .eq('kind', kind)
-        .gte('date', toIso(start))
-        .lte('date', toIso(end))
+      const orgParamsCat: Record<string, string | number> = workspaceId
+        ? { orgId: workspaceId }
+        : { personal: 'true' }
 
-      if (workspaceId) {
-        query = query.eq('organization_id', workspaceId)
-      } else {
-        query = query.eq('user_id', userId!).is('organization_id', null)
-      }
-
-      const { data, error } = await query
-      if (error) throw error
+      const { data } = await api.get<{ data: any[] }>('/api/v1/movements', {
+        startDate: toIso(start),
+        endDate: toIso(end),
+        kind,
+        limit: 5000,
+        ...orgParamsCat,
+      })
 
       const map = new Map<string, { value: number; color?: string }>()
-      for (const row of (data as unknown as { amount: number; category: { name?: string; color?: string } | { name?: string; color?: string }[] | null }[]) ?? []) {
-        const cat = Array.isArray(row.category) ? row.category[0] : row.category
-        const name = cat?.name || 'Sin categoría'
-        const existing = map.get(name) ?? { value: 0, color: cat?.color }
+      for (const row of (data ?? [])) {
+        const name = row.categoryName || row.category_name || 'Sin categoría'
+        const existing = map.get(name) ?? { value: 0, color: row.categoryColor }
         existing.value += Number(row.amount) || 0
-        if (!existing.color && cat?.color) existing.color = cat.color
         map.set(name, existing)
       }
       return Array.from(map.entries())

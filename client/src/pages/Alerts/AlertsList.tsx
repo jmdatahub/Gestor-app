@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import {
   getAlerts,
   markAsRead,
@@ -57,6 +57,7 @@ type SortMode = 'date' | 'severity'
 
 export default function AlertsList() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [rules, setRules] = useState<AlertRule[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,7 +86,6 @@ export default function AlertsList() {
   }, [snoozeMenuId])
 
   const loadData = async (showRefreshing = false) => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     if (showRefreshing) setRefreshing(true)
@@ -130,7 +130,6 @@ export default function AlertsList() {
   }
 
   const handleMarkAllAsRead = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     await markAllAsRead(user.id)
     setAlerts(prev => prev.map(a => ({ ...a, is_read: true })))
@@ -301,7 +300,7 @@ export default function AlertsList() {
                   </span>
                   <button
                     className="btn-icon-sm ml-1"
-                    onClick={() => handleToggleRule(rule.id, rule.is_active)}
+                    onClick={() => handleToggleRule(rule.id, rule.is_active ?? false)}
                     title={rule.is_active ? 'Desactivar' : 'Activar'}
                   >
                     {rule.is_active ? <Power size={14} /> : <PowerOff size={14} />}

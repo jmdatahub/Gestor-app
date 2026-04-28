@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { UiSelect, UiSelectOption } from '../ui/UiSelect'
 import { UiField } from '../ui/UiField'
-import { supabase } from '../../lib/supabaseClient'
+import { api } from '../../lib/apiClient'
 import { normalizeText, getCategorySuggestions } from '../../utils/categorySearch'
 
 interface Category {
@@ -52,18 +52,13 @@ export function CategoryAutocomplete({
   const loadCategories = async () => {
     try {
       setLoading(true)
-      const { data, error: loadError } = await supabase
-        .from('categories')
-        .select('*')
-        .order('name')
-      
-      if (loadError) throw loadError
-      
+      const { data } = await api.get<{ data: any[] }>('/api/v1/categories')
+
       // Filter by type
-      const filtered = (data || []).filter(c => 
-        c.type === type || type === 'investment'
+      const filtered = (data || []).filter((c: any) =>
+        c.type === type || c.kind === type || type === 'investment'
       )
-      
+
       setCategories(filtered as Category[])
     } catch (err) {
       console.error('[CategoryAutocomplete] Error loading categories:', err)
@@ -167,32 +162,23 @@ export function CategoryAutocomplete({
  * Call this when submitting the form
  */
 export async function resolveNewCategory(
-  value: string, 
-  type: 'income' | 'expense'
+  value: string,
+  type: 'income' | 'expense',
+  userId: string
 ): Promise<string | null> {
   if (!value.startsWith('__new__:')) {
     return value // Already an ID
   }
-  
+
   const name = value.replace('__new__:', '')
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Usuario no autenticado')
-  
+
   // Create category
-  const { data, error } = await supabase
-    .from('categories')
-    .insert([{
-      user_id: user.id,
-      name,
-      type,
-      color: generateRandomColor()
-    }])
-    .select()
-    .single()
-  
-  if (error) throw error
-  return data.id
+  const result = await api.post<{ data: any }>('/api/v1/categories', {
+    name,
+    kind: type,
+    color: generateRandomColor(),
+  })
+  return result.data?.id ?? null
 }
 
 function generateRandomColor(): string {

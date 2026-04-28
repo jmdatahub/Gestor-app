@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../../lib/supabaseClient'
+import { api } from '../../lib/apiClient'
+import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { fetchCategories, type Category } from '../../services/movementService'
 import { getTextColorClass, getCategoryPillStyle, getDefaultCategoryColor } from '../../utils/categoryColors'
@@ -13,6 +14,7 @@ import { EmptyState } from '../../components/shared/EmptyState'
 import { StatCard } from '../../components/shared/StatCard'
 
 export default function CategoriesList() {
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,7 +33,6 @@ export default function CategoriesList() {
   }, [currentWorkspace])
 
   const loadCategories = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -65,26 +66,16 @@ export default function CategoriesList() {
     e.preventDefault()
     setSubmitting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
       if (editingCategory) {
         // Update existing
-        const { error } = await supabase
-          .from('categories')
-          .update({ name, kind, color })
-          .eq('id', editingCategory.id)
-
-        if (error) throw error
+        await api.patch('/api/v1/categories/' + editingCategory.id, { name, kind, color })
       } else {
         // Create new
         const orgId = currentWorkspace?.id || null
-        const { error } = await supabase
-          .from('categories')
-          .insert([{ user_id: user.id, organization_id: orgId, name, kind, color }])
-
-        if (error) throw error
+        await api.post('/api/v1/categories', { name, kind, color, organizationId: orgId })
       }
 
       setShowModal(false)
@@ -100,12 +91,7 @@ export default function CategoriesList() {
     if (!confirm('¿Eliminar esta categoría?')) return
 
     try {
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('id', categoryId)
-
-      if (error) throw error
+      await api.delete('/api/v1/categories/' + categoryId)
       loadCategories()
     } catch (error) {
       console.error('Error deleting category:', error)

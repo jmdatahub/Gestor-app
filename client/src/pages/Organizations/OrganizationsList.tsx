@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
+import { api } from '../../lib/apiClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { createOrganization, deleteOrganization, getOrganizationMembers, OrganizationMember } from '../../services/organizationService'
 import { useI18n } from '../../hooks/useI18n'
@@ -28,6 +29,7 @@ const getRoleInfo = (role: string) => {
 export default function OrganizationsList() {
   const { t } = useI18n()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { currentWorkspace, workspaces, switchWorkspace, isLoading } = useWorkspace()
   
   // Modal State
@@ -127,30 +129,26 @@ export default function OrganizationsList() {
     setError(null)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         setError('No se pudo obtener el usuario')
         return
       }
 
-      const newOrg = await createOrganization(user.id, { 
+      const newOrg = await createOrganization(user.id, {
         name: newOrgName.trim(),
         description: newOrgDescription.trim() || undefined,
         parent_id: newOrgParentId || undefined
       })
-      
+
       // Log invited emails for future invite system
       if (inviteEmails.length > 0) {
         console.log('[INFO] Pending invitations for org', newOrg.id, ':', inviteEmails)
         // TODO: Implement proper invite system via Edge Function
-        // For now, we save them to organization_invitations table if it exists
         for (const email of inviteEmails) {
           try {
-            await supabase.from('organization_invitations').insert({
-              org_id: newOrg.id,
-              email: email,
-              role: 'member',
-              invited_by: user.id
+            await api.post(`/api/v1/organizations/${newOrg.id}/invitations`, {
+              email,
+              role: 'member'
             })
           } catch (inviteErr) {
             console.warn('Could not create invitation for', email, inviteErr)

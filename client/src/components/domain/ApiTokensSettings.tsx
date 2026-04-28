@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Copy, Check, AlertTriangle, Shield, CheckSquare, Square, Building2 } from 'lucide-react'
 import { getApiTokens, createApiToken, revokeApiToken, type ApiToken, API_SCOPES, ApiScope, DEFAULT_SCOPES } from '../../services/apiTokenService'
 import { useToast } from '../Toast'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { UiInput } from '../ui/UiInput'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../ui/UiModal'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -86,6 +86,7 @@ function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (id: string)
 
 export function ApiTokensSettings() {
   const toast = useToast()
+  const { user } = useAuth()
   const { workspaces } = useWorkspace()
   
   const [tokens, setTokens] = useState<ApiToken[]>([])
@@ -107,7 +108,6 @@ export function ApiTokensSettings() {
   useEffect(() => { loadTokens() }, [])
 
   const loadTokens = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     try {
       const data = await getApiTokens(user.id)
@@ -127,7 +127,6 @@ export function ApiTokensSettings() {
     }
     
     setCreating(true)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     
     try {

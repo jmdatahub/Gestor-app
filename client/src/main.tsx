@@ -10,6 +10,7 @@ import { I18nProvider } from './i18n/I18nContext'
 import { ToastProvider } from './components/Toast'
 import { OfflineProvider } from './context/OfflineContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
+import { AuthProvider } from './context/AuthContext'
 
 // Initialize error tracking before mounting the app so early errors are captured.
 initSentry()
@@ -21,9 +22,11 @@ createRoot(document.getElementById('root')!).render(
         <I18nProvider>
         <ToastProvider>
           <OfflineProvider>
-            <WorkspaceProvider>
-              <App />
-            </WorkspaceProvider>
+            <AuthProvider>
+              <WorkspaceProvider>
+                <App />
+              </WorkspaceProvider>
+            </AuthProvider>
           </OfflineProvider>
         </ToastProvider>
       </I18nProvider>

@@ -30,9 +30,7 @@ const DEFAULT_TIMEOUT = 15000 // 15 seconds
  * 
  * @example
  * const result = await runMutation('crear movimiento', async () => {
- *   const { data, error } = await supabase.from('movements').insert([...]).select().single()
- *   if (error) throw error
- *   return data
+ *   return api.post('/api/v1/movements', body)
  * })
  * 
  * if (!result.ok) {

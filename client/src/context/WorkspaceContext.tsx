@@ -1,168 +1,74 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { useAuth } from './AuthContext'
+import { getUserOrganizations } from '../services/organizationService'
 
-export type AppRole = 'owner' | 'admin' | 'member' | 'viewer';
-
-export interface Organization {
-  id: string;
-  name: string;
-  slug: string | null;
-  description: string | null;
-  parent_id: string | null;
-}
-
-export interface WorkspaceMember {
-  org_id: string;
-  user_id: string;
-  role: AppRole;
-  organization: Organization;
-}
+export type AppRole = 'owner' | 'admin' | 'member' | 'viewer'
+export interface Organization { id: string; name: string; slug: string | null; description: string | null; parent_id: string | null }
+export interface WorkspaceMember { org_id: string; user_id: string; role: AppRole; organization: Organization }
 
 interface WorkspaceContextType {
-  currentWorkspace: Organization | null; // null means Personal Workspace
-  workspaces: WorkspaceMember[];
-  isLoading: boolean;
-  isSuspended: boolean;
-  switchWorkspace: (orgId: string | null) => void;
-  refreshWorkspaces: () => Promise<void>;
-  userRole: AppRole | null;
+  currentWorkspace: Organization | null
+  workspaces: WorkspaceMember[]
+  isLoading: boolean
+  isSuspended: boolean
+  switchWorkspace: (orgId: string | null) => void
+  refreshWorkspaces: () => Promise<void>
+  userRole: AppRole | null
 }
 
-const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
+const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined)
 
 export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentWorkspace, setCurrentWorkspace] = useState<Organization | null>(null);
-  const [workspaces, setWorkspaces] = useState<WorkspaceMember[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSuspended, setIsSuspended] = useState(false);
-  const [userRole, setUserRole] = useState<AppRole | null>(null);
+  const { user } = useAuth()
+  const [currentWorkspace, setCurrentWorkspace] = useState<Organization | null>(null)
+  const [workspaces, setWorkspaces] = useState<WorkspaceMember[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSuspended] = useState(false)
+  const [userRole, setUserRole] = useState<AppRole | null>(null)
 
   const fetchWorkspaces = async () => {
+    if (!user) { setWorkspaces([]); setCurrentWorkspace(null); setIsLoading(false); return }
     try {
-      setIsLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        setWorkspaces([]);
-        setCurrentWorkspace(null);
-        setIsSuspended(false);
-        return;
-      }
-
-      // Check if user is suspended
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_suspended')
-        .eq('id', user.id)
-        .single();
-
-      if (profile?.is_suspended) {
-        console.warn('[WorkspaceContext] User is suspended, signing out...');
-        setIsSuspended(true);
-        // Give time for the suspended state to be shown
-        setTimeout(async () => {
-          await supabase.auth.signOut();
-          window.location.href = '/login?suspended=true';
-        }, 100);
-        return;
-      }
-
-      setIsSuspended(false);
-
-      const { data, error } = await supabase
-        .from('organization_members')
-        .select(`
-          org_id,
-          user_id,
-          role,
-          organization:organizations (
-            id,
-            name,
-            slug,
-            description,
-            parent_id
-          )
-        `)
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('[WorkspaceContext] Error fetching workspaces:', error);
-        return;
-      }
-
-      setWorkspaces(data as any[]);
-      console.log('[WorkspaceContext] Fetched workspaces:', data); // DIAGNOSTIC LOG
-      
-      // Load last used workspace from localStorage if available
-      const savedOrgId = localStorage.getItem('last_workspace_id');
+      setIsLoading(true)
+      const members = await getUserOrganizations(user.id)
+      setWorkspaces(members as WorkspaceMember[])
+      const savedOrgId = localStorage.getItem('last_workspace_id')
       if (savedOrgId && savedOrgId !== 'personal') {
-        const found = (data as any[]).find(w => w.org_id === savedOrgId);
-        if (found) {
-          setCurrentWorkspace(found.organization);
-          setUserRole(found.role);
-        }
+        const found = members.find(m => m.org_id === savedOrgId)
+        if (found) { setCurrentWorkspace(found.organization!); setUserRole(found.role) }
       }
     } catch (err) {
-      console.error('[WorkspaceContext] Unexpected error:', err);
+      console.error('[WorkspaceContext]', err)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
-  useEffect(() => {
-    fetchWorkspaces();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN') {
-        fetchWorkspaces();
-      } else if (event === 'SIGNED_OUT') {
-        setWorkspaces([]);
-        setCurrentWorkspace(null);
-        setUserRole(null);
-        localStorage.removeItem('last_workspace_id');
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  useEffect(() => { fetchWorkspaces() }, [user?.id])
 
   const switchWorkspace = (orgId: string | null) => {
     if (!orgId || orgId === 'personal') {
-      setCurrentWorkspace(null);
-      setUserRole(null);
-      localStorage.setItem('last_workspace_id', 'personal');
+      setCurrentWorkspace(null); setUserRole(null)
+      localStorage.setItem('last_workspace_id', 'personal')
     } else {
-      const found = workspaces.find(w => w.org_id === orgId);
+      const found = workspaces.find(w => w.org_id === orgId)
       if (found) {
-        setCurrentWorkspace(found.organization);
-        setUserRole(found.role);
-        localStorage.setItem('last_workspace_id', orgId);
+        setCurrentWorkspace(found.organization)
+        setUserRole(found.role)
+        localStorage.setItem('last_workspace_id', orgId)
       }
     }
-  };
+  }
 
   return (
-    <WorkspaceContext.Provider value={{ 
-      currentWorkspace, 
-      workspaces, 
-      isLoading, 
-      isSuspended,
-      switchWorkspace,
-      refreshWorkspaces: fetchWorkspaces,
-      userRole 
-    }}>
+    <WorkspaceContext.Provider value={{ currentWorkspace, workspaces, isLoading, isSuspended, switchWorkspace, refreshWorkspaces: fetchWorkspaces, userRole }}>
       {children}
     </WorkspaceContext.Provider>
-  );
-};
+  )
+}
 
 export const useWorkspace = () => {
-  const context = useContext(WorkspaceContext);
-  if (context === undefined) {
-    throw new Error('useWorkspace must be used within a WorkspaceProvider');
-  }
-  return context;
-};
+  const ctx = useContext(WorkspaceContext)
+  if (!ctx) throw new Error('useWorkspace must be used within WorkspaceProvider')
+  return ctx
+}

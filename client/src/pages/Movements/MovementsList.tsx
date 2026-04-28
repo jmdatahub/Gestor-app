@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
+import { api } from '../../lib/apiClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   fetchMovements,
@@ -96,6 +97,7 @@ interface FlatAccount extends Account {
 export default function MovementsList() {
   const { t } = useI18n()
   const { settings } = useSettings()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast() // Toast notifications
   const createMovementMutation = useCreateMovement()
@@ -181,7 +183,6 @@ export default function MovementsList() {
   }, [currentWorkspace])
 
   const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -248,7 +249,6 @@ export default function MovementsList() {
     if (loadingMore || !hasMore) return
     setLoadingMore(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       
       const orgId = currentWorkspace?.id || null
@@ -282,7 +282,6 @@ export default function MovementsList() {
     setSubmitting(true)
     setAppError(null)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     if (!amount || parseFloat(amount) <= 0) {
@@ -503,7 +502,6 @@ export default function MovementsList() {
 
   // Handle creating new account from modal
   const handleCreateAccount = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user || !newAccountName.trim()) return
 
     setCreatingAccount(true)
@@ -584,75 +582,36 @@ export default function MovementsList() {
   ]
 
   const fetchExportData = async () => {
-      try {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (!user) return []
+    try {
+      if (!user) return []
 
-          // 1. Base Query
-          let query = supabase
-              .from('movements')
-              .select(`
-                  *,
-                  category:categories(name),
-                  account:accounts(name)
-              `)
-              .eq('user_id', user.id)
-              .order('date', { ascending: false })
-
-          if (currentWorkspace?.id) {
-              query = query.eq('organization_id', currentWorkspace.id)
-          } else {
-              query = query.is('organization_id', null)
-          }
-
-          if (startDate) {
-              query = query.gte('date', formatISODateString(startDate))
-          }
-          if (endDate) {
-               query = query.lte('date', formatISODateString(endDate))
-          }
-
-          const { data, error } = await query
-
-          if (error) throw error
-          if (!data || data.length === 0) {
-              // Alert handled by ExportMenu if empty
-              return []
-          }
-
-          // 2. Fetch Profiles Manually (to avoid FK issues) and merge
-          let movementsToExport = data
-          if (data.length > 0) {
-              const uniqueUserIds = [...new Set(data.map(m => m.user_id))]
-              const { data: profiles } = await supabase
-                  .from('profiles')
-                  .select('id, display_name, email')
-                  .in('id', uniqueUserIds)
-              
-              if (profiles) {
-                  const profileMap = new Map(profiles.map(p => [p.id, p]))
-                  movementsToExport = data.map(m => ({
-                      ...m,
-                      creator: profileMap.get(m.user_id)
-                  }))
-              }
-          }
-
-          return movementsToExport.map(m => ({
-              date: m.date,
-              kind: m.kind === 'income' ? 'Ingreso' : m.kind === 'expense' ? 'Gasto' : 'Inversión',
-              description: m.description || '',
-              amount: m.amount,
-              category: m.category?.name || 'Sin categoría',
-              account: m.account?.name || 'Sin cuenta',
-              creator: m.creator ? (m.creator.display_name || m.creator.email) : '-',
-              created_at: m.created_at ? new Date(m.created_at).toLocaleString('es-ES') : '-'
-          }))
-
-      } catch (err) {
-          console.error("Export error", err)
-          throw err
+      const params: Record<string, string | number> = { limit: 5000 }
+      if (currentWorkspace?.id) {
+        params.orgId = currentWorkspace.id
+      } else {
+        params.personal = 'true'
       }
+      if (startDate) params.startDate = formatISODateString(startDate)
+      if (endDate) params.endDate = formatISODateString(endDate)
+
+      const { data: rawData } = await api.get<{ data: any[] }>('/api/v1/movements', params)
+
+      if (!rawData || rawData.length === 0) return []
+
+      return rawData.map((m: any) => ({
+        date: m.date,
+        kind: m.kind === 'income' ? 'Ingreso' : m.kind === 'expense' ? 'Gasto' : 'Inversión',
+        description: m.description || '',
+        amount: m.amount,
+        category: m.categoryName || m.category_name || 'Sin categoría',
+        account: m.accountName || m.account_name || 'Sin cuenta',
+        creator: '-',
+        created_at: m.createdAt ? new Date(m.createdAt).toLocaleString('es-ES') : '-',
+      }))
+    } catch (err) {
+      console.error('Export error', err)
+      throw err
+    }
   }
 
   if (loading) {

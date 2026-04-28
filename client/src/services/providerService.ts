@@ -1,124 +1,38 @@
-// Provider Service - Autocomplete functionality for providers
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 
-export interface Provider {
-  id: string
-  user_id: string
-  organization_id: string | null
-  name: string
-  usage_count: number
-  last_used_at: string
-  created_at: string
+export interface Provider { id: string; user_id: string; name: string; category?: string | null; usage_count: number; last_used_at?: string | null; created_at: string }
+
+export async function searchProviders(_userId: string, query: string, _orgId?: string | null): Promise<Provider[]> {
+  const { data } = await api.get<{ data: Provider[] }>('/api/v1/providers', { q: query })
+  return data
 }
 
-// Search providers for autocomplete (returns top 10 matches)
-export async function searchProviders(
-  userId: string,
-  query: string,
-  organizationId?: string | null
-): Promise<Provider[]> {
-  if (!query || query.length < 1) return []
-
-  const dbQuery = supabase
-    .from('providers')
-    .select('*')
-    .eq('user_id', userId)
-    .ilike('name', `%${query}%`)
-    .order('usage_count', { ascending: false })
-    .limit(10)
-
-  const { data, error } = await dbQuery
-
-  if (error) {
-    console.error('Error searching providers:', error)
-    return []
-  }
-
-  return data || []
+export async function fetchAllProviders(_userId: string): Promise<Provider[]> {
+  const { data } = await api.get<{ data: Provider[] }>('/api/v1/providers')
+  return data
 }
 
-// Get all providers (ordered by usage)
-export async function getProviders(userId: string, organizationId?: string | null): Promise<Provider[]> {
-  const { data, error } = await supabase
-    .from('providers')
-    .select('*')
-    .eq('user_id', userId)
-    .order('usage_count', { ascending: false })
-    .limit(50)
-
-  if (error) {
-    console.error('Error fetching providers:', error)
-    return []
-  }
-
-  return data || []
+export async function createProvider(name: string, category?: string): Promise<Provider> {
+  const { data } = await api.post<{ data: Provider }>('/api/v1/providers', { name, category })
+  return data
 }
 
-// Create or update a provider (increment usage if exists)
-export async function upsertProvider(
-  userId: string,
-  name: string,
-  organizationId?: string | null
-): Promise<Provider | null> {
-  const trimmedName = name.trim()
-  if (!trimmedName) return null
+export async function updateProviderUsage(id: string): Promise<void> {
+  await api.patch(`/api/v1/providers/${id}`, { last_used_at: new Date().toISOString() })
+}
 
-  // Check if exists
-  const { data: existing } = await supabase
-    .from('providers')
-    .select('*')
-    .eq('user_id', userId)
-    .ilike('name', trimmedName)
-    .single()
-
+// Upsert: find by name or create new
+// Support (name, category?) and (userId, name, orgId?) calling conventions
+export async function upsertProvider(nameOrUserId: string, nameOrCategory?: string, _orgId?: string | null): Promise<Provider> {
+  // If second arg looks like a name (not undefined) and third arg exists, treat as (userId, name, orgId)
+  const name = (_orgId !== undefined || (nameOrCategory && nameOrCategory.length > 0 && nameOrUserId.length === 36))
+    ? (nameOrCategory ?? nameOrUserId)
+    : nameOrUserId
+  const providers = await searchProviders('', name)
+  const existing = providers.find(p => p.name.toLowerCase() === name.toLowerCase())
   if (existing) {
-    // Update usage count
-    const { data, error } = await supabase
-      .from('providers')
-      .update({
-        usage_count: existing.usage_count + 1,
-        last_used_at: new Date().toISOString()
-      })
-      .eq('id', existing.id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating provider:', error)
-      return null
-    }
-    return data
-  } else {
-    // Create new
-    const { data, error } = await supabase
-      .from('providers')
-      .insert({
-        user_id: userId,
-        organization_id: organizationId || null,
-        name: trimmedName
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating provider:', error)
-      return null
-    }
-    return data
+    await updateProviderUsage(existing.id)
+    return existing
   }
-}
-
-// Delete a provider
-export async function deleteProvider(id: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('providers')
-    .delete()
-    .eq('id', id)
-
-  if (error) {
-    console.error('Error deleting provider:', error)
-    return false
-  }
-
-  return true
+  return createProvider(name)
 }

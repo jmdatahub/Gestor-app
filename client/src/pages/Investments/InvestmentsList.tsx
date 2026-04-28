@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getUserInvestments,
@@ -34,6 +34,7 @@ export default function InvestmentsList() {
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
   const createInvestmentMutation = useCreateInvestment()
@@ -95,7 +96,6 @@ export default function InvestmentsList() {
   
   // Quiet version (no alerts) for auto-updates
   const handleAutoUpdatePricesQuiet = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user || updatingPrices) return
     
     setUpdatingPrices(true)
@@ -105,7 +105,7 @@ export default function InvestmentsList() {
       
       for (const inv of cryptoInvestments) {
         const newPriceValue = await fetchExternalPrice(inv)
-        if (newPriceValue !== null && Math.abs(newPriceValue - inv.current_price) > 0.01) {
+        if (newPriceValue !== null && Math.abs(newPriceValue - (inv.current_price ?? 0)) > 0.01) {
           await updatePriceMutation.mutateAsync({
             id: inv.id,
             userId: user.id,
@@ -125,7 +125,6 @@ export default function InvestmentsList() {
   }
 
   const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -147,7 +146,6 @@ export default function InvestmentsList() {
     e.preventDefault()
     setSubmitting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -185,7 +183,6 @@ export default function InvestmentsList() {
     if (!selectedInvestment) return
     setSubmitting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -219,7 +216,7 @@ export default function InvestmentsList() {
 
   const openPriceModal = (inv: Investment) => {
     setSelectedInvestment(inv)
-    setNewPrice(inv.current_price.toString())
+    setNewPrice((inv.current_price ?? 0).toString())
     setPriceDate(new Date().toISOString().split('T')[0])
     setShowPriceModal(true)
   }
@@ -239,10 +236,10 @@ export default function InvestmentsList() {
   const openEditModal = (inv: Investment) => {
     setEditingId(inv.id)
     setName(inv.name)
-    setType(inv.type)
+    setType(inv.type ?? 'other')
     setQuantity(inv.quantity.toString())
-    setBuyPrice(inv.buy_price.toString())
-    setCurrentPrice(inv.current_price.toString())
+    setBuyPrice((inv.buy_price ?? inv.avg_buy_price ?? 0).toString())
+    setCurrentPrice((inv.current_price ?? 0).toString())
     setNotes(inv.notes || '')
     setAccountId(inv.account_id || '')
     setShowCreateModal(true)
@@ -262,7 +259,6 @@ export default function InvestmentsList() {
   
   // Auto-update crypto prices using CoinGecko API
   const handleAutoUpdatePrices = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     
     setUpdatingPrices(true)
@@ -274,9 +270,10 @@ export default function InvestmentsList() {
       
       for (const inv of cryptoInvestments) {
         const newPriceValue = await fetchExternalPrice(inv)
-        if (newPriceValue !== null && newPriceValue !== inv.current_price) {
+        const curPrice = inv.current_price ?? 0
+        if (newPriceValue !== null && newPriceValue !== curPrice) {
           // Calculate percentage change
-          const changePercent = ((newPriceValue - inv.current_price) / inv.current_price) * 100
+          const changePercent = curPrice > 0 ? ((newPriceValue - curPrice) / curPrice) * 100 : 0
           
           await updatePriceMutation.mutateAsync({
             id: inv.id,
@@ -418,9 +415,11 @@ export default function InvestmentsList() {
                 </thead>
                 <tbody>
                 {investments.map((inv) => {
-                    const totalValue = inv.quantity * inv.current_price
-                    const profitLoss = (inv.current_price - inv.buy_price) * inv.quantity
-                    const profitPct = inv.buy_price > 0 ? ((inv.current_price - inv.buy_price) / inv.buy_price) * 100 : 0
+                    const curPr = inv.current_price ?? 0
+                    const buyPr = inv.buy_price ?? inv.avg_buy_price ?? 0
+                    const totalValue = inv.quantity * curPr
+                    const profitLoss = (curPr - buyPr) * inv.quantity
+                    const profitPct = buyPr > 0 ? ((curPr - buyPr) / buyPr) * 100 : 0
 
                     return (
                     <tr key={inv.id}>
@@ -429,10 +428,10 @@ export default function InvestmentsList() {
                             {inv.notes && <div className="text-xs text-muted mt-1">{inv.notes}</div>}
                         </td>
                         <td style={{ padding: '0.75rem 1.5rem' }}>
-                             <span className="badge badge-gray">{getTypeName(inv.type)}</span>
+                             <span className="badge badge-gray">{getTypeName(inv.type ?? inv.asset_type)}</span>
                         </td>
                         <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>{inv.quantity}</td>
-                        <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>{formatCurrency(inv.current_price)}</td>
+                        <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>{formatCurrency(curPr)}</td>
                         <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(totalValue)}</td>
                         <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>
                             <div className="d-flex items-center justify-end gap-1" style={{ 

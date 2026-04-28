@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { organizations, accounts, usersInAuth, categories, paymentMethods, savingsGoals, debts, debtMovements, investmentAssets, investmentPositions, investments, investmentPriceHistory, monthlySnapshots, alertRules, alerts, apiTokens, organizationInvitations, providers, recurringRules, savingsContributions, savingsGoalContributions, movements, profiles, budgets, organizationMembers } from "./schema";
+import { organizations, accounts, users, categories, paymentMethods, savingsGoals, debts, debtMovements, investmentAssets, investmentPositions, investments, investmentPriceHistory, monthlySnapshots, alertRules, alerts, apiTokens, organizationInvitations, providers, recurringRules, savingsContributions, savingsGoalContributions, movements, profiles, budgets, organizationMembers } from "./schema";
 
 export const accountsRelations = relations(accounts, ({one, many}) => ({
 	organization: one(organizations, {
@@ -14,9 +14,9 @@ export const accountsRelations = relations(accounts, ({one, many}) => ({
 	accounts: many(accounts, {
 		relationName: "accounts_parentAccountId_accounts_id"
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [accounts.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 	savingsGoals: many(savingsGoals),
 	investmentPositions: many(investmentPositions),
@@ -28,15 +28,15 @@ export const accountsRelations = relations(accounts, ({one, many}) => ({
 export const organizationsRelations = relations(organizations, ({one, many}) => ({
 	accounts: many(accounts),
 	categories: many(categories),
-	usersInAuth_deletedBy: one(usersInAuth, {
+	users_deletedBy: one(users, {
 		fields: [organizations.deletedBy],
-		references: [usersInAuth.id],
-		relationName: "organizations_deletedBy_usersInAuth_id"
+		references: [users.id],
+		relationName: "organizations_deletedBy_users_id"
 	}),
-	usersInAuth_ownerId: one(usersInAuth, {
+	users_ownerId: one(users, {
 		fields: [organizations.ownerId],
-		references: [usersInAuth.id],
-		relationName: "organizations_ownerId_usersInAuth_id"
+		references: [users.id],
+		relationName: "organizations_ownerId_users_id"
 	}),
 	organization: one(organizations, {
 		fields: [organizations.parentId],
@@ -56,14 +56,14 @@ export const organizationsRelations = relations(organizations, ({one, many}) => 
 	organizationMembers: many(organizationMembers),
 }));
 
-export const usersInAuthRelations = relations(usersInAuth, ({many}) => ({
+export const usersRelations = relations(users, ({many}) => ({
 	accounts: many(accounts),
 	categories: many(categories),
 	organizations_deletedBy: many(organizations, {
-		relationName: "organizations_deletedBy_usersInAuth_id"
+		relationName: "organizations_deletedBy_users_id"
 	}),
 	organizations_ownerId: many(organizations, {
-		relationName: "organizations_ownerId_usersInAuth_id"
+		relationName: "organizations_ownerId_users_id"
 	}),
 	paymentMethods: many(paymentMethods),
 	savingsGoals: many(savingsGoals),
@@ -80,10 +80,10 @@ export const usersInAuthRelations = relations(usersInAuth, ({many}) => ({
 	providers: many(providers),
 	recurringRules: many(recurringRules),
 	movements_paidByUserId: many(movements, {
-		relationName: "movements_paidByUserId_usersInAuth_id"
+		relationName: "movements_paidByUserId_users_id"
 	}),
 	movements_userId: many(movements, {
-		relationName: "movements_userId_usersInAuth_id"
+		relationName: "movements_userId_users_id"
 	}),
 	profiles: many(profiles),
 	budgets: many(budgets),
@@ -95,9 +95,9 @@ export const categoriesRelations = relations(categories, ({one, many}) => ({
 		fields: [categories.organizationId],
 		references: [organizations.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [categories.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 	recurringRules: many(recurringRules),
 	movements: many(movements),
@@ -105,9 +105,9 @@ export const categoriesRelations = relations(categories, ({one, many}) => ({
 }));
 
 export const paymentMethodsRelations = relations(paymentMethods, ({one}) => ({
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [paymentMethods.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
@@ -120,9 +120,9 @@ export const savingsGoalsRelations = relations(savingsGoals, ({one, many}) => ({
 		fields: [savingsGoals.organizationId],
 		references: [organizations.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [savingsGoals.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 	savingsContributions: many(savingsContributions),
 	savingsGoalContributions: many(savingsGoalContributions),
@@ -141,17 +141,17 @@ export const debtsRelations = relations(debts, ({one, many}) => ({
 		fields: [debts.organizationId],
 		references: [organizations.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [debts.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 	movements: many(movements),
 }));
 
 export const investmentAssetsRelations = relations(investmentAssets, ({one, many}) => ({
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [investmentAssets.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 	investmentPositions: many(investmentPositions),
 }));
@@ -165,9 +165,9 @@ export const investmentPositionsRelations = relations(investmentPositions, ({one
 		fields: [investmentPositions.assetId],
 		references: [investmentAssets.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [investmentPositions.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
@@ -176,9 +176,9 @@ export const investmentPriceHistoryRelations = relations(investmentPriceHistory,
 		fields: [investmentPriceHistory.investmentId],
 		references: [investments.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [investmentPriceHistory.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
@@ -192,30 +192,30 @@ export const investmentsRelations = relations(investments, ({one, many}) => ({
 		fields: [investments.organizationId],
 		references: [organizations.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [investments.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
 export const monthlySnapshotsRelations = relations(monthlySnapshots, ({one}) => ({
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [monthlySnapshots.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
 export const alertRulesRelations = relations(alertRules, ({one}) => ({
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [alertRules.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
 export const alertsRelations = relations(alerts, ({one}) => ({
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [alerts.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
@@ -224,16 +224,16 @@ export const apiTokensRelations = relations(apiTokens, ({one}) => ({
 		fields: [apiTokens.organizationId],
 		references: [organizations.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [apiTokens.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
 export const organizationInvitationsRelations = relations(organizationInvitations, ({one}) => ({
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [organizationInvitations.invitedBy],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 	organization: one(organizations, {
 		fields: [organizationInvitations.orgId],
@@ -242,9 +242,9 @@ export const organizationInvitationsRelations = relations(organizationInvitation
 }));
 
 export const providersRelations = relations(providers, ({one}) => ({
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [providers.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
@@ -261,9 +261,9 @@ export const recurringRulesRelations = relations(recurringRules, ({one}) => ({
 		fields: [recurringRules.organizationId],
 		references: [organizations.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [recurringRules.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
@@ -303,22 +303,22 @@ export const movementsRelations = relations(movements, ({one, many}) => ({
 		fields: [movements.organizationId],
 		references: [organizations.id]
 	}),
-	usersInAuth_paidByUserId: one(usersInAuth, {
+	users_paidByUserId: one(users, {
 		fields: [movements.paidByUserId],
-		references: [usersInAuth.id],
-		relationName: "movements_paidByUserId_usersInAuth_id"
+		references: [users.id],
+		relationName: "movements_paidByUserId_users_id"
 	}),
-	usersInAuth_userId: one(usersInAuth, {
+	users_userId: one(users, {
 		fields: [movements.userId],
-		references: [usersInAuth.id],
-		relationName: "movements_userId_usersInAuth_id"
+		references: [users.id],
+		relationName: "movements_userId_users_id"
 	}),
 }));
 
 export const profilesRelations = relations(profiles, ({one}) => ({
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [profiles.id],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
@@ -327,9 +327,9 @@ export const budgetsRelations = relations(budgets, ({one}) => ({
 		fields: [budgets.categoryId],
 		references: [categories.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [budgets.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));
 
@@ -338,8 +338,8 @@ export const organizationMembersRelations = relations(organizationMembers, ({one
 		fields: [organizationMembers.orgId],
 		references: [organizations.id]
 	}),
-	usersInAuth: one(usersInAuth, {
+	users: one(users, {
 		fields: [organizationMembers.userId],
-		references: [usersInAuth.id]
+		references: [users.id]
 	}),
 }));

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getGoalsByUser,
@@ -25,6 +25,7 @@ import { useToast } from '../../components/Toast'
 export default function SavingsList() {
   const navigate = useNavigate()
   const { t } = useI18n()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
   const createGoalMutation = useCreateSavingsGoal()
@@ -55,7 +56,6 @@ export default function SavingsList() {
   }, [currentWorkspace])
 
   const loadGoals = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -75,7 +75,6 @@ export default function SavingsList() {
     setSubmitting(true)
     setFormError(null)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setFormError('No se pudo obtener el usuario')
       setSubmitting(false)
@@ -109,7 +108,6 @@ export default function SavingsList() {
     if (!selectedGoalId) return
     setSubmitting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
+import { api } from '../lib/apiClient'
 import { ensureDefaultAccountsForUser } from '../services/authService'
 import { TrendingUp, TrendingDown, Wallet, PiggyBank, Shield, BarChart3, AlertTriangle, CheckCircle, Mail, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { UiInput } from '../components/ui/UiInput'
@@ -24,6 +25,7 @@ function getPasswordStrength(password: string): { score: number; label: string; 
 export default function Auth() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { signIn, user } = useAuth()
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -38,120 +40,37 @@ export default function Auth() {
   const [resetEmailSent, setResetEmailSent] = useState(false)
   const [resetLoading, setResetLoading] = useState(false)
 
-  // Check URL params for various states
   useEffect(() => {
-    // User was suspended
-    if (searchParams.get('suspended') === 'true') {
-      setShowSuspendedMessage(true)
-    }
-    // User just confirmed email (Supabase redirects with access_token or type=signup)
-    const hashParams = new URLSearchParams(window.location.hash.slice(1))
-    if (hashParams.get('access_token') || searchParams.get('type') === 'signup') {
-      setShowEmailConfirmed(true)
-    }
-  }, [searchParams])
+    if (user) navigate('/app/dashboard', { replace: true })
+    if (searchParams.get('suspended') === 'true') setShowSuspendedMessage(true)
+  }, [user, searchParams, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
-
     try {
-      if (isLogin) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
-        
-        // Check profile status before proceeding
-        if (data.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('is_suspended, is_approved')
-            .eq('id', data.user.id)
-            .single()
-
-          if (!profile) {
-            await supabase.auth.signOut()
-            setError('Tu cuenta no fue encontrada o fue rechazada. Contacta al administrador.')
-            return
-          }
-
-          if (profile.is_suspended) {
-            await supabase.auth.signOut()
-            setError('Tu cuenta ha sido suspendida. Contacta al administrador para más información.')
-            return
-          }
-
-          if (!profile.is_approved) {
-            await supabase.auth.signOut()
-            setShowPendingApproval(true)
-            return
-          }
-
-          await ensureDefaultAccountsForUser(data.user.id)
-        }
-        navigate('/app/dashboard')
-      } else {
-        // Registration - send verification email
-        const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin
-        const { data: signUpData, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${siteUrl}/auth`
-          }
-        })
-        if (error) throw error
-
-        // Notify admin about new pending user
-        if (signUpData?.user) {
-          const siteApiUrl = import.meta.env.VITE_SITE_URL || window.location.origin
-          fetch(`${siteApiUrl}/api/v1/notify-new-user`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: signUpData.user.id })
-          }).catch(() => {}) // fire-and-forget
-        }
-        // Show success message - user needs to confirm email and await admin approval
-        setShowRegistrationSuccess(true)
-        setEmail('')
-        setPassword('')
-      }
+      await signIn(email, password)
+      await ensureDefaultAccountsForUser('')
+      navigate('/app/dashboard')
     } catch (err) {
-      // Translate Supabase errors to friendly messages
-      const message = err instanceof Error ? err.message : 'Ha ocurrido un error'
-      if (message.includes('Invalid login credentials') || message.includes('invalid_credentials')) {
-        setError('Correo o contraseña incorrectos. Por favor, verifica tus datos.')
-      } else if (message.includes('Email not confirmed')) {
-        setError('Debes confirmar tu correo electrónico antes de iniciar sesión.')
-      } else if (message.includes('User not found')) {
-        setError('No existe una cuenta con ese correo electrónico.')
-      } else if (message.includes('rate limit') || message.includes('too many')) {
-        setError('Demasiados intentos. Por favor, espera unos minutos e intenta de nuevo.')
+      const msg = err instanceof Error ? err.message : 'Ha ocurrido un error'
+      if (msg.toLowerCase().includes('credenciales') || msg.toLowerCase().includes('invalid')) {
+        setError('Correo o contraseña incorrectos.')
       } else {
-        setError(message)
+        setError(msg)
       }
     } finally {
       setLoading(false)
     }
   }
 
-  // Handle password reset
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim()) {
-      setError('Por favor, introduce tu correo electrónico')
-      return
-    }
-    
-    setResetLoading(true)
-    setError(null)
-    
+    if (!email.trim()) { setError('Introduce tu correo'); return }
+    setResetLoading(true); setError(null)
     try {
-      const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${siteUrl}/auth/reset-password`
-      })
-      if (error) throw error
+      await api.post('/api/auth/forgot-password', { email })
       setResetEmailSent(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al enviar el correo')

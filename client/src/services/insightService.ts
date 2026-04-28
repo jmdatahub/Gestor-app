@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 
 // Types
 export interface Insight {
@@ -55,29 +55,29 @@ export async function getMonthlyInsights(
 
   try {
     // Get movements for both months (excluding transfers)
-    const { data: currentMovements } = await supabase
-      .from('movements')
-      .select('kind, amount, category:categories(name)')
-      .eq('user_id', userId)
-      .not('kind', 'in', '(transfer_in,transfer_out)')
-      .gte('date', currentRange.start)
-      .lte('date', currentRange.end)
+    const [currentRes, prevRes] = await Promise.all([
+      api.get<{ data: any[] }>('/api/v1/movements', {
+        startDate: currentRange.start,
+        endDate: currentRange.end,
+        limit: 5000,
+        personal: 'true',
+      }),
+      api.get<{ data: any[] }>('/api/v1/movements', {
+        startDate: prevRange.start,
+        endDate: prevRange.end,
+        limit: 5000,
+        personal: 'true',
+      }),
+    ])
 
-    const { data: prevMovements } = await supabase
-      .from('movements')
-      .select('kind, amount, category:categories(name)')
-      .eq('user_id', userId)
-      .not('kind', 'in', '(transfer_in,transfer_out)')
-      .gte('date', prevRange.start)
-      .lte('date', prevRange.end)
-
-    type MovementRow = { kind: string; amount: number; category: { name?: string } | { name?: string }[] | null }
-    const currentRows = (currentMovements || []) as unknown as MovementRow[]
-    const prevRows = (prevMovements || []) as unknown as MovementRow[]
-    const catName = (row: MovementRow) => {
-      const c = Array.isArray(row.category) ? row.category[0] : row.category
-      return c?.name || ''
-    }
+    type MovementRow = { kind: string; amount: number; categoryName?: string; category_name?: string }
+    const currentRows: MovementRow[] = ((currentRes.data || []) as MovementRow[]).filter(
+      r => r.kind !== 'transfer_in' && r.kind !== 'transfer_out'
+    )
+    const prevRows: MovementRow[] = ((prevRes.data || []) as MovementRow[]).filter(
+      r => r.kind !== 'transfer_in' && r.kind !== 'transfer_out'
+    )
+    const catName = (row: MovementRow) => row.categoryName || row.category_name || ''
 
     // Calculate totals
     const currentExpenses = currentRows
@@ -211,11 +211,8 @@ export async function getMonthlyInsights(
     }
 
     // d) Savings goals progress
-    const { data: goals } = await supabase
-      .from('savings_goals')
-      .select('id, name, target_amount, current_amount, is_completed')
-      .eq('user_id', userId)
-      .eq('is_completed', false)
+    const { data: allGoals } = await api.get<{ data: any[] }>('/api/v1/savings-goals')
+    const goals = (allGoals || []).filter((g: any) => !g.is_completed)
 
     for (const goal of (goals || [])) {
       const progress = goal.target_amount > 0 
@@ -235,10 +232,7 @@ export async function getMonthlyInsights(
     }
 
     // e) Investment changes
-    const { data: investments } = await supabase
-      .from('investments')
-      .select('id, name, buy_price, current_price')
-      .eq('user_id', userId)
+    const { data: investments } = await api.get<{ data: any[] }>('/api/v1/investments')
 
     for (const inv of (investments || [])) {
       const changePercent = inv.buy_price > 0 
@@ -264,13 +258,11 @@ export async function getMonthlyInsights(
     const in15Days = new Date()
     in15Days.setDate(now.getDate() + 15)
 
-    const { data: debts } = await supabase
-      .from('debts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('is_closed', false)
-      .not('due_date', 'is', null)
-      .lte('due_date', in15Days.toISOString().split('T')[0])
+    const { data: allDebts } = await api.get<{ data: any[] }>('/api/v1/debts')
+    const in15DaysStr = in15Days.toISOString().split('T')[0]
+    const debts = (allDebts || []).filter((d: any) =>
+      !d.is_closed && d.due_date != null && d.due_date <= in15DaysStr
+    )
 
     for (const debt of (debts || [])) {
       if (debt.remaining_amount > 0) {

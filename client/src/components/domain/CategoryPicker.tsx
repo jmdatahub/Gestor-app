@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { api } from '../../lib/apiClient'
 import { UiField } from '../ui/UiField'
 import { Plus, Check, ChevronDown, X, Search } from 'lucide-react'
 
@@ -68,7 +68,7 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
   const loadCategories = async () => {
     try {
       setLoading(true)
-      const { data } = await supabase.from('categories').select('*').order('name')
+      const { data } = await api.get<{ data: any[] }>('/api/v1/categories')
       setCategories(data || [])
     } catch (err) {
       console.error('Error loading categories:', err)

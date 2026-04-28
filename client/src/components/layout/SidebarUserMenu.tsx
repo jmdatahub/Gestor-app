@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { LogOut, Check, Building, User, ChevronsUpDown, Plus } from 'lucide-react'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 
 interface SidebarUserMenuProps {
@@ -11,6 +11,7 @@ interface SidebarUserMenuProps {
 
 const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
   const { currentWorkspace, workspaces, switchWorkspace } = useWorkspace()
+  const { user, signOut } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -50,8 +51,8 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     setIsOpen(false)
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
+  const handleSignOut = () => {
+    signOut()
     navigate('/auth')
   }
 

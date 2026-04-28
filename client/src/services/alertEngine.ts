@@ -1,18 +1,18 @@
-import { supabase } from '../lib/supabaseClient'
 import { createAlert, hasRecentAlert, hasRecentAlertForEntity } from './alertService'
 import type { Alert } from './alertService'
+import { api } from '../lib/apiClient'
 
 // Sends a Telegram notification for an alert without throwing on failure
 async function notifyTelegram(type: Alert['type'], title: string, message: string): Promise<void> {
   try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return
+    const token = localStorage.getItem('auth_token')
+    if (!token) return
 
     await fetch('/api/v1/notify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({ type, title, message })
     })
@@ -44,26 +44,20 @@ export async function checkSpendingLimit(userId: string): Promise<void> {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
 
-  const { data: movements } = await supabase
-    .from('movements')
-    .select('amount')
-    .eq('user_id', userId)
-    .eq('status', 'confirmed')
-    .eq('type', 'expense')
-    .gte('date', startOfMonth)
-    .lte('date', endOfMonth)
+  const { data: movements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate: startOfMonth,
+    endDate: endOfMonth,
+    status: 'confirmed',
+    kind: 'expense',
+    limit: 5000,
+  })
 
   if (!movements) return
 
-  const totalExpenses = movements.reduce((sum, m) => sum + m.amount, 0)
+  const totalExpenses = (movements || []).reduce((sum, m) => sum + Number(m.amount), 0)
 
   // Use a configurable limit stored in the user profile, fallback to 2000
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('spending_limit')
-    .eq('id', userId)
-    .single()
-
+  const { data: profile } = await api.get<{ data: any }>('/api/v1/profiles/me')
   const limit: number = (profile as { spending_limit?: number } | null)?.spending_limit ?? 2000
 
   if (totalExpenses > limit) {
@@ -75,7 +69,7 @@ export async function checkSpendingLimit(userId: string): Promise<void> {
       type: 'spending_limit',
       title,
       message,
-      severity: pct >= 150 ? 'danger' : 'warning',
+      severity: pct >= 150 ? 'critical' : 'warning',
       action_url: '/app/analisis/movimientos',
     })
     await notifyTelegram('spending_limit', title, message)
@@ -86,13 +80,10 @@ export async function checkSpendingLimit(userId: string): Promise<void> {
 export async function checkPendingRecurringMovements(userId: string): Promise<void> {
   if (await hasRecentAlert(userId, 'rule_pending', 1)) return
 
-  const { count } = await supabase
-    .from('movements')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('status', 'pending')
+  const { data: pendingMovements } = await api.get<{ data: any[] }>('/api/v1/pending-movements')
+  const count = (pendingMovements || []).length
 
-  if (count && count > 0) {
+  if (count > 0) {
     const title = `${count} movimiento${count > 1 ? 's' : ''} pendiente${count > 1 ? 's' : ''}`
     const message = `Tienes ${count} movimiento${count > 1 ? 's' : ''} automático${count > 1 ? 's' : ''} que necesita${count > 1 ? 'n' : ''} tu aprobación.`
     await createAlert({
@@ -109,11 +100,8 @@ export async function checkPendingRecurringMovements(userId: string): Promise<vo
 
 // Check savings goals near completion (per goal, not global)
 export async function checkSavingsGoalProgress(userId: string): Promise<void> {
-  const { data: goals } = await supabase
-    .from('savings_goals')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_completed', false)
+  const { data: allGoals } = await api.get<{ data: any[] }>('/api/v1/savings-goals')
+  const goals = (allGoals || []).filter((g: any) => !g.is_completed)
 
   if (!goals) return
 
@@ -164,10 +152,7 @@ export async function checkSavingsGoalProgress(userId: string): Promise<void> {
 
 // Check for investment drops (per investment)
 export async function checkInvestmentDrop(userId: string): Promise<void> {
-  const { data: investments } = await supabase
-    .from('investments')
-    .select('id, name, buy_price, current_price')
-    .eq('user_id', userId)
+  const { data: investments } = await api.get<{ data: any[] }>('/api/v1/investments')
 
   if (!investments) return
 
@@ -189,7 +174,7 @@ export async function checkInvestmentDrop(userId: string): Promise<void> {
         type: 'investment_drop',
         title,
         message,
-        severity: change <= -25 ? 'danger' : 'warning',
+        severity: change <= -25 ? 'critical' : 'warning',
         action_url: `/app/patrimonio/inversiones`,
         metadata: { investment_id: inv.id },
       })
@@ -204,13 +189,11 @@ export async function checkDebtDueSoon(userId: string): Promise<void> {
   const in7Days = new Date()
   in7Days.setDate(now.getDate() + 7)
 
-  const { data: debts } = await supabase
-    .from('debts')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_closed', false)
-    .not('due_date', 'is', null)
-    .lte('due_date', in7Days.toISOString().split('T')[0])
+  const { data: allDebts } = await api.get<{ data: any[] }>('/api/v1/debts')
+  const in7DaysStr = in7Days.toISOString().split('T')[0]
+  const debts = (allDebts || []).filter((d: any) =>
+    !d.is_closed && d.due_date != null && d.due_date <= in7DaysStr
+  )
 
   if (!debts || debts.length === 0) return
 
@@ -233,7 +216,7 @@ export async function checkDebtDueSoon(userId: string): Promise<void> {
       type: 'debt_due',
       title,
       message,
-      severity: daysRemaining <= 1 ? 'danger' : 'warning',
+      severity: daysRemaining <= 1 ? 'critical' : 'warning',
       action_url: `/app/patrimonio/deudas`,
       metadata: { debt_id: debt.id },
     })

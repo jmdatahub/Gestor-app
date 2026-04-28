@@ -1,5 +1,5 @@
 // Subscription Alert Service - Alerts for expiring subscriptions
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 
 export interface SubscriptionAlert {
   id: string
@@ -22,44 +22,36 @@ export async function getExpiringSubscriptions(
   const futureDate = new Date()
   futureDate.setDate(today.getDate() + daysAhead)
 
-  const { data, error } = await supabase
-    .from('movements')
-    .select(`
-      id,
-      description,
-      provider,
-      amount,
-      subscription_end_date,
-      auto_renew,
-      category_id,
-      categories(name)
-    `)
-    .eq('user_id', userId)
-    .eq('is_subscription', true)
-    .gte('subscription_end_date', today.toISOString().split('T')[0])
-    .lte('subscription_end_date', futureDate.toISOString().split('T')[0])
-    .order('subscription_end_date', { ascending: true })
+  try {
+    const { data: allMovements } = await api.get<{ data: any[] }>('/api/v1/movements', { limit: 5000 })
+    const todayStr = today.toISOString().split('T')[0]
+    const futureDateStr = futureDate.toISOString().split('T')[0]
 
-  if (error) {
+    const data = (allMovements || []).filter(m =>
+      m.isSubscription === true &&
+      m.subscriptionEndDate != null &&
+      m.subscriptionEndDate >= todayStr &&
+      m.subscriptionEndDate <= futureDateStr
+    ).sort((a: any, b: any) => (a.subscriptionEndDate || '').localeCompare(b.subscriptionEndDate || ''))
+
+    return data.map((item: any) => {
+      const endDate = new Date(item.subscriptionEndDate)
+      const daysUntil = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      return {
+        id: item.id,
+        description: item.description || 'Suscripción',
+        provider: item.provider,
+        amount: Number(item.amount),
+        subscription_end_date: item.subscriptionEndDate,
+        auto_renew: item.autoRenew,
+        days_until_expiry: daysUntil,
+        category_name: item.categoryName || null
+      }
+    })
+  } catch (error) {
     console.error('Error fetching expiring subscriptions:', error)
     return []
   }
-
-  return (data || []).map(item => {
-    const endDate = new Date(item.subscription_end_date)
-    const daysUntil = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    
-    return {
-      id: item.id,
-      description: item.description || 'Suscripción',
-      provider: item.provider,
-      amount: item.amount,
-      subscription_end_date: item.subscription_end_date,
-      auto_renew: item.auto_renew,
-      days_until_expiry: daysUntil,
-      category_name: (item.categories as any)?.name || null
-    }
-  })
 }
 
 // Get subscriptions that user wants to cancel (auto_renew = false)
@@ -97,30 +89,22 @@ export async function renewSubscription(
   id: string,
   newEndDate: string
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from('movements')
-    .update({ subscription_end_date: newEndDate })
-    .eq('id', id)
-
-  if (error) {
+  try {
+    await api.patch('/api/v1/movements/' + id, { subscriptionEndDate: newEndDate })
+    return true
+  } catch (error) {
     console.error('Error renewing subscription:', error)
     return false
   }
-
-  return true
 }
 
 // Toggle auto-renew for subscription
 export async function toggleAutoRenew(id: string, autoRenew: boolean): Promise<boolean> {
-  const { error } = await supabase
-    .from('movements')
-    .update({ auto_renew: autoRenew })
-    .eq('id', id)
-
-  if (error) {
+  try {
+    await api.patch('/api/v1/movements/' + id, { autoRenew })
+    return true
+  } catch (error) {
     console.error('Error toggling auto renew:', error)
     return false
   }
-
-  return true
 }

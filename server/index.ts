@@ -10,6 +10,19 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { optionalAuth } from './middleware/auth.js'
 import authRoutes from './routes/auth.routes.js'
 import movementsRoutes from './routes/movements.routes.js'
+import accountsRoutes from './routes/accounts.routes.js'
+import categoriesRoutes from './routes/categories.routes.js'
+import budgetsRoutes from './routes/budgets.routes.js'
+import alertsRoutes from './routes/alerts.routes.js'
+import debtsRoutes from './routes/debts.routes.js'
+import savingsRoutes from './routes/savings.routes.js'
+import investmentsRoutes from './routes/investments.routes.js'
+import recurringRoutes from './routes/recurring.routes.js'
+import organizationsRoutes from './routes/organizations.routes.js'
+import profilesRoutes from './routes/profiles.routes.js'
+import paymentMethodsRoutes from './routes/payment-methods.routes.js'
+import providersRoutes from './routes/providers.routes.js'
+import apiTokensRoutes from './routes/api-tokens.routes.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -44,7 +57,6 @@ app.use(helmet({
     },
   },
 }))
-
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin)) cb(null, true)
@@ -52,10 +64,9 @@ app.use(cors({
   },
   credentials: true,
 }))
-
 app.use(express.json({ limit: '10mb' }))
 
-// ─── Health check ─────────────────────────────────────────────────────────────
+// ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), env: process.env.NODE_ENV || 'development' })
 })
@@ -63,7 +74,23 @@ app.get('/api/health', (_req, res) => {
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authLimiter, optionalAuth, authRoutes)
 app.use('/api/auth/change-password', passwordLimiter)
+
 app.use('/api/v1/movements', movementsRoutes)
+app.use('/api/v1/accounts', accountsRoutes)
+app.use('/api/v1/categories', categoriesRoutes)
+app.use('/api/v1/budgets', budgetsRoutes)
+app.use('/api/v1/alerts', alertsRoutes)
+app.use('/api/v1/alert-rules', alertsRoutes)
+app.use('/api/v1/debts', debtsRoutes)
+app.use('/api/v1/savings-goals', savingsRoutes)
+app.use('/api/v1/investments', investmentsRoutes)
+app.use('/api/v1/recurring-rules', recurringRoutes)
+app.use('/api/v1/pending-movements', recurringRoutes)
+app.use('/api/v1/organizations', organizationsRoutes)
+app.use('/api/v1/profiles', profilesRoutes)
+app.use('/api/v1/payment-methods', paymentMethodsRoutes)
+app.use('/api/v1/providers', providersRoutes)
+app.use('/api/v1/api-tokens', apiTokensRoutes)
 
 // ─── Static client (production) ──────────────────────────────────────────────
 if (isProduction) {

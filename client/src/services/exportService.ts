@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 import { buildAccountTree, flattenAccountTree, getUserAccounts, type Account } from './accountService'
 import { getAccountBalancesSummary } from './summaryService'
 
@@ -80,32 +80,23 @@ interface MovementFilters {
 }
 
 export async function exportMovementsToCSV(userId: string, filters: MovementFilters = {}) {
-  let query = supabase
-    .from('movements')
-    .select(`
-      id, date, type, amount, description, category, status, created_at,
-      account:accounts(name)
-    `)
-    .eq('user_id', userId)
-    .order('date', { ascending: false })
+  const params: Record<string, string | number> = { limit: 5000, personal: 'true' }
+  if (filters.startDate) params.startDate = filters.startDate
+  if (filters.endDate) params.endDate = filters.endDate
+  if (filters.type && filters.type !== 'all') params.kind = filters.type
 
-  if (filters.startDate) query = query.gte('date', filters.startDate)
-  if (filters.endDate) query = query.lte('date', filters.endDate)
-  if (filters.type && filters.type !== 'all') query = query.eq('type', filters.type)
+  const { data } = await api.get<{ data: any[] }>('/api/v1/movements', params)
 
-  const { data, error } = await query
-  if (error) throw error
-
-  const rows = (data || []).map(m => ({
+  const rows = (data || []).map((m: any) => ({
     id: m.id,
     date: m.date,
-    type: m.type,
+    type: m.kind || m.type,
     amount: m.amount,
-    account_name: Array.isArray(m.account) ? m.account[0]?.name : (m.account as any)?.name || '',
-    category: m.category || '',
+    account_name: m.accountName || m.account_name || '',
+    category: m.categoryName || m.category_name || m.category || '',
     description: m.description || '',
     status: m.status || 'confirmed',
-    created_at: m.created_at
+    created_at: m.createdAt || m.created_at,
   }))
 
   const csv = arrayToCSV(rows, ['id', 'date', 'type', 'amount', 'account_name', 'category', 'description', 'status', 'created_at'])
@@ -114,21 +105,12 @@ export async function exportMovementsToCSV(userId: string, filters: MovementFilt
 }
 
 export async function exportMovementsToExcel(userId: string, filters: MovementFilters = {}) {
-  let query = supabase
-    .from('movements')
-    .select(`
-      id, date, type, amount, description, category, status, created_at,
-      account:accounts(name)
-    `)
-    .eq('user_id', userId)
-    .order('date', { ascending: false })
+  const params: Record<string, string | number> = { limit: 5000, personal: 'true' }
+  if (filters.startDate) params.startDate = filters.startDate
+  if (filters.endDate) params.endDate = filters.endDate
+  if (filters.type && filters.type !== 'all') params.kind = filters.type
 
-  if (filters.startDate) query = query.gte('date', filters.startDate)
-  if (filters.endDate) query = query.lte('date', filters.endDate)
-  if (filters.type && filters.type !== 'all') query = query.eq('type', filters.type)
-
-  const { data, error } = await query
-  if (error) throw error
+  const { data } = await api.get<{ data: any[] }>('/api/v1/movements', params)
 
   const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
@@ -146,17 +128,17 @@ export async function exportMovementsToExcel(userId: string, filters: MovementFi
     { header: 'Creado', key: 'created_at', width: 20 },
   ]
 
-  ;(data || []).forEach(m => {
+  ;(data || []).forEach((m: any) => {
     sheet.addRow({
       id: m.id,
       date: m.date,
-      type: m.type,
+      type: m.kind || m.type,
       amount: m.amount,
-      account_name: Array.isArray(m.account) ? m.account[0]?.name : (m.account as any)?.name || '',
-      category: m.category || '',
+      account_name: m.accountName || m.account_name || '',
+      category: m.categoryName || m.category_name || m.category || '',
       description: m.description || '',
       status: m.status || 'confirmed',
-      created_at: m.created_at
+      created_at: m.createdAt || m.created_at,
     })
   })
 
@@ -166,22 +148,12 @@ export async function exportMovementsToExcel(userId: string, filters: MovementFi
 }
 
 export async function exportMovementsToJSON(userId: string, filters: MovementFilters = {}) {
-  let query = supabase
-    .from('movements')
-    .select(`
-      id, date, type, amount, description, category, status, created_at,
-      account:accounts(name)
-    `)
-    .eq('user_id', userId)
-    .order('date', { ascending: false })
+  const params: Record<string, string | number> = { limit: 5000, personal: 'true' }
+  if (filters.startDate) params.startDate = filters.startDate
+  if (filters.endDate) params.endDate = filters.endDate
+  if (filters.type && filters.type !== 'all') params.kind = filters.type
 
-  if (filters.startDate) query = query.gte('date', filters.startDate)
-  if (filters.endDate) query = query.lte('date', filters.endDate)
-  if (filters.type && filters.type !== 'all') query = query.eq('type', filters.type)
-
-  const { data, error } = await query
-  if (error) throw error
-
+  const { data } = await api.get<{ data: any[] }>('/api/v1/movements', params)
   return exportToJSON(data || [], 'movements.json')
 }
 
@@ -190,12 +162,7 @@ export async function exportMovementsToJSON(userId: string, filters: MovementFil
 // ========================================
 
 export async function exportAccountsToCSV(userId: string) {
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('id, name, type, created_at')
-    .eq('user_id', userId)
-
-  if (error) throw error
+  const { data } = await api.get<{ data: any[] }>('/api/v1/accounts')
 
   const csv = arrayToCSV(data || [], ['id', 'name', 'type', 'created_at'])
   downloadFile(csv, 'accounts.csv', 'text/csv;charset=utf-8;')
@@ -203,12 +170,7 @@ export async function exportAccountsToCSV(userId: string) {
 }
 
 export async function exportAccountsToExcel(userId: string) {
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('*')
-    .eq('user_id', userId)
-
-  if (error) throw error
+  const { data } = await api.get<{ data: any[] }>('/api/v1/accounts')
 
   // Flatten hierarchy for proper info
   // We cast to any for buildAccountTree
@@ -253,11 +215,7 @@ export async function exportAccountsToExcel(userId: string) {
 }
 
 export async function exportAccountsToJSON(userId: string) {
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('*')
-    .eq('user_id', userId)
-  if (error) throw error
+  const { data } = await api.get<{ data: any[] }>('/api/v1/accounts')
   return exportToJSON(data || [], 'accounts.json')
 }
 
@@ -266,14 +224,12 @@ export async function exportAccountsToJSON(userId: string) {
 // ========================================
 
 export async function exportCategoriesToCSV(userId: string) {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('id, name, type, created_at')
-    .eq('user_id', userId)
-
-  if (error) {
-    // Categories might not exist
-    console.warn('Categories table might not exist:', error)
+  let data: any[] | null = null
+  try {
+    const res = await api.get<{ data: any[] }>('/api/v1/categories')
+    data = res.data
+  } catch (error) {
+    console.warn('Error fetching categories:', error)
     return 0
   }
 
@@ -283,12 +239,13 @@ export async function exportCategoriesToCSV(userId: string) {
 }
 
 export async function exportCategoriesToExcel(userId: string) {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('id, name, type, created_at')
-    .eq('user_id', userId)
-
-  if (error && error.code !== '42P01') throw error // Ignore table not found if that was the logic
+  let data: any[] | null = null
+  try {
+    const res = await api.get<{ data: any[] }>('/api/v1/categories')
+    data = res.data
+  } catch {
+    data = []
+  }
 
   const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
@@ -309,12 +266,12 @@ export async function exportCategoriesToExcel(userId: string) {
 }
 
 export async function exportCategoriesToJSON(userId: string) {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('user_id', userId)
-  if (error) return 0
-  return exportToJSON(data || [], 'categories.json')
+  try {
+    const { data } = await api.get<{ data: any[] }>('/api/v1/categories')
+    return exportToJSON(data || [], 'categories.json')
+  } catch {
+    return 0
+  }
 }
 
 // ========================================
@@ -322,19 +279,9 @@ export async function exportCategoriesToJSON(userId: string) {
 // ========================================
 
 export async function exportSavingsToExcel(userId: string) {
-  const { data: goals, error: goalsError } = await supabase
-    .from('savings_goals')
-    .select('*')
-    .eq('user_id', userId)
-
-  if (goalsError) throw goalsError
-
-  const { data: contributions, error: contribError } = await supabase
-    .from('savings_goal_contributions')
-    .select('*')
-    .eq('user_id', userId)
-
-  if (contribError) throw contribError
+  const { data: goals } = await api.get<{ data: any[] }>('/api/v1/savings-goals')
+  // savings_goal_contributions has no API endpoint
+  const contributions: any[] = []
 
   const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
@@ -375,19 +322,9 @@ export async function exportSavingsToExcel(userId: string) {
 // ========================================
 
 export async function exportDebtsToExcel(userId: string) {
-  const { data: debts, error: debtsError } = await supabase
-    .from('debts')
-    .select('*')
-    .eq('user_id', userId)
-
-  if (debtsError) throw debtsError
-
-  const { data: movements, error: movError } = await supabase
-    .from('debt_movements')
-    .select('*')
-    .eq('user_id', userId)
-
-  if (movError) throw movError
+  const { data: debts } = await api.get<{ data: any[] }>('/api/v1/debts')
+  // debt_movements has no API endpoint
+  const movements: any[] = []
 
   const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
@@ -430,30 +367,21 @@ export async function exportDebtsToExcel(userId: string) {
 // ========================================
 
 export async function exportRecurringToCSV(userId: string) {
-  const { data, error } = await supabase
-    .from('recurring_rules')
-    .select(`
-      id, kind, amount, frequency, day_of_week, day_of_month, 
-      next_occurrence, is_active, category, description, created_at,
-      account:accounts(name)
-    `)
-    .eq('user_id', userId)
+  const { data } = await api.get<{ data: any[] }>('/api/v1/recurring-rules')
 
-  if (error) throw error
-
-  const rows = (data || []).map(r => ({
+  const rows = (data || []).map((r: any) => ({
     id: r.id,
     kind: r.kind,
     amount: r.amount,
     frequency: r.frequency,
-    day_of_week: r.day_of_week,
-    day_of_month: r.day_of_month,
-    next_occurrence: r.next_occurrence,
-    is_active: r.is_active,
+    day_of_week: r.dayOfWeek ?? r.day_of_week,
+    day_of_month: r.dayOfMonth ?? r.day_of_month,
+    next_occurrence: r.nextOccurrence ?? r.next_occurrence,
+    is_active: r.isActive ?? r.is_active,
     category: r.category || '',
-    account_name: Array.isArray(r.account) ? r.account[0]?.name : (r.account as any)?.name || '',
+    account_name: r.accountName || r.account_name || '',
     description: r.description || '',
-    created_at: r.created_at
+    created_at: r.createdAt ?? r.created_at,
   }))
 
   const csv = arrayToCSV(rows, ['id', 'kind', 'amount', 'frequency', 'day_of_week', 'day_of_month', 'next_occurrence', 'is_active', 'category', 'account_name', 'description', 'created_at'])
@@ -462,16 +390,7 @@ export async function exportRecurringToCSV(userId: string) {
 }
 
 export async function exportRecurringToExcel(userId: string) {
-  const { data, error } = await supabase
-    .from('recurring_rules')
-    .select(`
-      id, kind, amount, frequency, day_of_week, day_of_month, 
-      next_occurrence, is_active, category, description, created_at,
-      account:accounts(name)
-    `)
-    .eq('user_id', userId)
-
-  if (error) throw error
+  const { data } = await api.get<{ data: any[] }>('/api/v1/recurring-rules')
 
   const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
@@ -492,10 +411,10 @@ export async function exportRecurringToExcel(userId: string) {
     { header: 'Creado', key: 'created_at', width: 20 },
   ]
 
-  ;(data || []).forEach(r => {
+  ;(data || []).forEach((r: any) => {
     sheet.addRow({
       ...r,
-      account_name: Array.isArray(r.account) ? r.account[0]?.name : (r.account as any)?.name || ''
+      account_name: r.accountName || r.account_name || '',
     })
   })
 
@@ -521,11 +440,10 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
   const pathMap = buildAccountPathMap(allAccounts)
 
   // 2. Movements
-  const { data: movements } = await supabase
-    .from('movements')
-    .select('*, account:accounts(name)')
-    .eq('user_id', userId)
-    .order('date', { ascending: false })
+  const { data: movements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    limit: 5000,
+    personal: 'true',
+  })
 
   const movSheet = workbook.addWorksheet('Movements')
   movSheet.columns = [
@@ -539,17 +457,13 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
     { header: 'Descripción', key: 'description', width: 30 },
     { header: 'Estado', key: 'status', width: 12 },
   ]
-  ;(movements || []).forEach(m => {
-    // Determine account path if possible
-    let accPath = ''
-    if (m.account_id && pathMap.has(m.account_id)) {
-      accPath = pathMap.get(m.account_id)!
-    }
-
+  ;(movements || []).forEach((m: any) => {
+    const accId = m.accountId || m.account_id
+    const accPath = accId && pathMap.has(accId) ? pathMap.get(accId)! : ''
     movSheet.addRow({
       ...m,
       account_path: accPath,
-      account_name: Array.isArray(m.account) ? m.account[0]?.name : (m.account as any)?.name || ''
+      account_name: m.accountName || m.account_name || '',
     })
   })
 
@@ -601,10 +515,7 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
 
 
   // Savings Goals
-  const { data: goals } = await supabase
-    .from('savings_goals')
-    .select('*')
-    .eq('user_id', userId)
+  const { data: goals } = await api.get<{ data: any[] }>('/api/v1/savings-goals')
 
   const goalsSheet = workbook.addWorksheet('SavingsGoals')
   goalsSheet.columns = [
@@ -616,11 +527,8 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
   ]
   ;(goals || []).forEach(g => goalsSheet.addRow(g))
 
-  // Savings Contributions
-  const { data: contributions } = await supabase
-    .from('savings_goal_contributions')
-    .select('*')
-    .eq('user_id', userId)
+  // Savings Contributions — no API endpoint, use empty array
+  const contributions: any[] = []
 
   const contribSheet = workbook.addWorksheet('SavingsContributions')
   contribSheet.columns = [
@@ -633,10 +541,7 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
   ;(contributions || []).forEach(c => contribSheet.addRow(c))
 
   // Debts
-  const { data: debts } = await supabase
-    .from('debts')
-    .select('*')
-    .eq('user_id', userId)
+  const { data: debts } = await api.get<{ data: any[] }>('/api/v1/debts')
 
   const debtsSheet = workbook.addWorksheet('Debts')
   debtsSheet.columns = [
@@ -649,11 +554,8 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
   ]
   ;(debts || []).forEach(d => debtsSheet.addRow(d))
 
-  // Debt Movements
-  const { data: debtMov } = await supabase
-    .from('debt_movements')
-    .select('*')
-    .eq('user_id', userId)
+  // Debt Movements — no API endpoint, use empty array
+  const debtMov: any[] = []
 
   const debtMovSheet = workbook.addWorksheet('DebtMovements')
   debtMovSheet.columns = [
@@ -666,10 +568,7 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
   ;(debtMov || []).forEach(m => debtMovSheet.addRow(m))
 
   // Recurring Rules
-  const { data: recurring } = await supabase
-    .from('recurring_rules')
-    .select('*, account:accounts(name)')
-    .eq('user_id', userId)
+  const { data: recurring } = await api.get<{ data: any[] }>('/api/v1/recurring-rules')
 
   const recSheet = workbook.addWorksheet('RecurringRules')
   recSheet.columns = [
@@ -681,10 +580,10 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
     { header: 'Activa', key: 'is_active', width: 10 },
     { header: 'Cuenta', key: 'account_name', width: 20 },
   ]
-  ;(recurring || []).forEach(r => {
+  ;(recurring || []).forEach((r: any) => {
     recSheet.addRow({
       ...r,
-      account_name: (r.account as { name: string } | null)?.name || ''
+      account_name: r.accountName || r.account_name || '',
     })
   })
 
@@ -810,22 +709,22 @@ export async function exportSummaryToExcel(
     endDate = `${options.year}-12-31`
   }
   
-  const { data: movements } = await supabase
-    .from('movements')
-    .select('date, type, amount, category, description, status')
-    .eq('user_id', userId)
-    .gte('date', startDate)
-    .lte('date', endDate)
-    .order('date', { ascending: false })
-  
-  ;(movements || []).forEach(m => {
+  const { data: movements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate,
+    endDate,
+    limit: 5000,
+    personal: 'true',
+  })
+
+  ;(movements || []).forEach((m: any) => {
+    const kind = m.kind || m.type
     movSheet.addRow({
       date: m.date,
-      type: m.type === 'income' ? 'Ingreso' : m.type === 'expense' ? 'Gasto' : 'Inversión',
+      type: kind === 'income' ? 'Ingreso' : kind === 'expense' ? 'Gasto' : 'Inversión',
       amount: m.amount,
-      category: m.category || '-',
+      category: m.categoryName || m.category_name || m.category || '-',
       description: m.description || '-',
-      status: m.status === 'confirmed' ? 'Confirmado' : 'Pendiente'
+      status: m.status === 'confirmed' ? 'Confirmado' : 'Pendiente',
     })
   })
   

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
+import { api } from '../../lib/apiClient'
 import { User, Check, Save, Loader2, Mail, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 // Avatares predefinidos por categorías
@@ -24,6 +25,7 @@ interface UserProfile {
 }
 
 export default function ProfileSettings() {
+  const { user: authUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -44,27 +46,21 @@ export default function ProfileSettings() {
 
   const loadProfile = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!authUser) return
 
-      // Get email from auth.user (this is always correct)
-      setAuthEmail(user.email || null)
+      // Get email from auth user (this is always correct)
+      setAuthEmail(authUser.email || null)
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      const { data } = await api.get<{ data: UserProfile }>('/api/v1/profiles/me').catch(() => ({ data: null as unknown as UserProfile }))
 
-      if (error) {
-        console.error('Error loading profile:', error)
-        setProfile({ id: user.id, email: user.email || null, display_name: null, avatar_type: null })
-        setDisplayName(user.email?.split('@')[0] || '')
+      if (!data) {
+        setProfile({ id: authUser.id, email: authUser.email || null, display_name: null, avatar_type: null })
+        setDisplayName(authUser.email?.split('@')[0] || '')
         return
       }
 
       setProfile(data)
-      setDisplayName(data.display_name || user.email?.split('@')[0] || '')
+      setDisplayName(data.display_name || authUser.email?.split('@')[0] || '')
       
       if (data.avatar_type) {
         if (data.avatar_type.startsWith('emoji:')) {
@@ -91,15 +87,10 @@ export default function ProfileSettings() {
     try {
       const avatarValue = avatarType === 'default' ? `bg:${avatarBg}` : `emoji:${avatarType}`
       
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          display_name: displayName.trim() || null,
-          avatar_type: avatarValue
-        })
-        .eq('id', profile.id)
-
-      if (error) throw error
+      await api.patch('/api/v1/profiles/me', {
+        displayName: displayName.trim() || null,
+        avatarType: avatarValue,
+      })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (error) {
@@ -120,17 +111,12 @@ export default function ProfileSettings() {
     setEmailMessage(null)
     
     try {
-      const { error } = await supabase.auth.updateUser({ email: newEmail })
-      
-      if (error) {
-        setEmailMessage({ type: 'error', text: error.message })
-      } else {
-        setEmailMessage({ 
-          type: 'success', 
-          text: 'Se ha enviado un enlace de verificación a ambos emails. Confirma el cambio desde tu bandeja de entrada.' 
-        })
-        setNewEmail('')
-      }
+      await api.patch('/api/v1/profiles/me', { email: newEmail })
+      setEmailMessage({
+        type: 'success',
+        text: 'Se ha enviado un enlace de verificación a ambos emails. Confirma el cambio desde tu bandeja de entrada.'
+      })
+      setNewEmail('')
     } catch (error: any) {
       setEmailMessage({ type: 'error', text: error.message || 'Error al cambiar email' })
     } finally {

@@ -50,19 +50,24 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
     }
   }
 
+  const getBudgetCategoryName = (b: Budget) => b.category_name ?? b.categoryName ?? ''
+  const getBudgetLimit = (b: Budget) => b.monthly_limit ?? b.monthlyLimit ?? b.amount ?? 0
+
   const getProgressItems = (): BudgetProgress[] => {
     return budgets.map(budget => {
-      const spending = categorySpending.find(c => c.categoryName === budget.category_name)
+      const catName = getBudgetCategoryName(budget)
+      const limit = getBudgetLimit(budget)
+      const spending = categorySpending.find(c => c.categoryName === catName)
       const spent = spending?.total || 0
-      const percentage = budget.monthly_limit > 0 ? (spent / budget.monthly_limit) * 100 : 0
-      
+      const percentage = limit > 0 ? (spent / limit) * 100 : 0
+
       return {
-        categoryName: budget.category_name,
+        categoryName: catName,
         spent,
-        limit: budget.monthly_limit,
+        limit,
         percentage,
-        isOverBudget: spent > budget.monthly_limit,
-        remaining: budget.monthly_limit - spent
+        isOverBudget: spent > limit,
+        remaining: limit - spent
       }
     }).sort((a, b) => b.percentage - a.percentage)
   }
@@ -92,7 +97,8 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
 
   const handleDeleteBudget = async (categoryName: string) => {
     try {
-      await deleteBudget(userId, categoryName, currentMonth)
+      const budget = budgets.find(b => (b.category_name ?? b.categoryName) === categoryName)
+      if (budget) await deleteBudget(budget.id)
       await loadData()
     } catch (error) {
       console.error('Error deleting budget:', error)
@@ -101,12 +107,12 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
 
   const progressItems = getProgressItems()
   const overBudgetCount = progressItems.filter(p => p.isOverBudget).length
-  const totalBudget = budgets.reduce((sum, b) => sum + b.monthly_limit, 0)
+  const totalBudget = budgets.reduce((sum, b) => sum + (b.monthly_limit ?? b.monthlyLimit ?? b.amount ?? 0), 0)
   const totalSpent = progressItems.reduce((sum, p) => sum + p.spent, 0)
   const overallPercentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0
   
   const availableCategories = categorySpending.filter(
-    c => !budgets.some(b => b.category_name === c.categoryName)
+    c => !budgets.some(b => getBudgetCategoryName(b) === c.categoryName)
   )
 
   const getProgressColor = (percentage: number, isOver: boolean) => {
@@ -411,13 +417,15 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
               </h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {budgets.map(b => {
-                  const progress = progressItems.find(p => p.categoryName === b.category_name)
+                  const bCatName = getBudgetCategoryName(b)
+                  const bLimit = getBudgetLimit(b)
+                  const progress = progressItems.find(p => p.categoryName === bCatName)
                   return (
-                    <div 
-                      key={b.category_name} 
-                      style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
+                    <div
+                      key={b.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '0.875rem 1rem',
                         background: 'var(--background)',
@@ -432,17 +440,17 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
                           borderRadius: '50%',
                           background: getProgressColor(progress?.percentage || 0, progress?.isOverBudget || false)
                         }} />
-                        <span style={{ fontWeight: 500 }}>{b.category_name}</span>
+                        <span style={{ fontWeight: 500 }}>{bCatName}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <span style={{ 
+                        <span style={{
                           fontWeight: 600,
                           color: 'var(--text-primary)'
                         }}>
-                          {formatCurrency(b.monthly_limit)}
+                          {formatCurrency(bLimit)}
                         </span>
-                        <button 
-                          onClick={() => handleDeleteBudget(b.category_name)}
+                        <button
+                          onClick={() => handleDeleteBudget(bCatName)}
                           style={{
                             background: 'rgba(239, 68, 68, 0.1)',
                             border: 'none',

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getAccountsWithBalances,
@@ -38,6 +38,7 @@ export default function AccountsList() {
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
   const createAccountMutation = useCreateAccount()
@@ -72,7 +73,6 @@ export default function AccountsList() {
   }, [currentWorkspace])
 
   const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -97,7 +97,6 @@ export default function AccountsList() {
     setSubmitting(true)
     setErrorMsg(null)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -215,8 +214,7 @@ export default function AccountsList() {
     }
     
     setSubmitting(true)
-    
-    const { data: { user } } = await supabase.auth.getUser()
+
     if (!user) {
       setTransferError('No se pudo obtener el usuario')
       setSubmitting(false)

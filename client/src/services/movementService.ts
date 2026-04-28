@@ -1,402 +1,137 @@
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 import { invalidateCategories } from './catalogCache'
 
-// Types - MATCHES ACTUAL SUPABASE SCHEMA
 export interface Movement {
-  id: string
-  user_id: string
-  organization_id?: string | null
-  account_id: string
-  kind: 'income' | 'expense' | 'investment'
-  amount: number
-  date: string
-  description: string | null
-  category_id: string | null
-  status?: string
-  is_business?: boolean
-  created_at: string
-  // New fields
-  tax_rate?: number | null
-  tax_amount?: number | null
-  provider?: string | null
-  payment_method?: string | null
-  paid_by_user_id?: string | null
-  paid_by_external?: string | null
-  linked_debt_id?: string | null
-  is_subscription?: boolean
-  subscription_end_date?: string | null
-  auto_renew?: boolean
-  // Joined data
+  id: string; user_id: string; organization_id?: string | null; account_id: string
+  kind: 'income' | 'expense' | 'investment'; amount: number; date: string
+  description: string | null; category_id: string | null; status?: string
+  is_business?: boolean; created_at: string; tax_rate?: number | null
+  tax_amount?: number | null; provider?: string | null; payment_method?: string | null
+  paid_by_user_id?: string | null; paid_by_external?: string | null
+  linked_debt_id?: string | null; is_subscription?: boolean
+  subscription_end_date?: string | null; auto_renew?: boolean
   account?: { id: string; name: string }
   category?: { id: string; name: string; color?: string }
   creator?: { id: string; display_name: string | null; email: string | null } | null
 }
+export interface Account { id: string; user_id: string; organization_id?: string | null; name: string; type: string }
+export interface Category { id: string; user_id: string; organization_id?: string | null; name: string; kind: string; color?: string; description?: string | null }
 
-export interface Account {
-  id: string
-  user_id: string
-  organization_id?: string | null
-  name: string
-  type: string
+export async function fetchMovements(_userId: string, limit = 50, offset = 0, organizationId?: string | null): Promise<Movement[]> {
+  const params: Record<string, string | number> = { limit, offset }
+  if (organizationId) params.org_id = organizationId
+  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params)
+  return data
 }
 
-export interface Category {
-  id: string
-  user_id: string
-  organization_id?: string | null
-  name: string
-  kind: string
-  color?: string
-  description?: string | null
+export async function fetchMovementsForMonth(_userId: string, year: number, month: number, organizationId?: string | null): Promise<Movement[]> {
+  const params: Record<string, string | number> = { limit: 500, year, month }
+  if (organizationId) params.org_id = organizationId
+  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params)
+  return data
 }
 
-// Fetch movements for user (OR Organization)
-export async function fetchMovements(userId: string, limit = 50, offset = 0, organizationId?: string | null): Promise<Movement[]> {
-  let query = supabase
-    .from('movements')
-    .select(`
-      *,
-      account:accounts(id, name),
-      category:categories(id, name, color)
-    `)
-    .order('date', { ascending: false })
-    .range(offset, offset + limit - 1)
-
-  if (organizationId) {
-    // Org Mode: Filter by Org ID
-    query = query.eq('organization_id', organizationId)
-  } else {
-    // Personal Mode: Filter by User ID AND Org ID is NULL
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    console.error('Error fetching movements:', error)
-    throw error
-  }
-
-  // If in org mode, fetch creator profiles for each unique user_id
-  if (organizationId && data && data.length > 0) {
-    const uniqueUserIds = [...new Set(data.map(m => m.user_id))]
-    
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, display_name, email')
-      .in('id', uniqueUserIds)
-    
-    const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
-    
-    return data.map(m => ({
-      ...m,
-      creator: profileMap.get(m.user_id) || null
-    }))
-  }
-
-  return data || []
+export async function fetchMovementById(id: string): Promise<Movement | null> {
+  const { data } = await api.get<{ data: Movement }>(`/api/v1/movements/${id}`)
+  return data
 }
 
-// Fetch movements for current month
-export async function fetchMonthlyMovements(userId: string, organizationId?: string | null): Promise<Movement[]> {
+export async function createMovement(movement: Omit<Movement, 'id' | 'created_at'>): Promise<Movement> {
+  const { data } = await api.post<{ data: Movement }>('/api/v1/movements', movement)
+  invalidateCategories()
+  return data
+}
+
+export async function updateMovement(id: string, updates: Partial<Movement>): Promise<Movement> {
+  const { data } = await api.patch<{ data: Movement }>(`/api/v1/movements/${id}`, updates)
+  return data
+}
+
+export async function deleteMovement(id: string): Promise<void> {
+  await api.delete(`/api/v1/movements/${id}`)
+}
+
+export async function fetchCategories(_userId: string, organizationId?: string | null): Promise<Category[]> {
+  const params: Record<string, string> = {}
+  if (organizationId) params.org_id = organizationId
+  const { data } = await api.get<{ data: Category[] }>('/api/v1/categories', params)
+  return data
+}
+
+export async function createCategory(cat: Omit<Category, 'id'>): Promise<Category> {
+  const { data } = await api.post<{ data: Category }>('/api/v1/categories', cat)
+  invalidateCategories()
+  return data
+}
+
+export async function fetchAccounts(_userId: string, organizationId?: string | null): Promise<Account[]> {
+  const params: Record<string, string> = {}
+  if (organizationId) params.org_id = organizationId
+  const { data } = await api.get<{ data: Account[] }>('/api/v1/accounts', params)
+  return data
+}
+
+export async function acceptPendingMovement(id: string): Promise<void> {
+  await api.patch(`/api/v1/movements/${id}`, { status: 'confirmed' })
+}
+
+export async function discardPendingMovement(id: string): Promise<void> {
+  await api.delete(`/api/v1/movements/${id}`)
+}
+
+// ---- Backward-compat aliases & helpers ----
+
+export type CreateMovementInput = Omit<Movement, 'id' | 'created_at'>
+
+export async function fetchMonthlyMovements(
+  userId: string,
+  organizationId?: string | null,
+): Promise<Movement[]> {
   const now = new Date()
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-
-  let query = supabase
-    .from('movements')
-    .select(`
-      *,
-      category:categories(id, name, color)
-    `)
-    .gte('date', firstDay)
-    .lte('date', lastDay)
-
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    console.error('Error fetching monthly movements:', error)
-    throw error
-  }
-  return data || []
+  return fetchMovementsForMonth(userId, now.getFullYear(), now.getMonth() + 1, organizationId)
 }
 
-// Calculate monthly summary
-export function calculateMonthlySummary(movements: Movement[]) {
-  let income = 0
-  let expense = 0
-
-  movements.forEach(m => {
-    if (m.kind === 'income') {
-      income += m.amount
-    } else if (m.kind === 'expense') {
-      expense += m.amount
-    }
-    // investment is neutral for now
-  })
-
-  return {
-    income,
-    expense,
-    balance: income - expense
-  }
+export interface MonthlySummary {
+  income: number; expense: number; balance: number
 }
 
-// Create movement
-export interface CreateMovementInput {
-  user_id: string
-  organization_id?: string | null
-  account_id: string
-  kind: 'income' | 'expense' | 'investment'
-  amount: number
-  date: string
-  description?: string | null
-  category_id?: string | null
-  // New optional fields
-  tax_rate?: number | null
-  tax_amount?: number | null
-  provider?: string | null
-  payment_method?: string | null
-  paid_by_user_id?: string | null
-  paid_by_external?: string | null
-  linked_debt_id?: string | null
-  is_subscription?: boolean
-  subscription_end_date?: string | null
-  auto_renew?: boolean
+export function calculateMonthlySummary(movements: Movement[]): MonthlySummary {
+  let income = 0; let expense = 0
+  for (const m of movements) {
+    if (m.kind === 'income') income += m.amount
+    else if (m.kind === 'expense') expense += m.amount
+  }
+  return { income, expense, balance: income - expense }
 }
 
-export async function createMovement(input: CreateMovementInput): Promise<Movement> {
-  const { data, error } = await supabase
-    .from('movements')
-    .insert([{
-      user_id: input.user_id,
-      organization_id: input.organization_id || null,
-      account_id: input.account_id,
-      kind: input.kind,
-      amount: input.amount,
-      date: input.date,
-      description: input.description || null,
-      category_id: input.category_id || null,
-      // New fields
-      tax_rate: input.tax_rate ?? null,
-      tax_amount: input.tax_amount ?? null,
-      provider: input.provider || null,
-      payment_method: input.payment_method || null,
-      paid_by_user_id: input.paid_by_user_id || null,
-      paid_by_external: input.paid_by_external || null,
-      linked_debt_id: input.linked_debt_id || null,
-      is_subscription: input.is_subscription ?? false,
-      subscription_end_date: input.subscription_end_date || null,
-      auto_renew: input.auto_renew ?? true
-    }])
-    .select()
-    .single()
+export async function getPendingClassificationCount(
+  _userId: string,
+  organizationId?: string | null,
+): Promise<number> {
+  const params: Record<string, string | number> = { status: 'pending', limit: 1 }
+  if (organizationId) params.org_id = organizationId
+  const { total } = await api.get<{ data: Movement[]; total: number }>('/api/v1/movements', params)
+  return total ?? 0
+}
 
-  if (error) {
-    console.error('[movementService] Error creating movement:', error)
-    throw error
-  }
-  
+export async function fetchPendingClassificationMovements(
+  _userId: string,
+  organizationId?: string | null,
+): Promise<Movement[]> {
+  const params: Record<string, string | number> = { status: 'pending', limit: 200 }
+  if (organizationId) params.org_id = organizationId
+  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params)
   return data
 }
 
-// Update existing movement
-export async function updateMovement(
-  movementId: string, 
-  updates: Partial<CreateMovementInput>
-): Promise<Movement> {
-  const { data, error } = await supabase
-    .from('movements')
-    .update(updates)
-    .eq('id', movementId)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('[movementService] Error updating movement:', error)
-    throw error
-  }
-  
-  return data
-}
-
-// Delete movement
-export async function deleteMovement(movementId: string): Promise<void> {
-  const { error } = await supabase
-    .from('movements')
-    .delete()
-    .eq('id', movementId)
-
-  if (error) {
-    console.error('[movementService] Error deleting movement:', error)
-    throw error
-  }
-}
-
-// Fetch user accounts
-export async function fetchAccounts(userId: string, organizationId?: string | null): Promise<Account[]> {
-  let query = supabase.from('accounts').select('*')
-  
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-  
-  const { data, error } = await query
-
-  if (error) {
-    console.error('Error fetching accounts:', error)
-    throw error
-  }
-  return data || []
-}
-
-// Fetch user categories
-export async function fetchCategories(userId: string, organizationId?: string | null): Promise<Category[]> {
-  let query = supabase.from('categories').select('*')
-
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    console.warn('Categories fetch failed, might not exist:', error)
-    return []
-  }
-  return data || []
-}
-
-// Create a new category
-export async function createCategory(
-  userId: string, 
-  name: string, 
-  kind: 'income' | 'expense' = 'expense',
-  color?: string,
-  organizationId?: string | null
-): Promise<Category> {
-  const { data, error } = await supabase
-    .from('categories')
-    .insert([{
-      user_id: userId,
-      organization_id: organizationId || null,
-      name: name.trim(),
-      kind,
-      color: color || getRandomCategoryColor()
-    }])
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error creating category:', error)
-    throw error
-  }
-  // Invalidate cache for the specific context
-  invalidateCategories(organizationId || userId) 
-  return data
-}
-
-// Get or create category by name (for auto-creation)
 export async function getOrCreateCategory(
   userId: string,
   name: string,
-  kind: 'income' | 'expense' = 'expense',
-  organizationId?: string | null
+  kind: string,
+  organizationId?: string | null,
 ): Promise<Category> {
-  const trimmedName = name.trim()
-  
-  let query = supabase
-    .from('categories')
-    .select('*')
-    .ilike('name', trimmedName)
-
-  if (organizationId) {
-    query = query.eq('organization_id', organizationId)
-  } else {
-    query = query.eq('user_id', userId).is('organization_id', null)
-  }
-
-  const { data: existing } = await query.single()
-
-  if (existing) {
-    return existing
-  }
-
-  // Create new category
-  return createCategory(userId, trimmedName, kind, undefined, organizationId)
-}
-
-// Random color generator for new categories
-function getRandomCategoryColor(): string {
-  const colors = [
-    '#818cf8', '#34d399', '#fbbf24', '#f87171', 
-    '#60a5fa', '#a78bfa', '#fb923c', '#4ade80',
-    '#f472b6', '#22d3d8', '#84cc16', '#e879f9'
-  ]
-  return colors[Math.floor(Math.random() * colors.length)]
-}
-
-// Get count of movements pending classification (category_id is null OR category is "Otros")
-export async function getPendingClassificationCount(userId: string, organizationId?: string | null): Promise<number> {
-  // First, get "Otros" category IDs
-  let catQuery = supabase.from('categories').select('id').ilike('name', 'otros')
-  if (organizationId) catQuery = catQuery.eq('organization_id', organizationId)
-  else catQuery = catQuery.eq('user_id', userId).is('organization_id', null)
-  
-  const { data: otrosCats } = await catQuery
-  const otrosIds = otrosCats?.map(c => c.id) || []
-
-  // Count movements 
-  let query = supabase.from('movements').select('id', { count: 'exact', head: true })
-  
-  if (organizationId) query = query.eq('organization_id', organizationId)
-  else query = query.eq('user_id', userId).is('organization_id', null)
-
-  if (otrosIds.length > 0) {
-    query = query.or(`category_id.is.null,category_id.in.(${otrosIds.join(',')})`)
-  } else {
-    query = query.is('category_id', null)
-  }
-
-  const { count } = await query
-  return count || 0
-}
-
-// Fetch movements pending classification (category_id is null OR category is "Otros")
-export async function fetchPendingClassificationMovements(userId: string, organizationId?: string | null): Promise<Movement[]> {
-  let catQuery = supabase.from('categories').select('id').ilike('name', 'otros')
-  if (organizationId) catQuery = catQuery.eq('organization_id', organizationId)
-  else catQuery = catQuery.eq('user_id', userId).is('organization_id', null)
-
-  const { data: otrosCats } = await catQuery
-  const otrosIds = otrosCats?.map(c => c.id) || []
-
-  let query = supabase.from('movements').select(`
-    *,
-    account:accounts(id, name),
-    category:categories(id, name, color)
-  `).order('date', { ascending: false })
-
-  if (organizationId) query = query.eq('organization_id', organizationId)
-  else query = query.eq('user_id', userId).is('organization_id', null)
-
-  if (otrosIds.length > 0) {
-    query = query.or(`category_id.is.null,category_id.in.(${otrosIds.join(',')})`)
-  } else {
-    query = query.is('category_id', null)
-  }
-
-  const { data, error } = await query
-  if (error) throw error
-  return data || []
+  const cats = await fetchCategories(userId, organizationId)
+  const existing = cats.find(c => c.name.toLowerCase() === name.toLowerCase() && c.kind === kind)
+  if (existing) return existing
+  return createCategory({ user_id: userId, organization_id: organizationId ?? null, name, kind })
 }

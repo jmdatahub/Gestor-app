@@ -1,329 +1,108 @@
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 
-// Types (re-using matching types from Context or defining new DTOs)
 export type AppRole = 'owner' | 'admin' | 'member' | 'viewer'
-
-export interface Organization {
-  id: string
-  name: string
-  slug: string | null
-  description: string | null
-  parent_id: string | null
-  created_at?: string
+export interface Organization { id: string; name: string; slug: string | null; description: string | null; parent_id: string | null }
+export interface WorkspaceMember {
+  org_id: string; user_id: string; role: AppRole; organization?: Organization
+  profile?: { display_name?: string | null; email?: string | null; avatar_type?: string | null } | null
 }
-
-export interface OrganizationMember {
-  org_id: string
-  user_id: string
-  role: AppRole
-  profile?: {
-    id: string
-    email: string | null
-    display_name: string | null
-    avatar_type: string | null
-  } | null
-}
-
-export interface CreateOrganizationInput {
-  name: string
-  slug?: string
-  description?: string
-  parent_id?: string
-}
-
-// Fetch organizations for the current user
-export async function getUserOrganizations(userId: string): Promise<Organization[]> {
-  const { data, error } = await supabase
-    .from('organization_members')
-    .select(`
-      org_id,
-      organization:organizations (
-        id,
-        name,
-        slug,
-        created_at
-      )
-    `)
-    .eq('user_id', userId)
-
-  if (error) {
-    console.error('Error fetching user organizations:', error)
-    throw error
-  }
-  
-  interface OrgMemberQueryResult {
-    org_id: string
-    organization: Organization | null
-  }
-
-  // Map to flattened Organization array, filtering out nulls
-  return (data as any[] as OrgMemberQueryResult[])
-    .map(item => item.organization)
-    .filter((org): org is Organization => org !== null)
-}
-
-// Get single organization details
-export async function getOrganizationById(orgId: string): Promise<Organization | null> {
-  const { data, error } = await supabase
-    .from('organizations')
-    .select('*')
-    .eq('id', orgId)
-    .single()
-
-  if (error) {
-    console.error('Error fetching organization:', error)
-    throw error
-  }
-  return data
-}
-
-// Create new organization
-export async function createOrganization(userId: string, input: CreateOrganizationInput): Promise<Organization> {
-  // 1. Create Organization
-  const { data: org, error: orgError } = await supabase
-    .from('organizations')
-    .insert([{
-      name: input.name,
-      slug: input.slug || null,
-      description: input.description || null,
-      parent_id: input.parent_id || null,
-      owner_id: userId  // Required for RLS policy
-    }])
-    .select()
-    .single()
-
-  if (orgError) throw orgError
-
-  // 2. Add Creator as Owner in organization_members
-  // The DB trigger might not be working, so we do it manually
-  const { error: memberError } = await supabase
-    .from('organization_members')
-    .insert([{
-      org_id: org.id,
-      user_id: userId,
-      role: 'owner'
-    }])
-
-  if (memberError) {
-    console.error('Error adding creator as member:', memberError)
-    // Don't throw - org was created, user just won't see it immediately
-  }
-  
-  return org
-}
-
-// Update organization
-export async function updateOrganization(orgId: string, updates: Partial<Organization>): Promise<Organization> {
-  const { data, error } = await supabase
-    .from('organizations')
-    .update(updates)
-    .eq('id', orgId)
-    .select()
-    .single()
-
-  if (error) throw error
-  return data
-}
-
-// Delete organization (only owner can delete)
-export async function deleteOrganization(orgId: string): Promise<void> {
-  const { error } = await supabase
-    .from('organizations')
-    .delete()
-    .eq('id', orgId)
-
-  if (error) throw error
-}
-
-// Get members of an organization
-export async function getOrganizationMembers(orgId: string): Promise<OrganizationMember[]> {
-  // Step 1: Get organization members
-  const { data: membersData, error: membersError } = await supabase
-    .from('organization_members')
-    .select('org_id, user_id, role')
-    .eq('org_id', orgId)
-
-  if (membersError) {
-    console.error('Error fetching organization members:', membersError)
-    throw membersError
-  }
-
-  if (!membersData || membersData.length === 0) {
-    return []
-  }
-
-  // Step 2: Get profiles for all member user_ids
-  const userIds = membersData.map(m => m.user_id)
-  
-  const { data: profilesData, error: profilesError } = await supabase
-    .from('profiles')
-    .select('id, email, display_name, avatar_type')
-    .in('id', userIds)
-
-  if (profilesError) {
-    console.warn('Could not fetch profiles, returning members without profile data:', profilesError)
-    return membersData.map(m => ({ ...m, profile: null }))
-  }
-
-  // Step 3: Map profiles to members
-  const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || [])
-  
-  return membersData.map(m => ({
-    org_id: m.org_id,
-    user_id: m.user_id,
-    role: m.role as AppRole,
-    profile: profilesMap.get(m.user_id) || null
-  }))
-}
-
-// Invite member using database RPC
-export async function inviteMember(orgId: string, email: string, role: AppRole): Promise<void> {
-  // Call the database RPC to create the invitation
-  const { data, error } = await supabase.rpc('invite_to_organization', {
-    p_org_id: orgId,
-    p_target_email: email.toLowerCase().trim(),
-    p_role: role
-  })
-
-  if (error) {
-    console.error('Error inviting member:', error)
-    throw error
-  }
-}
-
-// Remove member
-export async function removeMember(orgId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('organization_members')
-    .delete()
-    .match({ org_id: orgId, user_id: userId })
-
-  if (error) throw error
-}
-
-// Update member role
-export async function updateMemberRole(orgId: string, userId: string, role: AppRole): Promise<void> {
-  const { error } = await supabase
-    .from('organization_members')
-    .update({ role })
-    .match({ org_id: orgId, user_id: userId })
-
-  if (error) throw error
-}
-
-// Organization Invitation Type
 export interface OrganizationInvitation {
-  id: string
-  org_id: string
-  email: string
-  role: AppRole
-  invited_by: string | null
-  expires_at: string
-  created_at: string
+  id: string; org_id: string; invitee_email: string; role: AppRole
+  invited_by: string; accepted_at: string | null; created_at: string
+  // Compat aliases
+  email?: string
+  organization?: { id: string; name: string } | null
 }
 
-// Get pending invitations for an organization
+// OrganizationMember alias for WorkspaceMember
+export type OrganizationMember = WorkspaceMember
+
+// PendingInvitation alias
+export type PendingInvitation = OrganizationInvitation
+
+export async function getUserOrganizations(_userId: string): Promise<WorkspaceMember[]> {
+  const { data } = await api.get<{ data: (Organization & { role: AppRole })[] }>('/api/v1/organizations')
+  return data.map(o => ({ org_id: o.id, user_id: '', role: o.role, organization: o }))
+}
+
+export async function createOrganization(
+  _userIdOrName: string,
+  options?: { name?: string; description?: string; parent_id?: string } | string,
+): Promise<Organization> {
+  let name: string; let description: string | undefined; let parent_id: string | undefined
+  if (typeof options === 'object' && options !== null) {
+    name = options.name ?? _userIdOrName
+    description = options.description
+    parent_id = options.parent_id
+  } else {
+    name = typeof options === 'string' ? options : _userIdOrName
+  }
+  const { data } = await api.post<{ data: Organization }>('/api/v1/organizations', { name, description, parent_id })
+  return data
+}
+
+export async function updateOrganization(id: string, updates: Partial<Organization>): Promise<Organization> {
+  const { data } = await api.patch<{ data: Organization }>(`/api/v1/organizations/${id}`, updates)
+  return data
+}
+
+export async function deleteOrganization(id: string): Promise<void> {
+  await api.delete(`/api/v1/organizations/${id}`)
+}
+
+export async function getOrganizationMembers(orgId: string): Promise<WorkspaceMember[]> {
+  const { data } = await api.get<{ data: WorkspaceMember[] }>(`/api/v1/organizations/${orgId}/members`)
+  return data
+}
+
+export async function removeMember(orgId: string, userId: string): Promise<void> {
+  await api.delete(`/api/v1/organizations/${orgId}/members/${userId}`)
+}
+
+export async function updateMemberRole(orgId: string, userId: string, role: AppRole): Promise<void> {
+  await api.patch(`/api/v1/organizations/${orgId}/members/${userId}`, { role })
+}
+
+export async function getMyPendingInvitations(email: string): Promise<OrganizationInvitation[]> {
+  const { data } = await api.get<{ data: OrganizationInvitation[] }>('/api/v1/organizations/invitations/pending', { email })
+  return data
+}
+
+export async function createInvitation(orgId: string, inviteeEmail: string, role: AppRole): Promise<OrganizationInvitation> {
+  const { data } = await api.post<{ data: OrganizationInvitation }>(`/api/v1/organizations/${orgId}/invitations`, { invitee_email: inviteeEmail, role })
+  return data
+}
+
+export async function cancelInvitation(orgIdOrInvId: string, invId?: string): Promise<void> {
+  if (invId) {
+    await api.delete(`/api/v1/organizations/${orgIdOrInvId}/invitations/${invId}`)
+  } else {
+    // Single-arg: invId only, org unknown — try generic endpoint
+    await api.delete(`/api/v1/organizations/invitations/${orgIdOrInvId}`)
+  }
+}
+
+// ---- Backward-compat aliases & helpers ----
+
+export async function getOrganizationById(id: string): Promise<Organization | null> {
+  const { data } = await api.get<{ data: Organization }>(`/api/v1/organizations/${id}`)
+  return data
+}
+
 export async function getOrganizationInvitations(orgId: string): Promise<OrganizationInvitation[]> {
-  const { data, error } = await supabase
-    .from('organization_invitations')
-    .select('*')
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching invitations:', error)
-    return []
-  }
-
-  return data as OrganizationInvitation[]
+  const { data } = await api.get<{ data: OrganizationInvitation[] }>(`/api/v1/organizations/${orgId}/invitations`)
+  // Normalize email field
+  return data.map(inv => ({ ...inv, email: inv.email ?? inv.invitee_email }))
 }
 
-// Cancel/delete an invitation
-export async function cancelInvitation(invitationId: string): Promise<void> {
-  const { error } = await supabase
-    .from('organization_invitations')
-    .delete()
-    .eq('id', invitationId)
-
-  if (error) throw error
+export async function inviteMember(orgId: string, email: string, role: AppRole): Promise<OrganizationInvitation> {
+  return createInvitation(orgId, email, role)
 }
 
-// Extended invitation type with organization name
-export interface PendingInvitation extends OrganizationInvitation {
-  organization?: {
-    id: string
-    name: string
-  } | null
+export async function acceptInvitation(invitationId: string, _userId?: string): Promise<void> {
+  await api.post(`/api/v1/organizations/invitations/${invitationId}/accept`, {})
 }
 
-// Get pending invitations for the current user (by their email)
-export async function getMyPendingInvitations(userEmail: string): Promise<PendingInvitation[]> {
-  if (!userEmail) return []
-  
-  const { data, error } = await supabase
-    .from('organization_invitations')
-    .select(`
-      *,
-      organization:organizations (
-        id,
-        name
-      )
-    `)
-    .ilike('email', userEmail.trim())
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching my invitations:', error)
-    return []
-  }
-
-  return data as PendingInvitation[]
-}
-
-// Accept an invitation - adds user as member and deletes invitation
-export async function acceptInvitation(invitationId: string, userId: string): Promise<void> {
-  // 1. Get the invitation details
-  const { data: invitation, error: fetchError } = await supabase
-    .from('organization_invitations')
-    .select('org_id, role')
-    .eq('id', invitationId)
-    .single()
-
-  if (fetchError || !invitation) {
-    throw new Error('Invitación no encontrada')
-  }
-
-  // 2. Add user to organization_members
-  const { error: memberError } = await supabase
-    .from('organization_members')
-    .insert([{
-      org_id: invitation.org_id,
-      user_id: userId,
-      role: invitation.role
-    }])
-
-  if (memberError) {
-    console.error('Error adding member:', memberError)
-    throw memberError
-  }
-
-  // 3. Delete the invitation
-  const { error: deleteError } = await supabase
-    .from('organization_invitations')
-    .delete()
-    .eq('id', invitationId)
-
-  if (deleteError) {
-    console.warn('Could not delete invitation, but user was added:', deleteError)
-  }
-}
-
-// Decline an invitation - just deletes it
 export async function declineInvitation(invitationId: string): Promise<void> {
-  const { error } = await supabase
-    .from('organization_invitations')
-    .delete()
-    .eq('id', invitationId)
-
-  if (error) throw error
+  await api.post(`/api/v1/organizations/invitations/${invitationId}/decline`, {})
 }

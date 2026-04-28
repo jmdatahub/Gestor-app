@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { supabase } from '../../lib/supabaseClient'
-import { 
+import { useAuth } from '../../context/AuthContext'
+import {
   exportMovementsToCSV,
   exportMovementsToExcel,
   exportMovementsToJSON,
@@ -28,6 +28,7 @@ import { useI18n } from '../../hooks/useI18n'
 export default function ExportPage() {
   const { settings } = useSettings()
   const { t } = useI18n()
+  const { user } = useAuth()
   const [loading, setLoading] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   
@@ -48,7 +49,6 @@ export default function ExportPage() {
     setMessage(null)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autenticado')
 
       const count = await exportFn(user.id, filters)
@@ -70,7 +70,6 @@ export default function ExportPage() {
     setMessage(null)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autenticado')
 
       await exportAllToExcel(user.id, { includeChildrenRollup: includeRollup })
@@ -88,7 +87,6 @@ export default function ExportPage() {
     setMessage(null)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autenticado')
 
       const recordCount = await downloadFullBackup(user.id)

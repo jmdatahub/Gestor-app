@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
 import SettingsPanel from '../components/SettingsPanel'
 import { useI18n } from '../hooks/useI18n'
 import { useOffline } from '../context/OfflineContext'
@@ -39,8 +39,9 @@ export default function AppLayout() {
   const location = useLocation()
   const { t } = useI18n()
   const { isOnline, pendingChanges, isSyncing, syncNow } = useOffline()
+  const { user, signOut, isLoading: authLoading } = useAuth()
   const { currentWorkspace, workspaces, switchWorkspace } = useWorkspace()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pendingInvitations, setPendingInvitations] = useState(0)
@@ -61,40 +62,25 @@ export default function AppLayout() {
   const sidebarRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    checkAuth()
+    if (user === null) {
+      navigate('/auth')
+    } else if (user) {
+      updateInvitations(user.email)
+      updatePendingDebts(user.id)
+      setLoading(false)
+    }
+  }, [user])
 
-    // Listen for auth changes to keep invitations in sync
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user?.email) {
-        updateInvitations(session.user.email)
-      } else if (event === 'SIGNED_OUT') {
-        setPendingInvitations(0)
-      }
-    })
-
-    // Listen for custom event to refresh invitations (e.g. after accept/decline)
+  useEffect(() => {
     const handleRefresh = () => {
-      supabase.auth.getUser().then(({ data }) => {
-        if (data.user?.email) updateInvitations(data.user.email)
-      })
+      if (user?.email) updateInvitations(user.email)
     }
     window.addEventListener('refreshInvitations', handleRefresh)
+    return () => window.removeEventListener('refreshInvitations', handleRefresh)
+  }, [user])
 
-    return () => {
-      subscription.unsubscribe()
-      window.removeEventListener('refreshInvitations', handleRefresh)
-    }
-  }, [])
-
-  // Refresh debt count when workspace changes
   useEffect(() => {
-    const refreshDebts = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        updatePendingDebts(user.id)
-      }
-    }
-    refreshDebts()
+    if (user) updatePendingDebts(user.id)
   }, [currentWorkspace])
 
   const updateInvitations = async (email: string) => {
@@ -115,21 +101,8 @@ export default function AppLayout() {
     }
   }
 
-  const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      navigate('/auth')
-    } else {
-      if (session.user?.email) {
-        updateInvitations(session.user.email)
-        updatePendingDebts(session.user.id)
-      }
-    }
-    setLoading(false)
-  }
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
+  const handleSignOut = () => {
+    signOut()
     navigate('/auth')
   }
 
@@ -180,7 +153,7 @@ export default function AppLayout() {
     { key: 'nav.analisis', path: '/app/analisis', icon: BarChart3 },
   ]
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="loading-container" style={{ minHeight: '100vh' }}>
         <div className="spinner"></div>

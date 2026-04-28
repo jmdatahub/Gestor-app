@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
 
 import { warmup as warmupCache } from '../services/catalogCache'
 import {
@@ -54,22 +54,19 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
+  const { user } = useAuth()
   const { currentWorkspace, workspaces, isLoading: workspaceLoading, userRole, switchWorkspace, refreshWorkspaces } = useWorkspace()
-  const [userEmail, setUserEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
 
+  const userId = user?.id ?? null
+  const userEmail = user?.email ?? null
   const workspaceId = currentWorkspace?.id || null
   const locale = language === 'es' ? 'es-ES' : 'en-US'
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUserEmail(user.email || null)
-        setUserId(user.id)
-        warmupCache(user.id, workspaceId)
-      }
-    })
-  }, [workspaceId])
+    if (user) {
+      warmupCache(user.id, workspaceId)
+    }
+  }, [user, workspaceId])
 
   const { data: accountsSummary = { totalBalance: 0, accountCount: 0 }, isLoading: isAccountsLoading } = useAccountsSummary(userId, workspaceId)
   const { data: monthlySummary = { income: 0, expense: 0, balance: 0 }, isLoading: isMonthlyLoading } = useMonthlyMovementsSummary(userId, workspaceId)

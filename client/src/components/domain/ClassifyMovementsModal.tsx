@@ -4,7 +4,7 @@ import { UiModal, UiModalHeader, UiModalBody } from '../ui/UiModal'
 import { CategoryPicker } from './CategoryPicker'
 import { fetchPendingClassificationMovements, updateMovement, type Movement } from '../../services/movementService'
 import { useWorkspace } from '../../context/WorkspaceContext'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { useQueryClient } from '@tanstack/react-query'
 import { movementKeys } from '../../hooks/queries/useDashboardMovements'
 import { dashboardKeys } from '../../hooks/queries/useDashboardAccounts'
@@ -28,22 +28,17 @@ function formatDateShort(dateStr: string) {
 
 export function ClassifyMovementsModal({ isOpen, onClose }: Props) {
   const { currentWorkspace } = useWorkspace()
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const toast = useToast()
 
-  const [userId, setUserId] = useState<string | null>(null)
+  const userId = user?.id ?? null
   const [movements, setMovements] = useState<Movement[]>([])
   const [loading, setLoading] = useState(false)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [allDone, setAllDone] = useState(false)
 
   const workspaceId = currentWorkspace?.id || null
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setUserId(user.id)
-    })
-  }, [])
 
   const load = useCallback(async () => {
     if (!userId) return

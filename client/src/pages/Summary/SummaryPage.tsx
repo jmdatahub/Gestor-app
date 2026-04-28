@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ExportMenu } from '../../components/shared/ExportMenu'
 import { ExcelColumn } from '../../utils/excelExport'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getMonthlySummary,
@@ -56,6 +56,7 @@ export default function SummaryPage() {
   const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings, updateSettings } = useSettings()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()
   const locale = language === 'es' ? 'es-ES' : 'en-US'
   const currency = 'EUR'
@@ -88,7 +89,6 @@ export default function SummaryPage() {
   const loadData = async () => {
     setLoading(true)
     setError(null)
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     try {
       const orgId = currentWorkspace?.id || null

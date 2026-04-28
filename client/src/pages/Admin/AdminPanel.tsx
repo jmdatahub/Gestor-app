@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 // import { AdminDashboard } from '../../components/admin/AdminDashboard'
 import { ExportMenu } from '../../components/shared/ExportMenu'
+import { api } from '../../lib/apiClient'
 // import { exportToCSV } from '../../utils/exportUtils'
 // import { downloadFile } from '../../services/exportService'
 // import { UiDropdown, UiDropdownItem } from '../../components/ui/UiDropdown'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import {
   getAllUsers,
   getUserCount,
@@ -59,6 +60,7 @@ import {
 
 export default function AdminPanel() {
   const { t } = useI18n()
+  const { user } = useAuth()
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<UserProfile[]>([])
@@ -139,7 +141,6 @@ export default function AdminPanel() {
 
   const checkAdminAccess = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setCurrentUserEmail(user.email ?? null)
         setCurrentUserId(user.id)
@@ -384,67 +385,39 @@ export default function AdminPanel() {
     setOrgStats(null)
     
     try {
-      // Fetch organization members first
-      const { data: members, error: membersError } = await supabase
-        .from('organization_members')
-        .select('user_id, role, joined_at')
-        .eq('org_id', org.id)
-      
-      if (membersError) {
-        console.error('Error loading org members:', membersError)
-      }
-
-      // Get profiles if we have members
-      let membersWithProfiles: any[] = []
-      if (members && members.length > 0) {
-        const userIds = members.map(m => m.user_id)
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, email, display_name, is_suspended')
-          .in('id', userIds)
-        
-        membersWithProfiles = members.map(member => ({
-          ...member,
-          profile: profiles?.find(p => p.id === member.user_id) || null
-        }))
-      }
+      // Fetch organization members first — no direct API endpoint, skip
+      const membersWithProfiles: any[] = []
       setOrgMembers(membersWithProfiles)
 
       // Fetch financial stats for this organization
-      // Get movements with more details for expanded view
-      const { data: movements } = await supabase
-        .from('movements')
-        .select('id, amount, type, description, date, created_at')
-        .eq('organization_id', org.id)
-        .order('date', { ascending: false })
-      
-      // Get accounts with names
-      const { data: accounts } = await supabase
-        .from('accounts')
-        .select('id, name, balance, type')
-        .eq('organization_id', org.id)
-        .order('balance', { ascending: false })
+      const [movementsRes, accountsRes] = await Promise.allSettled([
+        api.get<{ data: any[] }>('/api/v1/movements', { orgId: org.id, limit: 5000 }),
+        api.get<{ data: any[] }>('/api/v1/accounts'),
+      ])
+
+      const movements = movementsRes.status === 'fulfilled' ? movementsRes.value.data || [] : []
+      const allAccounts = accountsRes.status === 'fulfilled' ? accountsRes.value.data || [] : []
+      // Filter accounts belonging to this org
+      const accounts = allAccounts.filter((a: any) => a.organizationId === org.id || a.organization_id === org.id)
       
       // Calculate stats
       let totalIncome = 0
       let totalExpenses = 0
-      if (movements) {
-        movements.forEach(m => {
-          if (m.type === 'income') totalIncome += Number(m.amount) || 0
-          else if (m.type === 'expense') totalExpenses += Number(m.amount) || 0
-        })
-      }
-      
-      const totalBalance = accounts?.reduce((sum, a) => sum + (Number(a.balance) || 0), 0) || 0
-      
+      movements.forEach((m: any) => {
+        if (m.kind === 'income' || m.type === 'income') totalIncome += Number(m.amount) || 0
+        else if (m.kind === 'expense' || m.type === 'expense') totalExpenses += Number(m.amount) || 0
+      })
+
+      const totalBalance = accounts.reduce((sum: number, a: any) => sum + (Number(a.balance) || 0), 0)
+
       setOrgStats({
         totalIncome,
         totalExpenses,
         totalBalance,
-        movementCount: movements?.length || 0,
-        accountCount: accounts?.length || 0,
-        recentMovements: movements?.slice(0, 10) || [],
-        accounts: accounts || []
+        movementCount: movements.length,
+        accountCount: accounts.length,
+        recentMovements: movements.slice(0, 10),
+        accounts,
       })
 
     } catch (err) {
@@ -468,56 +441,36 @@ export default function AdminPanel() {
     setUserStats(null)
     
     try {
-      // Get user's personal movements (where organization_id IS NULL)
-      const { data: movements } = await supabase
-        .from('movements')
-        .select('id, amount, type, description, date')
-        .eq('user_id', user.id)
-        .is('organization_id', null)
-        .order('date', { ascending: false })
-      
-      // Get user's personal accounts
-      const { data: accounts } = await supabase
-        .from('accounts')
-        .select('id, name, balance, type')
-        .eq('user_id', user.id)
-        .is('organization_id', null)
-        .order('balance', { ascending: false })
-      
-      // Get user's organization memberships
-      const { data: memberships } = await supabase
-        .from('organization_members')
-        .select(`
-          role,
-          joined_at,
-          organization:organizations (
-            id,
-            name
-          )
-        `)
-        .eq('user_id', user.id)
-      
+      // Get user's personal movements
+      const [movementsRes, accountsRes] = await Promise.allSettled([
+        api.get<{ data: any[] }>('/api/v1/movements', { personal: 'true', limit: 5000 }),
+        api.get<{ data: any[] }>('/api/v1/accounts'),
+      ])
+
+      const movements = movementsRes.status === 'fulfilled' ? movementsRes.value.data || [] : []
+      const accounts = accountsRes.status === 'fulfilled' ? accountsRes.value.data || [] : []
+      // organization memberships not available via REST API
+      const memberships: any[] = []
+
       // Calculate stats
       let totalIncome = 0
       let totalExpenses = 0
-      if (movements) {
-        movements.forEach(m => {
-          if (m.type === 'income') totalIncome += Number(m.amount) || 0
-          else if (m.type === 'expense') totalExpenses += Number(m.amount) || 0
-        })
-      }
-      
-      const totalBalance = accounts?.reduce((sum, a) => sum + (Number(a.balance) || 0), 0) || 0
-      
+      movements.forEach((m: any) => {
+        if (m.kind === 'income' || m.type === 'income') totalIncome += Number(m.amount) || 0
+        else if (m.kind === 'expense' || m.type === 'expense') totalExpenses += Number(m.amount) || 0
+      })
+
+      const totalBalance = accounts.reduce((sum: number, a: any) => sum + (Number(a.balance) || 0), 0)
+
       setUserStats({
         totalIncome,
         totalExpenses,
         totalBalance,
-        movementCount: movements?.length || 0,
-        accountCount: accounts?.length || 0,
-        recentMovements: movements?.slice(0, 10) || [],
-        accounts: accounts || [],
-        organizations: memberships || []
+        movementCount: movements.length,
+        accountCount: accounts.length,
+        recentMovements: movements.slice(0, 10),
+        accounts,
+        organizations: memberships,
       })
     } catch (err) {
       console.error('Error loading user details:', err)
@@ -991,7 +944,7 @@ export default function AdminPanel() {
                           {org.slug || '-'}
                         </code>
                       </td>
-                      <td style={{ padding: '16px 24px', color: '#94a3b8', fontSize: 13 }}>{formatDate(org.created_at)}</td>
+                      <td style={{ padding: '16px 24px', color: '#94a3b8', fontSize: 13 }}>{formatDate(org.created_at ?? '')}</td>
                       <td style={{ padding: '16px 24px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                           <button 
@@ -1775,7 +1728,7 @@ export default function AdminPanel() {
               </div>
               <div style={{ padding: 12, background: '#0f172a', borderRadius: 8, border: '1px solid #334155' }}>
                 <div style={{ color: '#64748b', fontSize: 11, marginBottom: 4, textTransform: 'uppercase' }}>Creada</div>
-                <div style={{ color: '#94a3b8', fontSize: 12 }}>{formatDate(selectedOrg.created_at)}</div>
+                <div style={{ color: '#94a3b8', fontSize: 12 }}>{formatDate(selectedOrg.created_at ?? '')}</div>
               </div>
             </div>
 

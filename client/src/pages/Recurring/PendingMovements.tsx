@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { getPendingMovements } from '../../services/recurringService'
 import {
   useAcceptPendingMovement,
@@ -20,6 +20,7 @@ interface PendingMovement {
 
 export default function PendingMovements() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const acceptMutation = useAcceptPendingMovement()
   const discardMutation = useDiscardPendingMovement()
   const [movements, setMovements] = useState<PendingMovement[]>([])
@@ -31,12 +32,11 @@ export default function PendingMovements() {
   }, [])
 
   const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
       const data = await getPendingMovements(user.id)
-      setMovements(data)
+      setMovements(data as unknown as PendingMovement[])
     } catch (error) {
       console.error('Error loading pending:', error)
     } finally {

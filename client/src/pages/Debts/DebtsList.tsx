@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { fetchDebts, type Debt, type CreateDebtInput } from '../../services/debtService'
 import { useCreateDebt } from '../../hooks/queries/useDebtMutations'
@@ -21,6 +21,7 @@ import { useToast } from '../../components/Toast'
 export default function DebtsList() {
   const { t, language } = useI18n()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
   const createDebtMutation = useCreateDebt()
@@ -43,7 +44,6 @@ export default function DebtsList() {
   }, [currentWorkspace])
 
   const loadDebts = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -75,8 +75,6 @@ export default function DebtsList() {
     }
 
     setSubmitting(true)
-    
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setFormError('No se pudo obtener el usuario. Inicia sesión nuevamente.')
       setSubmitting(false)

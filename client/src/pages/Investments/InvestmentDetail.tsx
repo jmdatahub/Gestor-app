@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import {
   getInvestmentById,
   getPriceHistory,
@@ -17,6 +17,7 @@ import { UiNumber } from '../../components/ui/UiNumber'
 export default function InvestmentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [investment, setInvestment] = useState<Investment | null>(null)
   const [history, setHistory] = useState<PriceHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,7 +53,6 @@ export default function InvestmentDetail() {
     if (!id || !investment) return
     setSubmitting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -113,15 +113,17 @@ export default function InvestmentDetail() {
     )
   }
 
-  const totalValue = investment.quantity * investment.current_price
-  const profitLoss = (investment.current_price - investment.buy_price) * investment.quantity
-  const profitPct = investment.buy_price > 0 
-    ? ((investment.current_price - investment.buy_price) / investment.buy_price) * 100 
+  const curPr = investment.current_price ?? 0
+  const buyPr = investment.buy_price ?? investment.avg_buy_price ?? 0
+  const totalValue = investment.quantity * curPr
+  const profitLoss = (curPr - buyPr) * investment.quantity
+  const profitPct = buyPr > 0
+    ? ((curPr - buyPr) / buyPr) * 100
     : 0
 
   // Simple chart visualization
-  const maxPrice = Math.max(...history.map(h => h.price), investment.current_price)
-  const minPrice = Math.min(...history.map(h => h.price), investment.current_price)
+  const maxPrice = Math.max(...history.map(h => h.price), curPr)
+  const minPrice = Math.min(...history.map(h => h.price), curPr)
   const priceRange = maxPrice - minPrice || 1
 
   return (
@@ -137,7 +139,7 @@ export default function InvestmentDetail() {
         <div style={styles.cardHeader}>
           <div>
             <h2 style={styles.invName}>{investment.name}</h2>
-            <span className="badge badge-gray">{getTypeName(investment.type)}</span>
+            <span className="badge badge-gray">{getTypeName(investment.type ?? investment.asset_type)}</span>
           </div>
           <button className="btn btn-primary" onClick={() => setShowPriceForm(!showPriceForm)}>
             <RefreshCw size={18} />
@@ -153,12 +155,12 @@ export default function InvestmentDetail() {
           </div>
           <div style={styles.detailItem}>
             <span style={styles.detailLabel}>Precio Compra</span>
-            <span style={styles.detailValue}>{formatCurrency(investment.buy_price)}</span>
+            <span style={styles.detailValue}>{formatCurrency(buyPr)}</span>
           </div>
           <div style={styles.detailItem}>
             <span style={styles.detailLabel}>Precio Actual</span>
             <span style={{ ...styles.detailValue, color: 'var(--primary)' }}>
-              {formatCurrency(investment.current_price)}
+              {formatCurrency(curPr)}
             </span>
           </div>
           <div style={styles.detailItem}>

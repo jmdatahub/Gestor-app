@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Calendar, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { getExpiringSubscriptions, type SubscriptionAlert } from '../../services/subscriptionAlertService'
-import { supabase } from '../../lib/supabaseClient'
 
 interface Props {
   userId: string

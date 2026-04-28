@@ -4,7 +4,7 @@
  * Each rule type maps to a query + comparison. When the condition is met and
  * the dedup window allows it, a new alert is created.
  */
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 import { createAlert, hasRecentAlert } from './alertService'
 import {
   getAlertRules,
@@ -66,23 +66,27 @@ async function evaluateRule(userId: string, rule: AlertRule): Promise<void> {
 
     if (actualValue === null) return
 
-    const triggered = compare(actualValue, rule.condition.operator, rule.condition.value)
+    const cond = rule.condition
+    if (!cond) return
+    const triggered = compare(actualValue, cond.operator, cond.value)
     if (!triggered) return
 
     // Avoid creating duplicate alerts of 'general' type within 24h for the same rule
-    const recentKey = `rule_${rule.id}`
     if (await hasRecentAlert(userId, 'general', 1)) {
-      // Check specifically for this rule in metadata
-      const { data } = await supabase
-        .from('alerts')
-        .select('id, metadata')
-        .eq('user_id', userId)
-        .eq('type', 'general')
-        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-      const alreadyFired = (data || []).some(
-        a => (a.metadata as Record<string, unknown>)?.rule_id === rule.id
-      )
-      if (alreadyFired) return
+      // Check specifically for this rule via alerts endpoint
+      try {
+        const { data: recentAlerts } = await api.get<{ data: any[] }>('/api/v1/alerts')
+        const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        const alreadyFired = (recentAlerts || []).some(
+          (a: any) =>
+            a.type === 'general' &&
+            a.created_at >= cutoff &&
+            (a.metadata as Record<string, unknown>)?.rule_id === rule.id
+        )
+        if (alreadyFired) return
+      } catch {
+        // If we can't check, proceed (better to fire than to silently skip)
+      }
     }
 
     await createAlert({
@@ -102,116 +106,99 @@ async function evaluateRule(userId: string, rule: AlertRule): Promise<void> {
 
 // ─── Data fetchers ────────────────────────────────────────────────────────────
 
-async function getMonthlyExpenses(userId: string, rule: AlertRule): Promise<number | null> {
-  const { start, end } = getPeriodDates(rule.period)
-  const { data } = await supabase
-    .from('movements')
-    .select('amount')
-    .eq('user_id', userId)
-    .eq('type', 'expense')
-    .eq('status', 'confirmed')
-    .gte('date', start)
-    .lte('date', end)
-
-  return data ? data.reduce((s, m) => s + m.amount, 0) : null
+async function getMonthlyExpenses(_userId: string, rule: AlertRule): Promise<number | null> {
+  const { start, end } = getPeriodDates(rule.period ?? 'current_month')
+  const { data } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate: start,
+    endDate: end,
+    kind: 'expense',
+    status: 'confirmed',
+    limit: 5000,
+  })
+  if (!data) return null
+  return data.filter((m: any) => m.kind === 'expense' || m.type === 'expense').reduce((s: number, m: any) => s + Number(m.amount), 0)
 }
 
-async function getMonthlyIncome(userId: string, rule: AlertRule): Promise<number | null> {
-  const { start, end } = getPeriodDates(rule.period)
-  const { data } = await supabase
-    .from('movements')
-    .select('amount')
-    .eq('user_id', userId)
-    .eq('type', 'income')
-    .eq('status', 'confirmed')
-    .gte('date', start)
-    .lte('date', end)
-
-  return data ? data.reduce((s, m) => s + m.amount, 0) : null
+async function getMonthlyIncome(_userId: string, rule: AlertRule): Promise<number | null> {
+  const { start, end } = getPeriodDates(rule.period ?? 'current_month')
+  const { data } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate: start,
+    endDate: end,
+    kind: 'income',
+    status: 'confirmed',
+    limit: 5000,
+  })
+  if (!data) return null
+  return data.filter((m: any) => m.kind === 'income' || m.type === 'income').reduce((s: number, m: any) => s + Number(m.amount), 0)
 }
 
-async function getAccountBalance(userId: string, rule: AlertRule): Promise<number | null> {
-  const accountId = rule.condition.account_id
+async function getAccountBalance(_userId: string, rule: AlertRule): Promise<number | null> {
+  const accountId = rule.condition?.account_id
+  const { data } = await api.get<{ data: any[] }>('/api/v1/accounts')
+  if (!data) return null
+
   if (!accountId) {
-    // Sum all accounts
-    const { data } = await supabase
-      .from('accounts')
-      .select('balance')
-      .eq('user_id', userId)
-    return data ? data.reduce((s, a) => s + (a.balance || 0), 0) : null
+    return data.reduce((s: number, a: any) => s + (Number(a.balance) || 0), 0)
   }
 
-  const { data } = await supabase
-    .from('accounts')
-    .select('balance')
-    .eq('id', accountId)
-    .single()
-
-  return data ? (data.balance || 0) : null
+  const account = data.find((a: any) => a.id === accountId)
+  return account ? (Number(account.balance) || 0) : null
 }
 
-async function getCategoryExpenses(userId: string, rule: AlertRule): Promise<number | null> {
-  const categoryId = rule.condition.category_id
+async function getCategoryExpenses(_userId: string, rule: AlertRule): Promise<number | null> {
+  const categoryId = rule.condition?.category_id
   if (!categoryId) return null
 
-  const { start, end } = getPeriodDates(rule.period)
-  const { data } = await supabase
-    .from('movements')
-    .select('amount')
-    .eq('user_id', userId)
-    .eq('category_id', categoryId)
-    .eq('type', 'expense')
-    .eq('status', 'confirmed')
-    .gte('date', start)
-    .lte('date', end)
-
-  return data ? data.reduce((s, m) => s + m.amount, 0) : null
+  const { start, end } = getPeriodDates(rule.period ?? 'current_month')
+  const { data } = await api.get<{ data: any[] }>('/api/v1/movements', {
+    startDate: start,
+    endDate: end,
+    kind: 'expense',
+    status: 'confirmed',
+    limit: 5000,
+  })
+  if (!data) return null
+  return data
+    .filter((m: any) => (m.categoryId || m.category_id) === categoryId)
+    .reduce((s: number, m: any) => s + Number(m.amount), 0)
 }
 
-async function getSavingsProgress(userId: string, rule: AlertRule): Promise<number | null> {
-  const goalId = rule.condition.savings_goal_id
-  let query = supabase
-    .from('savings_goals')
-    .select('current_amount, target_amount')
-    .eq('user_id', userId)
-    .eq('is_completed', false)
+async function getSavingsProgress(_userId: string, rule: AlertRule): Promise<number | null> {
+  const goalId = rule.condition?.savings_goal_id
+  const { data } = await api.get<{ data: any[] }>('/api/v1/savings-goals')
+  if (!data) return null
 
-  if (goalId) query = query.eq('id', goalId)
-
-  const { data } = await query.limit(1)
-  const row = Array.isArray(data) ? data[0] : data
+  let goals = data.filter((g: any) => !g.is_completed)
+  if (goalId) goals = goals.filter((g: any) => g.id === goalId)
+  const row = goals[0]
   if (!row || !row.target_amount) return null
 
   return (row.current_amount / row.target_amount) * 100
 }
 
-async function getInvestmentDrop(userId: string, rule: AlertRule): Promise<number | null> {
-  const { data: investments } = await supabase
-    .from('investments')
-    .select('buy_price, current_price')
-    .eq('user_id', userId)
+async function getInvestmentDrop(_userId: string, _rule: AlertRule): Promise<number | null> {
+  const { data: investments } = await api.get<{ data: any[] }>('/api/v1/investments')
 
   if (!investments || investments.length === 0) return null
 
   // Return the worst drop across all investments (most negative %)
   let worstDrop: number | null = null
   for (const inv of investments) {
-    if (!inv.buy_price || inv.buy_price <= 0) continue
-    const drop = ((inv.buy_price - inv.current_price) / inv.buy_price) * 100 // positive = dropped
+    const buyPrice = Number(inv.buyPrice ?? inv.buy_price)
+    const currentPrice = Number(inv.currentPrice ?? inv.current_price)
+    if (!buyPrice || buyPrice <= 0) continue
+    const drop = ((buyPrice - currentPrice) / buyPrice) * 100 // positive = dropped
     if (worstDrop === null || drop > worstDrop) worstDrop = drop
   }
   return worstDrop
 }
 
-async function getDaysUntilDebt(userId: string, rule: AlertRule): Promise<number | null> {
-  const { data: debts } = await supabase
-    .from('debts')
-    .select('due_date')
-    .eq('user_id', userId)
-    .eq('is_closed', false)
-    .not('due_date', 'is', null)
-    .order('due_date', { ascending: true })
-    .limit(1)
+async function getDaysUntilDebt(_userId: string, _rule: AlertRule): Promise<number | null> {
+  const { data: allDebts } = await api.get<{ data: any[] }>('/api/v1/debts')
+  const debts = (allDebts || [])
+    .filter((d: any) => !d.is_closed && d.due_date != null)
+    .sort((a: any, b: any) => (a.due_date || '').localeCompare(b.due_date || ''))
+    .slice(0, 1)
 
   if (!debts || debts.length === 0) return null
 
@@ -259,7 +246,7 @@ function getPeriodDates(period: string): { start: string; end: string } {
 }
 
 function buildRuleMessage(rule: AlertRule, actualValue: number): string {
-  const v = rule.condition.value
+  const v = rule.condition?.value ?? 0
   const actual = Math.round(actualValue * 100) / 100
 
   switch (rule.type) {

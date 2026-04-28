@@ -1,147 +1,59 @@
-// Budget service - Supabase-based for cross-device sync
-import { supabase } from '../lib/supabaseClient'
+import { api } from '../lib/apiClient'
 
 export interface Budget {
-  id: string
-  user_id: string
-  category_id: string | null
-  category_name: string
-  monthly_limit: number
-  month: string // YYYY-MM format
-  created_at: string
-  updated_at: string
+  id: string; user_id: string; organization_id?: string | null; category_id: string | null
+  month: string; amount: number; created_at: string
+  // camelCase aliases returned by Drizzle ORM (and snake_case compat fields)
+  category_name?: string; monthly_limit?: number
+  categoryName?: string; monthlyLimit?: number
 }
 
 export interface BudgetInput {
-  user_id: string
-  category_id?: string | null
-  category_name: string
-  monthly_limit: number
-  month: string
+  user_id: string; organization_id?: string | null; category_id?: string | null
+  month: string; amount?: number; category_name?: string; monthly_limit?: number
 }
 
-// Get current month in YYYY-MM format
 export function getCurrentMonth(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
-// Get all budgets for a specific month
-export async function getBudgetsForMonth(
-  userId: string, 
-  month: string
-): Promise<Budget[]> {
-  const { data, error } = await supabase
-    .from('budgets')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('month', month)
-    .order('category_name')
-
-  if (error) {
-    console.error('Error fetching budgets:', error)
-    return []
-  }
-
-  return data || []
-}
-
-// Get budget for specific category and month
-export async function getBudget(
-  userId: string,
-  categoryName: string, 
-  month: string
-): Promise<Budget | null> {
-  const { data, error } = await supabase
-    .from('budgets')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('category_name', categoryName)
-    .eq('month', month)
-    .single()
-
-  if (error) {
-    if (error.code !== 'PGRST116') { // Not found is ok
-      console.error('Error fetching budget:', error)
-    }
-    return null
-  }
-
+export async function fetchBudgets(_userId: string, month?: string, organizationId?: string | null): Promise<Budget[]> {
+  const params: Record<string, string> = {}
+  if (month) params.month = month
+  if (organizationId) params.org_id = organizationId
+  const { data } = await api.get<{ data: Budget[] }>('/api/v1/budgets', params)
   return data
 }
 
-// Create or update a budget (upsert by checking if exists first)
-export async function setBudget(input: BudgetInput): Promise<Budget | null> {
-  // Check if budget already exists
-  const existing = await getBudget(input.user_id, input.category_name, input.month)
-  
-  if (existing) {
-    // Update existing
-    const { data, error } = await supabase
-      .from('budgets')
-      .update({
-        monthly_limit: input.monthly_limit,
-        category_id: input.category_id || null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', existing.id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating budget:', error)
-      return null
-    }
-    return data
-  } else {
-    // Insert new
-    const { data, error } = await supabase
-      .from('budgets')
-      .insert({
-        user_id: input.user_id,
-        category_id: input.category_id || null,
-        category_name: input.category_name,
-        monthly_limit: input.monthly_limit,
-        month: input.month
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating budget:', error)
-      return null
-    }
-    return data
-  }
+export async function createBudget(budget: Omit<Budget, 'id' | 'created_at'>): Promise<Budget> {
+  const { data } = await api.post<{ data: Budget }>('/api/v1/budgets', budget)
+  return data
 }
 
-// Delete a budget
-export async function deleteBudget(
-  userId: string,
-  categoryName: string, 
-  month: string
-): Promise<boolean> {
-  const { error } = await supabase
-    .from('budgets')
-    .delete()
-    .eq('user_id', userId)
-    .eq('category_name', categoryName)
-    .eq('month', month)
-
-  if (error) {
-    console.error('Error deleting budget:', error)
-    return false
-  }
-
-  return true
+export async function updateBudget(id: string, updates: Partial<Budget>): Promise<Budget> {
+  const { data } = await api.patch<{ data: Budget }>(`/api/v1/budgets/${id}`, updates)
+  return data
 }
 
-// Calculate budget progress
-export interface BudgetProgress {
-  categoryName: string
-  spent: number
-  limit: number
-  percentage: number
-  isOverBudget: boolean
-  remaining: number
+export async function deleteBudget(id: string): Promise<void> {
+  await api.delete(`/api/v1/budgets/${id}`)
+}
+
+// Aliases for backward compatibility
+export const getBudgetsForMonth = (userId: string, month: string, organizationId?: string | null) =>
+  fetchBudgets(userId, month, organizationId)
+
+export async function setBudget(input: BudgetInput): Promise<Budget> {
+  const payload: Omit<Budget, 'id' | 'created_at'> = {
+    user_id: input.user_id,
+    organization_id: input.organization_id ?? null,
+    category_id: input.category_id ?? null,
+    month: input.month,
+    amount: input.monthly_limit ?? input.amount ?? 0,
+    category_name: input.category_name,
+    monthly_limit: input.monthly_limit,
+  }
+  const { data } = await api.post<{ data: Budget }>('/api/v1/budgets', payload)
+  return data
 }

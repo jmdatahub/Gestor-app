@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
+import { api } from '../../lib/apiClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
   getUserRecurringRules,
@@ -26,6 +27,7 @@ import { CategoryPicker } from '../../components/domain/CategoryPicker'
 
 export default function RecurringList() {
   const { t, language } = useI18n()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const createRuleMutation = useCreateRecurringRule()
   const toggleRuleMutation = useToggleRecurringRuleActive()
@@ -53,19 +55,18 @@ export default function RecurringList() {
   }, [currentWorkspace])
 
   const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
       const orgId = currentWorkspace?.id || null
-      const [rulesData, accountsData, categoriesData] = await Promise.all([
+      const [rulesData, accountsData, categoriesResponse] = await Promise.all([
         getUserRecurringRules(user.id, orgId),
         fetchAccounts(user.id, orgId),
-        supabase.from('categories').select('id, name, type').eq('user_id', user.id).order('name')
+        api.get<{ data: { id: string; name: string; type: string }[] }>('/api/v1/categories')
       ])
       setRules(rulesData)
       setAccounts(accountsData)
-      setCategories(categoriesData.data || [])
+      setCategories(categoriesResponse.data || [])
       
       const generalAccount = accountsData.find(a => a.type === 'general')
       if (generalAccount) setAccountId(generalAccount.id)
@@ -80,7 +81,6 @@ export default function RecurringList() {
     e.preventDefault()
     setSubmitting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
@@ -231,7 +231,7 @@ export default function RecurringList() {
                     <td style={{ padding: '0.75rem 1.5rem' }}>
                       <div style={{ fontWeight: 500 }}>{rule.description || t('common.noDescription')}</div>
                       {rule.category && (
-                        <div className="text-xs text-muted mt-1">{rule.category}</div>
+                        <div className="text-xs text-muted mt-1">{typeof rule.category === 'object' ? rule.category.name : rule.category}</div>
                       )}
                     </td>
                     <td style={{ padding: '0.75rem 1.5rem' }}>

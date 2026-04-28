@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
-import { 
+import { useAuth } from '../../context/AuthContext'
+import {
   getGoalById, 
   getContributionsByGoal,
   addContribution,
@@ -23,6 +23,7 @@ import { formatISODateString } from '../../utils/date'
 export default function SavingsDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [goal, setGoal] = useState<SavingsGoal | null>(null)
   const [contributions, setContributions] = useState<SavingsContribution[]>([])
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
@@ -59,7 +60,6 @@ export default function SavingsDetail() {
       setContributions(contribsData)
       
       // Fetch accounts separately
-      const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const accs = await getAccountsWithBalances(user.id)
         setAccounts(accs.filter(a => a.is_active))
@@ -82,7 +82,6 @@ export default function SavingsDetail() {
     if (!id || !goal) return
     setSubmitting(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {

@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { movements } from '../db/schema.js'
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { eq, and, desc, gte, lte, isNull, sql } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { z } from 'zod'
 
@@ -21,13 +21,26 @@ const MovementSchema = z.object({
 })
 
 // GET /api/v1/movements
+// Query params: limit, offset, startDate, endDate, kind, status, orgId, personal
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const userId = req.userId!
-  const limit = Math.min(Number(req.query.limit) || 50, 200)
+  const limit = Math.min(Number(req.query.limit) || 50, 5000)
   const offset = Number(req.query.offset) || 0
 
+  const conditions = [
+    eq(movements.userId, userId),
+    sql`${movements.deletedAt} IS NULL`,
+  ]
+
+  if (req.query.startDate) conditions.push(gte(movements.date, String(req.query.startDate)))
+  if (req.query.endDate) conditions.push(lte(movements.date, String(req.query.endDate)))
+  if (req.query.kind) conditions.push(eq(movements.kind, String(req.query.kind) as 'income' | 'expense' | 'transfer'))
+  if (req.query.status) conditions.push(eq(movements.status, String(req.query.status) as 'confirmed' | 'pending'))
+  if (req.query.orgId) conditions.push(eq(movements.organizationId, String(req.query.orgId)))
+  if (req.query.personal === 'true') conditions.push(isNull(movements.organizationId))
+
   const rows = await db.select().from(movements)
-    .where(and(eq(movements.userId, userId), sql`${movements.deletedAt} IS NULL`))
+    .where(and(...conditions))
     .orderBy(desc(movements.date), desc(movements.createdAt))
     .limit(limit)
     .offset(offset)

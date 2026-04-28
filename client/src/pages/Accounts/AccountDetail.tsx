@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabaseClient'
-import { 
+import { useAuth } from '../../context/AuthContext'
+import {
   getAccountById,
   getAccountsWithBalances,
   updateAccount,
@@ -32,6 +32,7 @@ export default function AccountDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { t } = useI18n()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()
   
   const [account, setAccount] = useState<AccountWithBalance | null>(null)
@@ -66,7 +67,6 @@ export default function AccountDetail() {
   const loadData = async () => {
     if (!id) return
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
       const orgId = currentWorkspace?.id || null

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
 import {
   getMonthlyInsights,
   getInsightTypeLabel,
@@ -49,23 +49,19 @@ function severityTone(severity: Insight['severity']): 'success' | 'warning' | 'n
 
 export default function InsightsPage() {
   const { t, language } = useI18n()
+  const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()
   const locale = language === 'es' ? 'es-ES' : 'en-US'
   const currency = 'EUR'
   const workspaceId = currentWorkspace?.id || null
 
   const now = new Date()
-  const [userId, setUserId] = useState<string | null>(null)
+  const userId = user?.id ?? null
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [insights, setInsights] = useState<Insight[]>([])
   const [loadingInsights, setLoadingInsights] = useState(true)
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setUserId(user.id)
-    })
-  }, [])
 
   useEffect(() => {
     if (!userId) return
