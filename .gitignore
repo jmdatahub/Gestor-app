@@ -28,3 +28,6 @@ dist-ssr
 
 # Vite PWA dev artifacts
 **/dev-dist/
+
+# Plan operativo de migración (contiene credenciales)
+MIGRATION-PLAN.md
