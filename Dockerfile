@@ -16,7 +16,7 @@ COPY client/package.json client/package-lock.json ./client/
 RUN cd client && npm ci
 
 COPY . .
-RUN VITE_API_URL=$VITE_API_URL VITE_APP_URL=$VITE_APP_URL cd client && npm run build
+RUN cd client && VITE_API_URL=$VITE_API_URL VITE_APP_URL=$VITE_APP_URL npm run build
 
 # ─── Runtime ─────────────────────────────────────────────────────────────────
 FROM node:24-slim AS runtime
