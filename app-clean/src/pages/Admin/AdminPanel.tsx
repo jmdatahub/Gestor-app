@@ -57,8 +57,6 @@ import {
   XCircle
 } from 'lucide-react'
 
-const SUPER_ADMIN_EMAIL = 'mp.jorge00@gmail.com'
-
 export default function AdminPanel() {
   const { t } = useI18n()
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
@@ -142,11 +140,13 @@ export default function AdminPanel() {
   const checkAdminAccess = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user?.email) {
-        setCurrentUserEmail(user.email)
+      if (user) {
+        setCurrentUserEmail(user.email ?? null)
         setCurrentUserId(user.id)
-        setIsSuperAdmin(user.email === SUPER_ADMIN_EMAIL)
-        if (user.email === SUPER_ADMIN_EMAIL) {
+        // Verify admin status against the database, not a hardcoded email
+        const adminStatus = await checkIsSuperAdmin()
+        setIsSuperAdmin(adminStatus)
+        if (adminStatus) {
           const isHealthy = await loadStats()
           if (isHealthy) {
             await Promise.all([loadUsers(), loadOrganizations(), loadTrash(), loadPendingUsers()])

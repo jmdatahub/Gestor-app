@@ -3,18 +3,17 @@
  * Returns API info, available endpoints, and health status
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { applySecurityHeaders } from './_security'
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
+  applySecurityHeaders(res)
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Content-Type', 'application/json')
-  
-  const isConfigured = !!(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) 
-    && !!process.env.SUPABASE_SERVICE_ROLE_KEY
 
   return res.status(200).json({
     name: 'Gestor App API',
     version: 'v1.1.0',
-    status: isConfigured ? 'healthy' : 'misconfigured',
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     
     authentication: {

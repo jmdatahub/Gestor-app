@@ -42,7 +42,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
             <h2 style={{ marginBottom: 8 }}>Ha ocurrido un error</h2>
             <p className="text-muted" style={{ marginBottom: 24 }}>
-              {error.message || 'No hemos podido cargar esta sección.'}
+              No hemos podido cargar esta sección. Si el problema persiste, recarga la página.
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
               <button className="btn btn-primary" onClick={this.handleReset} type="button">
