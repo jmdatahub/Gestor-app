@@ -3,13 +3,44 @@
   "private": true,
   "version": "1.0.0",
   "description": "Mi Panel Financiero - Personal Finance Dashboard",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
-    "dev": "cd app-clean && npm run dev",
-    "build": "cd app-clean && npm run build",
-    "preview": "cd app-clean && npm run preview",
-    "install:app": "cd app-clean && npm install"
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "tsx watch --ignore \"*.log\" --ignore \"dist/**\" --ignore \"client/**\" --ignore \"public/**\" server/index.ts",
+    "build": "cd client && npm run build",
+    "build:all": "npm run build && echo 'client built'",
+    "start": "NODE_ENV=production npx tsx server/index.ts",
+    "lint": "cd client && npm run lint",
+    "install:all": "npm install && cd client && npm install",
+    "deploy:check": "npm run build && echo '✅ Build OK — ready for production'"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "drizzle-orm": "^0.45.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "postgres": "^3.4.8",
+    "resend": "^6.12.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@vite-pwa/assets-generator": "^1.0.2"
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.10.1",
+    "@vite-pwa/assets-generator": "^1.0.2",
+    "concurrently": "^9.2.1",
+    "drizzle-kit": "^0.31.9",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3"
   }
 }

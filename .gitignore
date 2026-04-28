@@ -31,3 +31,15 @@ dist-ssr
 
 # Plan operativo de migración (contiene credenciales)
 MIGRATION-PLAN.md
+
+# Env files (never commit real secrets)
+.env
+.env.local
+.env.*.local
+
+# Server runtime logs
+server_errors.log
+
+# Drizzle kit output (generated, not tracked)
+server/db/migrations/*.sql
+server/db/migrations/*.snap
