@@ -10,10 +10,10 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "cd client && npm run dev",
-    "dev:server": "tsx watch --ignore \"*.log\" --ignore \"dist/**\" --ignore \"client/**\" --ignore \"public/**\" server/index.ts",
+    "dev:server": "tsx watch --env-file=.env --ignore \"*.log\" --ignore \"dist/**\" --ignore \"client/**\" --ignore \"public/**\" server/index.ts",
     "build": "cd client && npm run build",
     "build:all": "npm run build && echo 'client built'",
-    "start": "NODE_ENV=production npx tsx server/index.ts",
+    "start": "NODE_ENV=production npx tsx --env-file=.env server/index.ts",
     "lint": "cd client && npm run lint",
     "install:all": "npm install && cd client && npm install",
     "deploy:check": "npm run build && echo '✅ Build OK — ready for production'"
