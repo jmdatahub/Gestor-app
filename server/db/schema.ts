@@ -372,6 +372,12 @@ export const investments = pgTable("investments", {
 	deletedAt: timestamp("deleted_at", { withTimezone: true, mode: 'string' }),
 	createdByEmail: text("created_by_email"),
 	updatedByEmail: text("updated_by_email"),
+	positionType: text("position_type").default('spot'),
+	leverage: numeric("leverage", { precision: 5, scale: 2 }).default('1'),
+	marginAmount: numeric("margin_amount", { precision: 15, scale: 2 }),
+	isShort: boolean("is_short").default(false),
+	liquidationPrice: numeric("liquidation_price", { precision: 15, scale: 2 }),
+	positionStatus: text("position_status").default('open'),
 }, (table) => [
 	index("idx_investments_deleted_at").using("btree", table.deletedAt.asc().nullsLast().op("timestamptz_ops")).where(sql`(deleted_at IS NOT NULL)`),
 	index("idx_investments_organization_id").using("btree", table.organizationId.asc().nullsLast().op("uuid_ops")),

@@ -1,38 +1,89 @@
 import { api } from '../lib/apiClient'
 
+// ── Types ──────────────────────────────────────────────────────────────────
+
 export type InvestmentType = 'crypto' | 'stock' | 'etf' | 'bond' | 'real_estate' | 'commodity' | 'other'
+export type PositionType   = 'spot' | 'margin' | 'futures' | 'perpetual'
+export type PositionStatus = 'open' | 'closed' | 'liquidated'
 
 export const investmentTypes: Array<{ value: InvestmentType; label: string }> = [
-  { value: 'crypto', label: 'Criptomoneda' },
-  { value: 'stock', label: 'Acción' },
-  { value: 'etf', label: 'ETF' },
-  { value: 'bond', label: 'Bono' },
+  { value: 'crypto',      label: 'Criptomoneda' },
+  { value: 'stock',       label: 'Acción' },
+  { value: 'etf',         label: 'ETF' },
+  { value: 'bond',        label: 'Bono' },
   { value: 'real_estate', label: 'Inmueble' },
-  { value: 'commodity', label: 'Commodity' },
-  { value: 'other', label: 'Otro' },
+  { value: 'commodity',   label: 'Commodity' },
+  { value: 'other',       label: 'Otro' },
 ]
 
+export const positionTypeLabels: Record<PositionType, string> = {
+  spot:      'Spot',
+  margin:    'Margen',
+  futures:   'Futuros',
+  perpetual: 'Perpetuo',
+}
+
 export interface Investment {
-  id: string; user_id: string; organization_id?: string | null; name: string
-  ticker?: string | null; asset_type: string; quantity: number
-  avg_buy_price: number; current_price?: number | null; currency?: string
-  notes?: string | null; created_at: string; deleted_at?: string | null
-  // Compat snake_case / alternate fields (computed from main fields)
-  type?: InvestmentType | string; account_id?: string | null
-  buy_price?: number; currentPrice?: number
+  id: string
+  user_id: string
+  organization_id?: string | null
+  name: string
+  // asset identification
+  symbol?: string | null
+  ticker?: string | null       // alias for symbol
+  type: InvestmentType | string
+  asset_type: InvestmentType | string
+  // position size & pricing (in investment's own currency)
+  quantity: number | null
+  buy_price: number | null      // entry price per unit
+  avg_buy_price: number | null  // alias
+  purchase_price: number | null // alias
+  current_price: number | null
+  currency: string
+  // leveraged position metadata
+  position_type: PositionType
+  leverage: number
+  margin_amount: number | null
+  is_short: boolean
+  liquidation_price: number | null
+  position_status: PositionStatus
+  // server-computed equity
+  equity: number | null
+  // linking
+  account_id?: string | null
   fund_from_account_id?: string | null
+  notes?: string | null
+  created_at: string
+  deleted_at?: string | null
 }
 
 export interface CreateInvestmentInput {
-  user_id: string; organization_id?: string | null; name: string
-  ticker?: string | null; asset_type?: string; quantity: number
-  avg_buy_price?: number; current_price?: number | null; currency?: string
-  notes?: string | null; type?: InvestmentType | string; account_id?: string | null
-  buy_price?: number; fund_from_account_id?: string | null
+  user_id: string
+  organization_id?: string | null
+  name: string
+  type: InvestmentType | string
+  symbol?: string | null
+  ticker?: string | null
+  quantity: number
+  buy_price?: number | null
+  current_price?: number | null
+  currency?: string
+  notes?: string | null
+  account_id?: string | null
+  fund_from_account_id?: string | null
+  position_type?: PositionType
+  leverage?: number
+  margin_amount?: number | null
+  is_short?: boolean
+  liquidation_price?: number | null
+  position_status?: PositionStatus
 }
+
 export interface InvestmentPriceHistory {
   id: string; investment_id: string; price: number; date: string; created_at: string
 }
+
+// ── API calls ──────────────────────────────────────────────────────────────
 
 export async function fetchInvestments(_userId: string, organizationId?: string | null): Promise<Investment[]> {
   const params: Record<string, string> = {}
@@ -70,53 +121,104 @@ export async function addPriceHistory(investmentId: string, entry: { price: numb
   return data
 }
 
-export async function fetchCoinPrice(ticker: string): Promise<number | null> {
+// ── Price fetching via server proxy ────────────────────────────────────────
+// Server handles BTC→bitcoin mapping + 60s cache + rate limits.
+
+export async function fetchCryptoPrices(symbols: string[]): Promise<Record<string, { eur: number; usd: number }>> {
+  if (!symbols.length) return {}
   try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ticker)}&vs_currencies=eur`)
-    const json = await res.json()
-    return json[ticker]?.eur ?? null
-  } catch { return null }
+    const { data } = await api.get<{ data: Record<string, { eur: number; usd: number }> }>(
+      '/api/v1/investments/prices/crypto',
+      { symbols: symbols.join(',') }
+    )
+    return data
+  } catch {
+    return {}
+  }
 }
 
-// ---- Backward-compat aliases & helpers ----
+export async function fetchExternalPrice(inv: Investment): Promise<number | null> {
+  if ((inv.type ?? inv.asset_type) !== 'crypto') return null
+  const sym = (inv.symbol ?? inv.ticker ?? '').toUpperCase()
+  if (!sym) return null
+  const prices = await fetchCryptoPrices([sym])
+  return prices[sym]?.eur ?? null
+}
 
-export const getUserInvestments = fetchInvestments
+// ── Equity helpers ─────────────────────────────────────────────────────────
+
+/**
+ * The "real" value of the position:
+ *   - Leveraged (perpetual/futures/margin): margin + unrealised PnL
+ *   - Spot: quantity × current_price
+ * Returns value in the investment's own currency (USD for most crypto).
+ */
+export function getPositionEquity(inv: Investment): number {
+  if (inv.equity != null) return inv.equity  // prefer server-computed
+  const isLeveraged = inv.position_type !== 'spot' && inv.margin_amount != null
+  if (isLeveraged) {
+    const entry = inv.buy_price ?? inv.avg_buy_price ?? inv.purchase_price
+    const cur   = inv.current_price
+    const qty   = inv.quantity
+    if (entry != null && cur != null && qty != null) {
+      const dir = inv.is_short ? -1 : 1
+      return (inv.margin_amount ?? 0) + dir * (cur - entry) * qty
+    }
+    return inv.margin_amount ?? 0
+  }
+  return (inv.quantity ?? 0) * (inv.current_price ?? inv.buy_price ?? 0)
+}
+
+export function getUnrealisedPnl(inv: Investment): number | null {
+  const entry = inv.buy_price ?? inv.avg_buy_price ?? inv.purchase_price
+  const cur   = inv.current_price
+  const qty   = inv.quantity
+  if (entry == null || cur == null || qty == null) return null
+  const dir = inv.is_short ? -1 : 1
+  if (inv.position_type !== 'spot') return dir * (cur - entry) * qty
+  return (cur - entry) * qty
+}
+
+export function getPnlPercent(inv: Investment): number | null {
+  const pnl  = getUnrealisedPnl(inv)
+  const base = inv.position_type !== 'spot'
+    ? inv.margin_amount
+    : ((inv.buy_price ?? inv.avg_buy_price ?? 0) * (inv.quantity ?? 0))
+  if (pnl == null || !base) return null
+  return (pnl / base) * 100
+}
+
+// ── Totals ─────────────────────────────────────────────────────────────────
 
 export interface InvestmentTotals {
   totalValue: number; totalCost: number; totalGain: number; gainPercent: number
-  // Compat aliases
   totalProfitLoss: number; profitLossPercent: number; count: number
 }
 
-export function calculateTotals(investments: Investment[]): InvestmentTotals {
+export function calculateTotals(invs: Investment[]): InvestmentTotals {
   let totalValue = 0; let totalCost = 0
-  for (const inv of investments) {
-    const price = inv.current_price ?? inv.avg_buy_price
-    const cost = (inv.buy_price ?? inv.avg_buy_price) * inv.quantity
-    totalValue += price * inv.quantity
+  for (const inv of invs) {
+    totalValue += getPositionEquity(inv)
+    const cost = inv.position_type !== 'spot'
+      ? (inv.margin_amount ?? 0)
+      : (inv.buy_price ?? inv.avg_buy_price ?? 0) * (inv.quantity ?? 0)
     totalCost += cost
   }
-  const totalGain = totalValue - totalCost
+  const totalGain   = totalValue - totalCost
   const gainPercent = totalCost > 0 ? (totalGain / totalCost) * 100 : 0
   return {
     totalValue, totalCost, totalGain, gainPercent,
     totalProfitLoss: totalGain, profitLossPercent: gainPercent,
-    count: investments.length,
+    count: invs.length,
   }
 }
+
+// ── Backward-compat aliases ────────────────────────────────────────────────
+export const getUserInvestments = fetchInvestments
+export type  PriceHistoryEntry  = InvestmentPriceHistory
+export const getPriceHistory    = fetchPriceHistory
 
 export async function updatePrice(id: string, _userId: string, price: number, date: string): Promise<Investment> {
-  const entry = await addPriceHistory(id, { price, date })
-  return updateInvestment(id, { current_price: entry.price })
-}
-
-export type PriceHistoryEntry = InvestmentPriceHistory
-export const getPriceHistory = fetchPriceHistory
-
-export async function fetchExternalPrice(inv: Investment): Promise<number | null> {
-  const type = inv.type ?? inv.asset_type
-  if (type === 'crypto' && inv.ticker) {
-    return fetchCoinPrice(inv.ticker)
-  }
-  return null
+  await addPriceHistory(id, { price, date })
+  return updateInvestment(id, { current_price: price })
 }
