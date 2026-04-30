@@ -283,13 +283,40 @@ router.post('/', async (req: Request, res: Response) => {
 
     if (text === '/start') {
       await sendTelegramMessage(chatId,
-        `👋 <b>¡Hola! Soy el Gestor Bot.</b>\n\nPuedo ayudarte a:\n• Registrar gastos e ingresos escribiendo el importe\n• Recibir alertas automáticas de tu cuenta\n\n<b>Comandos disponibles:</b>\n/link &lt;token&gt; — Vincular tu cuenta\n/notifications — Gestionar notificaciones\n/help — Ver esta ayuda\n\n<i>Para empezar, usa: /link tu_token</i>`)
+        `👋 <b>¡Hola! Soy el Gestor Bot.</b>\n\n` +
+        `Puedo ayudarte a registrar gastos e ingresos al instante y enviarte alertas automáticas de tu cuenta.\n\n` +
+        `<b>⚡ Registro rápido:</b>\n` +
+        `<code>25 mercadona</code> → gasto de 25€\n` +
+        `<code>cena 18.50</code> → gasto de 18,50€\n` +
+        `<code>+1200 nomina</code> → ingreso de 1.200€\n\n` +
+        `<b>📋 Comandos:</b>\n` +
+        `/link &lt;token&gt; — Vincular tu cuenta\n` +
+        `/notifications — Gestionar alertas\n` +
+        `/magia — Crear categorías por defecto\n` +
+        `/help — Ver esta ayuda\n\n` +
+        `<i>Para empezar, ve a Gestor → Ajustes → Tokens API y usa /link &lt;tu_token&gt;</i>`)
       res.status(200).send('OK'); return
     }
 
     if (text === '/help') {
       await sendTelegramMessage(chatId,
-        `📖 <b>Comandos del Gestor Bot</b>\n\n/link &lt;token&gt; — Vincular tu cuenta de Gestor\n/notifications — Activar o desactivar alertas\n/help — Ver esta ayuda\n\n<b>Registro rápido:</b>\nEscribe directamente el importe y la descripción:\n<code>25 mercadona</code> → gasto\n<code>+1000 nómina</code> → ingreso`)
+        `📖 <b>Ayuda del Gestor Bot</b>\n\n` +
+        `<b>🔗 Vinculación:</b>\n` +
+        `/link &lt;token&gt; — Vincula tu cuenta (token en Gestor → Ajustes)\n\n` +
+        `<b>⚡ Registro rápido (sin comandos):</b>\n` +
+        `<code>25 mercadona</code> → gasto 25€ · desc "mercadona"\n` +
+        `<code>gasolina 60</code> → gasto 60€ · desc "gasolina"\n` +
+        `<code>+1200 nomina</code> → ingreso 1.200€\n` +
+        `<code>+500 soul ia</code> → ingreso 500€\n` +
+        `Tras guardar → elige categoría con los botones o pulsa <b>➕ Nueva categoría</b>\n\n` +
+        `<b>🔔 Notificaciones:</b>\n` +
+        `/notifications — Ver estado actual\n` +
+        `/notifications on — Activar alertas\n` +
+        `/notifications off — Desactivar alertas\n\n` +
+        `<b>🗂 Categorías:</b>\n` +
+        `/magia — Borra las actuales y crea las categorías por defecto\n\n` +
+        `<b>📝 Notas:</b>\n` +
+        `Después de registrar un movimiento, escribe texto sin importe para añadir una nota al último movimiento.`)
       res.status(200).send('OK'); return
     }
 
@@ -311,12 +338,26 @@ router.post('/', async (req: Request, res: Response) => {
         .from(apiTokens)
         .where(eq(apiTokens.userId, profile.id))
 
-      const linkedToken = userTokensList.find(
+      let linkedToken = userTokensList.find(
         t => Array.isArray(t.scopes) && t.scopes.includes(`tg_chat:${chatIdStr}`),
       )
 
+      // Auto-repair: profile has chatId but no token has the tg_chat scope yet.
+      // Pick the first token and add the scope so the user doesn't need to re-link.
+      if (!linkedToken && userTokensList.length > 0) {
+        const firstToken = userTokensList[0]
+        const repairedScopes = [
+          ...((firstToken.scopes as string[]) || []).filter(s => !s.startsWith('tg_chat:')),
+          `tg_chat:${chatIdStr}`,
+        ]
+        await db.update(apiTokens)
+          .set({ scopes: repairedScopes })
+          .where(eq(apiTokens.tokenHash, firstToken.tokenHash))
+        linkedToken = { tokenHash: firstToken.tokenHash, scopes: repairedScopes }
+      }
+
       if (!linkedToken) {
-        await sendTelegramMessage(chatId, '⚠️ No se encontró el token vinculado. Vuelve a usar /link.')
+        await sendTelegramMessage(chatId, '⚠️ No se encontró ningún token API. Ve a Gestor → Ajustes → Tokens API y usa /link &lt;token&gt;.')
         res.status(200).send('OK'); return
       }
 
