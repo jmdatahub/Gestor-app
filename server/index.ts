@@ -23,6 +23,7 @@ import profilesRoutes from './routes/profiles.routes.js'
 import paymentMethodsRoutes from './routes/payment-methods.routes.js'
 import providersRoutes from './routes/providers.routes.js'
 import apiTokensRoutes from './routes/api-tokens.routes.js'
+import adminRoutes from './routes/admin.routes.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -91,6 +92,7 @@ app.use('/api/v1/profiles', profilesRoutes)
 app.use('/api/v1/payment-methods', paymentMethodsRoutes)
 app.use('/api/v1/providers', providersRoutes)
 app.use('/api/v1/api-tokens', apiTokensRoutes)
+app.use('/api/v1/admin', adminRoutes)
 
 // ─── Static client (production) ──────────────────────────────────────────────
 if (isProduction) {
