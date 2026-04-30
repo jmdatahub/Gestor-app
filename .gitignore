@@ -43,3 +43,6 @@ server_errors.log
 # Drizzle kit output (generated, not tracked)
 server/db/migrations/*.sql
 server/db/migrations/*.snap
+---
+DEPLOY.md
+scripts/wipe-personal.cjs

@@ -122,11 +122,40 @@ export function flattenAccountTree(nodes: AccountNode[]): AccountNode[] {
   return result
 }
 
-export function calculateTotalsByType(accounts: AccountWithBalance[]): Record<string, number> {
-  return accounts.reduce((acc, a) => {
-    acc[a.type] = (acc[a.type] || 0) + (a.balance || 0)
-    return acc
-  }, {} as Record<string, number>)
+export interface AccountTotals {
+  total: number
+  savings: number
+  broker: number
+  cash: number
+  bank: number
+  general: number
+  other: number
+  count: number
+  activeCount: number
+  [key: string]: number
+}
+
+export function calculateTotalsByType(accounts: AccountWithBalance[]): AccountTotals {
+  const result: AccountTotals = {
+    total: 0,
+    savings: 0,
+    broker: 0,
+    cash: 0,
+    bank: 0,
+    general: 0,
+    other: 0,
+    count: 0,
+    activeCount: 0,
+  }
+  for (const a of accounts) {
+    const balance = Number(a.balance) || 0
+    result.total += balance
+    if (typeof result[a.type] === 'number') result[a.type] += balance
+    else result[a.type] = balance
+    result.count += 1
+    if (a.is_active) result.activeCount += 1
+  }
+  return result
 }
 
 export function getAccountTypeLabel(type: string): string {
