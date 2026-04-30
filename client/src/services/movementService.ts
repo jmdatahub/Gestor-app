@@ -98,8 +98,8 @@ export interface MonthlySummary {
 export function calculateMonthlySummary(movements: Movement[]): MonthlySummary {
   let income = 0; let expense = 0
   for (const m of movements) {
-    if (m.kind === 'income') income += m.amount
-    else if (m.kind === 'expense') expense += m.amount
+    if (m.kind === 'income') income += Number(m.amount)
+    else if (m.kind === 'expense') expense += Number(m.amount)
   }
   return { income, expense, balance: income - expense }
 }
