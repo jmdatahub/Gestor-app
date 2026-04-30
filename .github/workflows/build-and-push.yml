@@ -52,3 +52,12 @@ jobs:
           build-args: |
             VITE_API_URL=${{ vars.VITE_API_URL }}
             VITE_APP_URL=${{ vars.VITE_APP_URL }}
+
+      - name: Make package public
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | cut -d'/' -f2 | tr '[:upper:]' '[:lower:]')
+          curl -s -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/user/packages/container/${REPO_LOWER}" \
+            -d '{"visibility":"public"}'
