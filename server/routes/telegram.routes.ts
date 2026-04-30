@@ -367,24 +367,23 @@ router.post('/', async (req: Request, res: Response) => {
 
       const list = [
         // ── GASTOS ──────────────────────────────────────────────────
-        { name: 'Ocio',         kind: 'expense', color: '#f43f5e' },
-        { name: 'Comida',       kind: 'expense', color: '#f97316' },
+        { name: 'Gasolina',     kind: 'expense', color: '#f43f5e' },
+        { name: 'Ocio',         kind: 'expense', color: '#f97316' },
+        { name: 'Comida',       kind: 'expense', color: '#eab308' },
         { name: 'Deporte',      kind: 'expense', color: '#22c55e' },
+        { name: 'Transporte',   kind: 'expense', color: '#06b6d4' },
+        { name: 'Casa',         kind: 'expense', color: '#14b8a6' },
+        { name: 'Salud',        kind: 'expense', color: '#10b981' },
         { name: 'Formación',    kind: 'expense', color: '#3b82f6' },
         { name: 'Herramientas', kind: 'expense', color: '#8b5cf6' },
-        { name: 'Transporte',   kind: 'expense', color: '#eab308' },
-        { name: 'Casa',         kind: 'expense', color: '#06b6d4' },
-        { name: 'Salud',        kind: 'expense', color: '#10b981' },
-        { name: 'Suscripciones',kind: 'expense', color: '#ec4899' },
         { name: 'Ropa',         kind: 'expense', color: '#a78bfa' },
+        { name: 'Suscripción',  kind: 'expense', color: '#ec4899' },
         { name: 'Otros',        kind: 'expense', color: '#64748b' },
         // ── INGRESOS ────────────────────────────────────────────────
-        { name: 'Nómina',       kind: 'income',  color: '#14b8a6' },
         { name: 'Soul IA',      kind: 'income',  color: '#8b5cf6' },
+        { name: 'Mama',         kind: 'income',  color: '#ec4899' },
         { name: 'Just Jorge',   kind: 'income',  color: '#3b82f6' },
-        { name: 'Freelance',    kind: 'income',  color: '#f59e0b' },
-        { name: 'Inversiones',  kind: 'income',  color: '#22c55e' },
-        { name: 'Regalo',       kind: 'income',  color: '#ec4899' },
+        { name: 'Regalo',       kind: 'income',  color: '#f59e0b' },
         { name: 'Otros',        kind: 'income',  color: '#94a3b8' },
       ]
 
@@ -394,7 +393,7 @@ router.post('/', async (req: Request, res: Response) => {
 
       const orgInfo = targetOrgId ? 'Org: Soul IA' : 'Entorno Personal'
       await sendTelegramMessage(chatId,
-        `✨ <b>¡Categorías creadas!</b>\n\nEntorno: <code>${orgInfo}</code>\n\n<b>Gastos:</b> Ocio, Comida, Deporte, Formación, Herramientas, Transporte, Casa, Salud, Suscripciones, Ropa, Otros\n\n<b>Ingresos:</b> Nómina, Soul IA, Just Jorge, Freelance, Inversiones, Regalo, Otros`)
+        `✨ <b>¡Categorías creadas!</b>\n\nEntorno: <code>${orgInfo}</code>\n\n<b>💸 Gastos:</b> Gasolina, Ocio, Comida, Deporte, Transporte, Casa, Salud, Formación, Herramientas, Ropa, Suscripción, Otros\n\n<b>💰 Ingresos:</b> Soul IA, Mama, Just Jorge, Regalo, Otros`)
       res.status(200).send('OK'); return
     }
 
