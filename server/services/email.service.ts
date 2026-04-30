@@ -43,3 +43,14 @@ export async function sendPasswordChangedEmail(to: string, name: string): Promis
     `Tu contraseña en Gestor Soul IA acaba de cambiarse. Si no fuiste tú, contacta al administrador.`,
   ))
 }
+
+export async function sendNewUserNotificationEmail(adminTo: string, userEmail: string): Promise<void> {
+  const url = `${APP_URL}/admin`
+  await sendEmail(adminTo, 'Nuevo usuario pendiente de aprobación — Gestor Soul IA', layout(
+    'Nuevo registro pendiente',
+    `Un nuevo usuario se ha registrado y está esperando tu aprobación:<br><br>
+     <strong>Email:</strong> ${userEmail}<br>
+     <strong>Fecha:</strong> ${new Date().toLocaleString('es-ES')}`,
+    url, 'Ir al Panel de Admin',
+  ))
+}
