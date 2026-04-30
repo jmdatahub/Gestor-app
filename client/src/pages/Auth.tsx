@@ -50,13 +50,27 @@ export default function Auth() {
     setLoading(true)
     setError(null)
     try {
-      await signIn(email, password)
-      await ensureDefaultAccountsForUser('')
-      navigate('/app/dashboard')
+      if (isLogin) {
+        await signIn(email, password)
+        await ensureDefaultAccountsForUser('')
+        navigate('/app/dashboard')
+      } else {
+        if (password.length < 8) {
+          setError('La contraseña debe tener al menos 8 caracteres.')
+          return
+        }
+        const result = await api.post<{ ok: boolean; pending?: boolean }>('/api/auth/register', { email, password })
+        if (result.pending) {
+          setShowRegistrationSuccess(true)
+          setIsLogin(true)
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Ha ocurrido un error'
       if (msg.toLowerCase().includes('credenciales') || msg.toLowerCase().includes('invalid')) {
         setError('Correo o contraseña incorrectos.')
+      } else if (msg.toLowerCase().includes('ya existe')) {
+        setError('Ya existe una cuenta con ese email.')
       } else {
         setError(msg)
       }

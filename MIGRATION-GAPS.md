@@ -41,30 +41,24 @@
 
 **Cuando esté**: cambiar `FINANCE_API_URL` del CRM (Dokploy) a `https://finanzas.soulia.info/api/crm-sync` y `FINANCE_API_KEY` al mismo `CRM_SYNC_SECRET`.
 
-### 2. Webhook de Telegram (si se usa el bot)
+### 2. Webhook de Telegram ✅ PORTADO
 
-| Endpoint Vercel | Origen | Externo |
-|---|---|---|
-| `…/api/v1/telegram-webhook` | `client/api/v1/telegram-webhook.ts` | Telegram (BotFather webhook URL) |
+| Endpoint | Destino |
+|---|---|
+| `POST /api/v1/telegram-webhook` | `server/routes/telegram.routes.ts` |
 
-**Funciones**: cuando un usuario manda `/start` al bot, vincula `telegram_chat_id` en `profiles` con un token preconfigurado. También procesa comandos del bot.
+**Acciones pendientes**: actualizar webhook URL en BotFather a `https://finanzas.soulia.info/api/v1/telegram-webhook`. Variables requeridas: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`.
 
-**Plan**: portar a `server/routes/telegram.routes.ts` y registrar nuevo webhook URL en BotFather (`setWebhook`) apuntando a `https://finanzas.soulia.info/api/v1/telegram-webhook`. Variables: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`.
+### 3. Notificaciones internas ✅ PORTADO
 
-**Si el bot Telegram no se usa hoy**: lo eliminamos en lugar de portar.
+| Endpoint | Destino |
+|---|---|
+| `POST /api/v1/notify` | `server/routes/notify.routes.ts` |
+| notify-new-user | Integrado en `POST /api/auth/register` (Telegram + email al admin) |
+| reject-user | `DELETE /api/v1/admin/users/:id` en `server/routes/admin.routes.ts` |
+| approve-user | `PATCH /api/v1/admin/users/:id/approve` en `server/routes/admin.routes.ts` |
 
-### 3. Notificaciones internas
-
-| Endpoint Vercel | Origen | Quién lo usa |
-|---|---|---|
-| `…/api/v1/notify` | `client/api/v1/notify.ts` | `client/src/services/alertEngine.ts:11` (alertas spending_limit, savings_goal_progress, etc) |
-| `…/api/v1/notify-new-user` | `client/api/v1/notify-new-user.ts` | Auth signUp → email a admin + Telegram |
-| `…/api/v1/reject-user` | `client/api/v1/reject-user.ts` | AdminPanel → super-admin borra usuario pendiente |
-
-**Plan**:
-- `notify` → mover a `server/routes/notify.routes.ts` (envía Telegram + en su caso email).
-- `notify-new-user` → integrar dentro de `server/routes/auth.routes.ts` (signUp dispara la notificación, mejor que un endpoint separado).
-- `reject-user` → integrar en `server/routes/admin.routes.ts` (DELETE `/users/:id`, ya hay infra de super-admin).
+**Registro de usuarios**: `POST /api/auth/register` crea el usuario con `isActive=false`, notifica al admin vía Telegram (botones Aprobar/Rechazar) y email (`ADMIN_EMAIL`).
 
 ### 4. API pública v1 para integraciones externas (opcional)
 
@@ -83,13 +77,16 @@
 
 ## 📋 Plan de ejecución recomendado
 
-1. **Hoy / próxima sesión**: portar `crm-sync` (es lo único que cuando borremos Vercel rompe el CRM en producción).
-2. **Después**: decidir si seguimos usando bot Telegram. Si sí → portar webhook. Si no → borrar código y `telegram_chat_id` queda como campo legacy.
-3. **Después**: portar `notify` (alertas) y `notify-new-user` (admin onboard).
-4. **Después**: integrar API pública con tokens.
-5. **Después**: validar Sentry y crons.
-6. **Después**: cutover CRM (`FINANCE_API_URL` → finanzas.soulia.info).
-7. **Tras 1-2 semanas estables**: borrar proyectos Vercel.
+1. ✅ **Portado**: CRM-sync → `server/routes/crm-sync.routes.ts`
+2. ✅ **Portado**: Telegram webhook → `server/routes/telegram.routes.ts`
+3. ✅ **Portado**: notify (alertas) → `server/routes/notify.routes.ts`
+4. ✅ **Portado**: notify-new-user + register → `POST /api/auth/register`
+5. ✅ **Portado**: reject/approve user → `server/routes/admin.routes.ts`
+6. **Pendiente**: actualizar webhook URL en BotFather → `https://finanzas.soulia.info/api/v1/telegram-webhook`
+7. **Pendiente**: integrar API pública con tokens.
+8. **Pendiente**: validar Sentry y crons.
+9. **Pendiente**: cutover CRM (`FINANCE_API_URL` → finanzas.soulia.info).
+10. **Tras 1-2 semanas estables**: borrar proyectos Vercel.
 
 ## ❌ NO borrar Vercel todavía
 

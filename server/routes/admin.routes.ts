@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
-import { profiles, organizations, organizationMembers } from '../db/schema.js'
+import { profiles, organizations, organizationMembers, users } from '../db/schema.js'
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
@@ -126,6 +126,25 @@ router.post('/organizations/purge', authMiddleware, async (req: AuthRequest, res
     .where(and(isNotNull(organizations.deletedAt), sql`${organizations.deletedAt} < ${cutoff}`))
     .returning({ id: organizations.id })
   res.json({ ok: true, purged: deleted.length })
+})
+
+// PATCH /api/v1/admin/users/:id/approve — approve pending user (set isActive = true)
+router.patch('/users/:id/approve', authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!(await requireSuperAdmin(req, res))) return
+  const [updated] = await db
+    .update(users)
+    .set({ isActive: true })
+    .where(eq(users.id, req.params.id))
+    .returning({ id: users.id, email: users.email })
+  if (!updated) { res.status(404).json({ error: 'Usuario no encontrado' }); return }
+  res.json({ ok: true, user: updated })
+})
+
+// DELETE /api/v1/admin/users/:id — delete user (reject / hard delete)
+router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!(await requireSuperAdmin(req, res))) return
+  await db.delete(users).where(eq(users.id, req.params.id))
+  res.json({ ok: true })
 })
 
 export default router

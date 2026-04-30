@@ -4,10 +4,11 @@ import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import { db } from '../db/connection.js'
-import { users } from '../db/schema.js'
+import { users, profiles } from '../db/schema.js'
 import { eq, sql } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
-import { sendPasswordResetEmail, sendPasswordChangedEmail } from '../services/email.service.js'
+import { sendPasswordResetEmail, sendPasswordChangedEmail, sendNewUserNotificationEmail } from '../services/email.service.js'
+import { sendTelegramMessage } from '../services/telegram.service.js'
 
 const router = Router()
 
@@ -46,6 +47,61 @@ router.post('/login', async (req: Request, res: Response) => {
   await db.update(users).set({ lastActiveAt: new Date().toISOString() }).where(eq(users.id, user.id))
   const token = signToken({ id: user.id, email: user.email, role: user.role || 'member' })
   res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl } })
+})
+
+// POST /api/auth/register
+router.post('/register', async (req: Request, res: Response) => {
+  const { email, password, name } = req.body ?? {}
+  if (typeof email !== 'string' || typeof password !== 'string' || !email || password.length < 8) {
+    res.status(400).json({ error: 'Email y contraseña (mínimo 8 caracteres) requeridos' }); return
+  }
+
+  const existing = (await db.select({ id: users.id }).from(users)
+    .where(sql`LOWER(${users.email}) = LOWER(${email})`).limit(1))[0]
+  if (existing) {
+    res.status(409).json({ error: 'Ya existe una cuenta con ese email' }); return
+  }
+
+  const hash = await bcrypt.hash(password, 10)
+  const [newUser] = await db.insert(users).values({
+    email,
+    name: typeof name === 'string' && name.trim() ? name.trim() : null,
+    passwordHash: hash,
+    isActive: false, // pending admin approval
+    role: 'member',
+  }).returning({ id: users.id, email: users.email, name: users.name })
+
+  // Create associated profile
+  await db.insert(profiles).values({ id: newUser.id, email: newUser.email }).onConflictDoNothing()
+
+  // Notify admin via Telegram
+  const adminProfile = (await db
+    .select({ telegramChatId: profiles.telegramChatId })
+    .from(profiles)
+    .where(eq(profiles.isSuperAdmin, true))
+    .limit(1))[0]
+
+  if (adminProfile?.telegramChatId) {
+    await sendTelegramMessage(
+      adminProfile.telegramChatId,
+      `🔔 <b>Nuevo registro pendiente</b>\n\n👤 <b>Email:</b> ${newUser.email}\n🕐 <b>Hora:</b> ${new Date().toLocaleString('es-ES')}\n\n¿Apruebas el acceso a esta cuenta?`,
+      {
+        inline_keyboard: [[
+          { text: '✅ Aprobar', callback_data: `app:${newUser.id}` },
+          { text: '❌ Rechazar', callback_data: `rej:${newUser.id}` },
+        ]],
+      },
+    ).catch(err => console.warn('[auth/register] Telegram notify failed:', err))
+  }
+
+  // Notify admin via email (non-critical)
+  const adminEmail = process.env.ADMIN_EMAIL
+  if (adminEmail) {
+    sendNewUserNotificationEmail(adminEmail, newUser.email)
+      .catch(err => console.warn('[auth/register] Email notify failed:', err))
+  }
+
+  res.status(201).json({ ok: true, pending: true })
 })
 
 // POST /api/auth/logout (stateless)
