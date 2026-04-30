@@ -33,7 +33,11 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     )
     expect(screen.getByText('Ha ocurrido un error')).toBeInTheDocument()
-    expect(screen.getByText('kapow')).toBeInTheDocument()
+    // Error message is inside a collapsed <details> / <pre>. The pre may also
+    // contain a full stack trace (isDev=true in vitest), so we can't rely on
+    // exact text match. Query the pre element directly and assert containment.
+    const pre = document.querySelector('pre')
+    expect(pre?.textContent).toContain('kapow')
     expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument()
   })
 
