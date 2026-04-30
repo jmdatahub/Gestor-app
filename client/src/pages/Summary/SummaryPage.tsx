@@ -490,7 +490,7 @@ export default function SummaryPage() {
                 <span className="muted-sm" style={{ textTransform: 'capitalize' }}>{acc.type}</span>
                 <span
                   className="cat-row__amount"
-                  style={{ color: acc.balance >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}
+                  style={{ color: Number(acc.balance) >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}
                 >
                   {formatCurrency(acc.balance, locale)}
                 </span>

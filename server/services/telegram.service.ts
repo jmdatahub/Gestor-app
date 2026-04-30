@@ -8,10 +8,16 @@ export interface InlineKeyboard {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>
 }
 
+export interface ForceReply {
+  force_reply: true
+  selective?: boolean
+  input_field_placeholder?: string
+}
+
 export async function sendTelegramMessage(
   chatId: string | number,
   text: string,
-  reply_markup?: InlineKeyboard,
+  reply_markup?: InlineKeyboard | ForceReply,
 ): Promise<void> {
   if (!TELEGRAM_TOKEN) return
   try {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/apiClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -820,8 +820,8 @@ export default function MovementsList() {
         />
         <StatCard
           label={t('movements.balance')}
-          value={`${summary.balance >= 0 ? '+' : ''}${formatCurrency(summary.balance)}`}
-          tone={summary.balance >= 0 ? 'primary' : 'danger'}
+          value={`${Number(summary.balance) >= 0 ? '+' : ''}${formatCurrency(summary.balance)}`}
+          tone={Number(summary.balance) >= 0 ? 'primary' : 'danger'}
           icon={<Wallet size={18} />}
         />
       </div>
@@ -1047,88 +1047,78 @@ export default function MovementsList() {
 
       {/* Movement Modal */}
       {showModal && (
-        <UiModal isOpen={showModal} onClose={() => { setShowModal(false); resetForm(); }}>
-          <UiModalHeader>
-            {editingMovement ? t('movements.editTitle') : t('movements.newTitle')}
+        <UiModal isOpen={showModal} onClose={() => { setShowModal(false); resetForm(); }} width="lg">
+          <UiModalHeader onClose={() => { setShowModal(false); resetForm(); }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{
+                width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: type === 'income' ? 'rgba(34,197,94,0.12)' : type === 'investment' ? 'rgba(99,102,241,0.12)' : 'rgba(239,68,68,0.12)',
+                color: type === 'income' ? '#22c55e' : type === 'investment' ? '#6366f1' : '#ef4444',
+                fontSize: 16
+              }}>
+                {type === 'income' ? '↑' : type === 'investment' ? '◆' : '↓'}
+              </span>
+              <span>{editingMovement ? t('movements.editTitle') : t('movements.newTitle')}</span>
+            </div>
           </UiModalHeader>
           <form onSubmit={handleSubmit}>
-            <UiModalBody>
+            <UiModalBody className="movement-modal-body">
               {appError && (
-                <div className="mb-4 p-3 bg-danger/10 text-danger rounded-lg text-sm border border-danger/20 flex gap-3">
-                  <AlertTriangle className="shrink-0" size={20} />
-                  <div className="flex-1">
-                    <p className="font-bold">{appError.message}</p>
-                    {appError.details && (
-                      <details className="mt-1">
-                        <summary className="cursor-pointer text-xs opacity-80 hover:opacity-100">Ver detalles técnicos</summary>
-                        <pre className="mt-2 text-[10px] bg-black/5 p-2 rounded overflow-x-auto whitespace-pre-wrap">
-                          {appError.details}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                  <button onClick={() => setAppError(null)} className="text-danger opacity-70 hover:opacity-100">
-                    <X size={16}/>
-                  </button>
+                <div className="movement-error-banner">
+                  <AlertTriangle size={15} />
+                  <span>{appError.message}</span>
+                  <button type="button" onClick={() => setAppError(null)}><X size={13}/></button>
                 </div>
               )}
 
-              <div className="mb-4">
+              {/* Fecha + Tipo */}
+              <div className="movement-form-row">
                 <UiDatePicker
                   label={t('common.date')}
                   value={date}
                   onChange={(d) => d && setDate(d)}
                 />
-              </div>
-
-              <div className="mb-4">
-                <UiField label={t('common.type')} error={undefined}>
-                    <UiSelect
-                      value={type}
-                      onChange={(val) => setType(val as 'income' | 'expense' | 'investment')}
-                      options={[
-                        { value: 'income', label: t('movements.type.income') },
-                        { value: 'expense', label: t('movements.type.expense') },
-                        { value: 'investment', label: t('movements.type.investment') }
-                      ]}
-                    />
+                <UiField label={t('common.type')}>
+                  <UiSelect
+                    value={type}
+                    onChange={(val) => setType(val as 'income' | 'expense' | 'investment')}
+                    options={[
+                      { value: 'income', label: t('movements.type.income') },
+                      { value: 'expense', label: t('movements.type.expense') },
+                      { value: 'investment', label: t('movements.type.investment') }
+                    ]}
+                  />
                 </UiField>
               </div>
 
-              <div className="mb-4">
-                {accounts.length === 0 ? (
-                  <div className="p-4 bg-gray-50 dark:bg-slate-800 rounded-xl text-center">
-                    <CreditCard size={32} className="text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500 mb-3 text-sm">
-                      {t('movements.noAccount')}
-                    </p>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm w-full"
-                      onClick={() => setShowAccountModal(true)}
-                    >
-                      <Plus size={16} />
-                      {t('accounts.createFirst')}
-                    </button>
-                  </div>
-                ) : (
-                  <UiField label={getAccountLabel()}>
-                      <UiSelect
-                        value={accountId}
-                        onChange={handleAccountSelectChange}
-                        options={[
-                          ...flatAccounts.map(acc => ({
-                            value: acc.id,
-                            label: '\u00A0\u00A0'.repeat(acc.level || 0) + ((acc.level || 0) > 0 ? '— ' : '') + acc.name
-                          })),
-                          { value: '__create_new__', label: '+ ' + t('accounts.new') }
-                        ]}
-                      />
-                  </UiField>
-                )}
-              </div>
+              {/* Cuenta de origen */}
+              {accounts.length === 0 ? (
+                <div className="movement-no-account">
+                  <CreditCard size={22} />
+                  <p>{t('movements.noAccount')}</p>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowAccountModal(true)}>
+                    <Plus size={14} /> {t('accounts.createFirst')}
+                  </button>
+                </div>
+              ) : (
+                <UiField label={getAccountLabel()}>
+                  <UiSelect
+                    value={accountId}
+                    onChange={handleAccountSelectChange}
+                    options={[
+                    options={[
+                      ...flatAccounts.map(acc => ({
+                        value: acc.id,
+                        label: '  '.repeat(acc.level || 0) + ((acc.level || 0) > 0 ? '— ' : '') + acc.name
+                      })),
+                      { value: '__create_new__', label: '+ ' + t('accounts.new') }
+                    ]}
+                  />
+                </UiField>
+              )}
 
-              <div className="mb-4">
+              {/* Cantidad + Categoría */}
+              <div className="movement-form-row">
                 <UiNumber
                   label={`${t('common.amount')} (€)`}
                   value={amount}
@@ -1137,9 +1127,6 @@ export default function MovementsList() {
                   step="0.01"
                   min={0.01}
                 />
-              </div>
-
-              <div className="mb-4">
                 <CategoryPicker
                   label={t('common.category')}
                   type={type === 'income' ? 'income' : 'expense'}
@@ -1148,149 +1135,112 @@ export default function MovementsList() {
                 />
               </div>
 
-              <div className="mb-4">
-                <UiInput
-                  label={`${t('common.description')} (${t('common.optional')})`}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder={`${t('common.description')}...`}
-                />
+              <UiInput
+                label={`${t('common.description')} (${t('common.optional')})`}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={`${t('common.description')}...`}
+              />
+
+              {/* Divider más detalles */}
+              <div className="movement-section-divider">
+                <span>Más detalles</span>
               </div>
 
-              {/* Proveedor */}
-              <div className="mb-4">
-                 <UiField label="Proveedor (Opcional)">
-                    <UiSelect
-                        value={provider}
-                        onChange={setProvider}
-                        options={providers?.map?.(p => ({ value: p.name, label: p.name })) || []}
-                        searchable
-                        creatable
-                        onCreate={(val) => {
-                            setProvider(val)
-                            // Optionally add to temp list if needed, but 'value' handling in UiSelect might suffice if state updates
-                        }}
-                        placeholder="Buscar o crear proveedor..."
-                    />
-                 </UiField>
+              {/* Proveedor + Método de pago */}
+              <div className="movement-form-row">
+                <UiField label="Proveedor">
+                  <UiSelect
+                    value={provider}
+                    onChange={setProvider}
+                    options={providers?.map?.(p => ({ value: p.name, label: p.name })) || []}
+                    searchable
+                    creatable
+                    onCreate={(val) => setProvider(val)}
+                    placeholder="Buscar o crear..."
+                  />
+                </UiField>
+                <UiField label="Método de pago">
+                  <UiSelect
+                    value={paymentMethod}
+                    onChange={setPaymentMethod}
+                    options={[
+                      { value: '', label: 'Seleccionar...' },
+                      ...(paymentMethods?.map(pm => ({ value: pm.name, label: pm.name })) || [])
+                    ]}
+                  />
+                </UiField>
               </div>
 
-              {/* Método de Pago */}
-              <div className="mb-4">
-                 <UiField label="Método de pago">
-                    <UiSelect
-                        value={paymentMethod}
-                        onChange={setPaymentMethod}
-                        options={[
-                           { value: '', label: 'Seleccionar...' },
-                           ...(paymentMethods?.map(pm => ({ 
-                               value: pm.name, 
-                               label: pm.name 
-                           })) || [])
-                        ]}
-                    />
-                 </UiField>
+              {/* IVA */}
+              <div className="movement-toggle-row">
+                <span className="movement-toggle-label">Desglosar IVA</span>
+                <UiSwitch checked={showTaxSection} onChange={setShowTaxSection} />
               </div>
-
-              {/* IVA Section */}
-              <div className="mb-4 p-4 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-gray-700">
-                  <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Desglosar IVA</span>
-                      </div>
-                      <UiSwitch checked={showTaxSection} onChange={setShowTaxSection} />
-                  </div>
-                  
-                  {showTaxSection && (
-                      <div className="flex gap-4">
-                          <div className="w-1/3">
-                               <UiNumber 
-                                 label="% IVA" 
-                                 value={taxRate} 
-                                 onChange={(v) => setTaxRate(Number(v))} 
-                               />
-                          </div>
-                          <div className="w-2/3">
-                               <UiNumber 
-                                 label="Cuota IVA" 
-                                 value={taxAmount} 
-                                 onChange={(v) => {
-                                   setTaxAmount(parseFloat(v))
-                                   // Logic to inverse update rate could be complex, leave manual override
-                                 }} 
-                               />
-                          </div>
-                      </div>
-                  )}
-              </div>
-
-              {/* Paid By (Only for Workspace) */}
-              {currentWorkspace && (
-                 <div className="mb-4 p-4 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-100 dark:border-gray-700">
-                    <UiField label="Pagado por">
-                        <UiSelect
-                           value={paidByExternal ? 'other' : (paidByUserId || '')}
-                           onChange={(val) => {
-                               if (val === 'other') {
-                                   setPaidByUserId('')
-                                   setPaidByExternal('Externo') // Default text
-                               } else {
-                                   setPaidByUserId(val)
-                                   setPaidByExternal('')
-                               }
-                           }}
-                           options={[
-                               { value: '', label: 'Yo (Por defecto)' },
-                               { value: 'other', label: 'Otro (Externo) -> Generar Deuda' }
-                           ]}
-                        />
-                    </UiField>
-                    
-                    {paidByExternal && (
-                        <div className="mt-3">
-                           <UiInput
-                              label="Nombre del pagador externo"
-                              value={paidByExternal === 'Externo' ? '' : paidByExternal}
-                              onChange={(e) => setPaidByExternal(e.target.value)}
-                              placeholder="Ej. Empresa, Socio..."
-                           />
-                           <div className="mt-2 flex items-center gap-2">
-                              <UiSwitch checked={createDebt} onChange={setCreateDebt} />
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Crear deuda automáticamente</span>
-                           </div>
-                        </div>
-                    )}
-                 </div>
+              {showTaxSection && (
+                <div className="movement-form-row">
+                  <UiNumber label="% IVA" value={taxRate} onChange={(v) => setTaxRate(Number(v))} />
+                  <UiNumber label="Cuota IVA (€)" value={taxAmount} onChange={(v) => setTaxAmount(parseFloat(v))} />
+                </div>
               )}
 
-              {/* Subscription Toggle */}
-              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                          <CalendarClock size={18} className="text-primary" />
-                          <span className="font-medium text-gray-700 dark:text-gray-300">Suscripción recurrente</span>
+              {/* Paid By (workspace only) */}
+              {currentWorkspace && (
+                <>
+                  <UiField label="Pagado por">
+                    <UiSelect
+                      value={paidByExternal ? 'other' : (paidByUserId || '')}
+                      onChange={(val) => {
+                        if (val === 'other') { setPaidByUserId(''); setPaidByExternal('Externo') }
+                        else { setPaidByUserId(val); setPaidByExternal('') }
+                      }}
+                      options={[
+                        { value: '', label: 'Yo (por defecto)' },
+                        { value: 'other', label: 'Externo → generar deuda' }
+                      ]}
+                    />
+                  </UiField>
+                  {paidByExternal && (
+                    <div style={{ marginTop: 8 }}>
+                      <UiInput
+                        label="Nombre del pagador"
+                        value={paidByExternal === 'Externo' ? '' : paidByExternal}
+                        onChange={(e) => setPaidByExternal(e.target.value)}
+                        placeholder="Ej. Empresa, Socio..."
+                      />
+                      <div className="movement-toggle-row" style={{ marginTop: 8 }}>
+                        <span className="movement-toggle-label">Crear deuda automáticamente</span>
+                        <UiSwitch checked={createDebt} onChange={setCreateDebt} />
                       </div>
-                      <UiSwitch checked={isSubscription} onChange={setIsSubscription} />
-                  </div>
-                  
-                  {isSubscription && (
-                      <div className="mt-4 pl-4 border-l-2 border-primary/20 space-y-4">
-                           <UiDatePicker 
-                              label="Fecha fin suscripción (Opcional)"
-                              value={subscriptionEndDate || null}
-                              onChange={(d) => setSubscriptionEndDate(d || undefined)}
-                           />
-                           
-                           <div className="flex items-center justify-between">
-                               <span className="text-sm text-gray-600 dark:text-gray-400">Renovación automática</span>
-                               <UiSwitch checked={autoRenew} onChange={setAutoRenew} />
-                           </div>
-                      </div>
+                    </div>
                   )}
+                </>
+              )}
+
+              {/* Suscripción */}
+              <div className="movement-toggle-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CalendarClock size={15} style={{ color: 'var(--primary)' }} />
+                  <span className="movement-toggle-label">Suscripción recurrente</span>
+                </div>
+                <UiSwitch checked={isSubscription} onChange={setIsSubscription} />
               </div>
+              {isSubscription && (
+                <div className="movement-sub-fields">
+                  <UiDatePicker
+                    label="Fecha fin (opcional)"
+                    value={subscriptionEndDate || null}
+                    onChange={(d) => setSubscriptionEndDate(d || undefined)}
+                  />
+                  <div className="movement-toggle-row">
+                    <span className="movement-toggle-label">Renovación automática</span>
+                    <UiSwitch checked={autoRenew} onChange={setAutoRenew} />
+                  </div>
+                </div>
+              )}
             </UiModalBody>
             <UiModalFooter>
-               <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+               <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); resetForm(); }}>
                 {t('common.cancel')}
               </button>
               <button type="submit" className="btn btn-primary" disabled={submitting}>

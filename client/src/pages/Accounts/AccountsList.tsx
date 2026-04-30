@@ -370,7 +370,7 @@ export default function AccountsList() {
                     <td style={{ padding: '0.75rem 1.5rem' }}>
                       <span className="badge badge-gray">{getAccountTypeLabel(acc.type)}</span>
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 600, color: acc.balance >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
+                    <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 600, color: Number(acc.balance) >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
                       {formatCurrency(acc.balance)}
                     </td>
                     <td style={{ padding: '0.75rem 1.5rem' }}>

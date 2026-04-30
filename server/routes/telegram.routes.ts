@@ -9,6 +9,7 @@ import {
   editMessageText,
   answerCallbackQuery,
   escapeHtml,
+  type ForceReply,
 } from '../services/telegram.service.js'
 
 const router = Router()
@@ -68,6 +69,8 @@ async function buildCategoriesKeyboard(
     if (hasNext) navRow.push({ text: '➡️', callback_data: `p:${page + 1}:${kindShort}:${movPrefix}` })
     keyboard.push(navRow)
   }
+
+  keyboard.push([{ text: '➕ Nueva categoría', callback_data: `nc:${kindShort}:${movPrefix}` }])
 
   const switchLabel = kind === 'expense' ? '💰 Ingreso' : '💸 Gasto'
   const switchCb = kind === 'expense' ? `inc:${movPrefix}` : `exp:${movPrefix}`
@@ -221,6 +224,18 @@ router.post('/', async (req: Request, res: Response) => {
           const msgTxt = `🚀 <b>${typeLabel} guardado:</b>\n${typeSign} <b>${mov.amount}€</b>\n📝 ${safeDesc}\n\n<i>¿En qué categoría lo clasifico? 👇</i>`
           await editMessageText(chatId, msgId, msgTxt, { inline_keyboard: kb })
         }
+
+      } else if (parts[0] === 'nc' && parts.length === 3) {
+        // New category: ask user for name via ForceReply
+        const kindShort = parts[1] // 'e' or 'i'
+        const movPrefix = parts[2]
+        const kindLabel = kindShort === 'e' ? 'gasto' : 'ingreso'
+        const fr: ForceReply = { force_reply: true, selective: true, input_field_placeholder: 'Ej: Comida, Ocio, Sueldo…' }
+        await sendTelegramMessage(
+          chatId,
+          `📂 <b>Nueva categoría de ${kindLabel}</b>\n\nEscribe el nombre:\n<code>ref:${kindShort}:${movPrefix}</code>`,
+          fr,
+        )
       }
 
       res.status(200).send('OK'); return
@@ -351,15 +366,26 @@ router.post('/', async (req: Request, res: Response) => {
       await db.delete(categories).where(eq(categories.userId, userId))
 
       const list = [
-        { name: 'Ocio', kind: 'expense', color: '#f43f5e' },
-        { name: 'Transporte', kind: 'expense', color: '#eab308' },
-        { name: 'Comida', kind: 'expense', color: '#22c55e' },
-        { name: 'Otros', kind: 'expense', color: '#64748b' },
-        { name: 'Regalo', kind: 'income', color: '#ec4899' },
-        { name: 'Salario', kind: 'income', color: '#14b8a6' },
-        { name: 'Soul IA', kind: 'income', color: '#8b5cf6' },
-        { name: 'Just Jorge', kind: 'income', color: '#3b82f6' },
-        { name: 'Otros', kind: 'income', color: '#94a3b8' },
+        // ── GASTOS ──────────────────────────────────────────────────
+        { name: 'Ocio',         kind: 'expense', color: '#f43f5e' },
+        { name: 'Comida',       kind: 'expense', color: '#f97316' },
+        { name: 'Deporte',      kind: 'expense', color: '#22c55e' },
+        { name: 'Formación',    kind: 'expense', color: '#3b82f6' },
+        { name: 'Herramientas', kind: 'expense', color: '#8b5cf6' },
+        { name: 'Transporte',   kind: 'expense', color: '#eab308' },
+        { name: 'Casa',         kind: 'expense', color: '#06b6d4' },
+        { name: 'Salud',        kind: 'expense', color: '#10b981' },
+        { name: 'Suscripciones',kind: 'expense', color: '#ec4899' },
+        { name: 'Ropa',         kind: 'expense', color: '#a78bfa' },
+        { name: 'Otros',        kind: 'expense', color: '#64748b' },
+        // ── INGRESOS ────────────────────────────────────────────────
+        { name: 'Nómina',       kind: 'income',  color: '#14b8a6' },
+        { name: 'Soul IA',      kind: 'income',  color: '#8b5cf6' },
+        { name: 'Just Jorge',   kind: 'income',  color: '#3b82f6' },
+        { name: 'Freelance',    kind: 'income',  color: '#f59e0b' },
+        { name: 'Inversiones',  kind: 'income',  color: '#22c55e' },
+        { name: 'Regalo',       kind: 'income',  color: '#ec4899' },
+        { name: 'Otros',        kind: 'income',  color: '#94a3b8' },
       ]
 
       await db.insert(categories).values(
@@ -368,7 +394,7 @@ router.post('/', async (req: Request, res: Response) => {
 
       const orgInfo = targetOrgId ? 'Org: Soul IA' : 'Entorno Personal'
       await sendTelegramMessage(chatId,
-        `✨ <b>¡SISTEMA RESETEADO!</b>\n\nEntorno: <code>${orgInfo}</code>\n\nCategorías configuradas correctamente.`)
+        `✨ <b>¡Categorías creadas!</b>\n\nEntorno: <code>${orgInfo}</code>\n\n<b>Gastos:</b> Ocio, Comida, Deporte, Formación, Herramientas, Transporte, Casa, Salud, Suscripciones, Ropa, Otros\n\n<b>Ingresos:</b> Nómina, Soul IA, Just Jorge, Freelance, Inversiones, Regalo, Otros`)
       res.status(200).send('OK'); return
     }
 
@@ -393,6 +419,49 @@ router.post('/', async (req: Request, res: Response) => {
       t => Array.isArray(t.scopes) && t.scopes.some((s: string) => s === `tg_chat:${chatIdStr}`),
     )
     const targetOrgId = linkedToken?.organizationId ?? null
+
+    // ── REPLY TO CATEGORY CREATION PROMPT ──────────────────────────────────
+    // When the user replies to a ForceReply message like "ref:e:abc12345", create the category.
+    if (message.reply_to_message) {
+      const replyText: string = message.reply_to_message.text || ''
+      const catRef = replyText.match(/ref:(e|i):([0-9a-f]{8,})/)
+      if (catRef) {
+        const kindShort = catRef[1]
+        const movPrefix = catRef[2]
+        const newKind: 'expense' | 'income' = kindShort === 'e' ? 'expense' : 'income'
+        const catName = text.trim().slice(0, 100)
+
+        if (!catName) {
+          await sendTelegramMessage(chatId, '❌ El nombre no puede estar vacío.')
+          res.status(200).send('OK'); return
+        }
+
+        const defaultColor = newKind === 'expense' ? '#ef4444' : '#22c55e'
+        const [newCat] = await db.insert(categories).values({
+          userId,
+          organizationId: targetOrgId,
+          name: catName,
+          kind: newKind,
+          color: defaultColor,
+        }).returning({ id: categories.id, name: categories.name })
+
+        if (newCat) {
+          const recentMovs = await db.select({ id: movements.id })
+            .from(movements).where(eq(movements.userId, userId))
+            .orderBy(desc(movements.createdAt)).limit(20)
+          const mov = recentMovs.find(m => m.id.startsWith(movPrefix))
+          if (mov) {
+            await db.update(movements).set({ categoryId: newCat.id }).where(eq(movements.id, mov.id))
+            await sendTelegramMessage(chatId, `✅ Categoría <b>${escapeHtml(catName)}</b> creada y asignada.`)
+          } else {
+            await sendTelegramMessage(chatId, `✅ Categoría <b>${escapeHtml(catName)}</b> creada.`)
+          }
+        } else {
+          await sendTelegramMessage(chatId, '❌ No se pudo crear la categoría.')
+        }
+        res.status(200).send('OK'); return
+      }
+    }
 
     const amountMatch = text.match(/([+-]?)(\d+(?:[.,]\d{1,2})?)(?:€|eur|euros)?(?:\s|$)/i)
 

@@ -19,8 +19,9 @@ export function formatDate(value: string | Date, settings: AppSettings): string 
   return `${day}/${month}/${year}`;
 }
 
-export function formatNumber(value: number, settings: AppSettings, decimals = 2): string {
-  const safe = Number.isFinite(value) ? value : 0;
+export function formatNumber(value: number | string, settings: AppSettings, decimals = 2): string {
+  const coerced = typeof value === 'string' ? Number(value) : value
+  const safe = Number.isFinite(coerced) ? coerced : 0;
   const fixed = safe.toFixed(decimals);
   const [intPart, decPart] = fixed.split('.');
   
@@ -35,7 +36,7 @@ export function formatNumber(value: number, settings: AppSettings, decimals = 2)
   return decPart ? `${intWithThousands}${sep}${decPart}` : intWithThousands;
 }
 
-export function formatEUR(value: number, settings: AppSettings, decimals = 2): string {
+export function formatEUR(value: number | string, settings: AppSettings, decimals = 2): string {
   const n = formatNumber(value, settings, decimals);
   return `${n} €`;
 }

@@ -232,7 +232,7 @@ export default function AccountDetail() {
 
             <div className="mt-2">
                <div className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Saldo Disponible</div>
-               <div className={`text-6xl font-bold font-mono tracking-tighter ${account.balance >= 0 ? 'text-gray-900 dark:text-white' : 'text-danger'}`}>
+               <div className={`text-6xl font-bold font-mono tracking-tighter ${Number(account.balance) >= 0 ? 'text-gray-900 dark:text-white' : 'text-danger'}`}>
                  {formatCurrency(account.balance)}
                </div>
             </div>

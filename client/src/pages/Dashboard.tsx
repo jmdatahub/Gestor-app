@@ -372,7 +372,7 @@ export default function Dashboard() {
                         <Layers size={12} style={{ opacity: 0.5, marginLeft: 6, verticalAlign: 'middle' }} />
                       )}
                     </span>
-                    <span className="cat-row__amount" style={{ color: acc.balance >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
+                    <span className="cat-row__amount" style={{ color: Number(acc.balance) >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
                       {formatCurrency(acc.balance)}
                     </span>
                   </div>
