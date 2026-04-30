@@ -53,14 +53,25 @@ export async function deleteAccount(id: string): Promise<void> {
 export function buildAccountTree(accounts: AccountWithBalance[]): AccountNode[] {
   const map = new Map<string, AccountNode>()
   accounts.forEach(a => map.set(a.id, { ...a, children: [], level: 0 }))
+
+  // First pass: wire parent→child references
   const roots: AccountNode[] = []
   map.forEach(node => {
     if (node.parent_account_id && map.has(node.parent_account_id)) {
-      const parent = map.get(node.parent_account_id)!
-      node.level = parent.level + 1
-      parent.children.push(node)
-    } else roots.push(node)
+      map.get(node.parent_account_id)!.children.push(node)
+    } else {
+      roots.push(node)
+    }
   })
+
+  // Second pass: assign levels via BFS so depth is always correct
+  const queue = roots.map(r => ({ node: r, level: 0 }))
+  while (queue.length) {
+    const { node, level } = queue.shift()!
+    node.level = level
+    node.children.forEach(c => queue.push({ node: c, level: level + 1 }))
+  }
+
   return roots
 }
 
