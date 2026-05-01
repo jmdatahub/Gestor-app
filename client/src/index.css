@@ -8,8 +8,17 @@
 
 @import './styles/advanced.css';
 
-/* Premium overlay — must be LAST so it wins specificity battles. */
-@import './styles/premium.css';
+/* ==============================================
+   DESIGN OVERLAYS — each file is scoped under
+   [data-design='X']. Only the active one applies
+   based on the attribute set on <html>.
+   Order matters only for @keyframes shared names.
+   ============================================== */
+@import './styles/design-crafted.css';
+@import './styles/design-mono.css';
+@import './styles/design-aurora.css';
+@import './styles/design-bento.css';
+@import './styles/design-editorial.css';
 
 /* ==============================================
    TABLES

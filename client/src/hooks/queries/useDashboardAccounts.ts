@@ -19,7 +19,11 @@ export const useAccountsSummary = (userId: string | null, workspaceId: string | 
     queryKey: dashboardKeys.accountsSummary(userId!, workspaceId),
     queryFn: async ({ signal }) => {
       const data = await fetchAccountsSummary(userId!, workspaceId, signal)
-      return accountSummarySchema.parse(data)
+      // API returns AccountWithBalance[] — fold into summary shape expected by Dashboard.
+      const accounts = Array.isArray(data) ? data : []
+      const totalBalance = accounts.reduce((sum, a: any) => sum + Number(a?.balance ?? 0), 0)
+      const accountCount = accounts.length
+      return accountSummarySchema.parse({ totalBalance, accountCount })
     },
     enabled: !!userId,
   })

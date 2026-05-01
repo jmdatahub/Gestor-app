@@ -1,6 +1,6 @@
-import { useSettings, type Theme } from '../context/SettingsContext';
+import { useSettings, type Theme, DESIGN_OPTIONS, type Design } from '../context/SettingsContext';
 import { useI18n } from '../hooks/useI18n';
-import { Sun, Moon, Monitor, X, HelpCircle } from 'lucide-react';
+import { Sun, Moon, Monitor, X, HelpCircle, Check } from 'lucide-react';
 import type { Density } from '../context/SettingsContext';
 import { UiSelect } from './ui/UiSelect';
 import { UiSegmented } from './ui/UiSegmented';
@@ -35,6 +35,60 @@ export default function SettingsPanel({ open, onClose }: Props) {
           {/* Appearance Section */}
           <div className="settings-section">
             <div className="settings-section-title">{t('settings.appearance')}</div>
+
+            {/* DESIGN PICKER — choose visual language */}
+            <div className="settings-field">
+              <div className="settings-label">Estilo visual</div>
+              <div className="design-picker-grid">
+                {DESIGN_OPTIONS.map((opt) => {
+                  const active = settings.design === opt.value
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`design-card${active ? ' design-card--active' : ''}`}
+                      onClick={() => updateSettings({ design: opt.value as Design })}
+                      aria-pressed={active}
+                      title={opt.description}
+                    >
+                      <div
+                        className="design-card__preview"
+                        style={{ background: opt.previewColors.bg }}
+                        aria-hidden="true"
+                      >
+                        <div
+                          className="design-card__preview-card"
+                          style={{
+                            background: opt.previewColors.surface,
+                            color: opt.previewColors.text,
+                          }}
+                        >
+                          <span
+                            className="design-card__preview-bar"
+                            style={{ background: opt.previewColors.accent }}
+                          />
+                          <span
+                            className="design-card__preview-text"
+                            style={{
+                              color: opt.previewColors.text,
+                              opacity: 0.7,
+                              fontSize: 8,
+                            }}
+                          >
+                            123
+                          </span>
+                        </div>
+                      </div>
+                      <div className="design-card__name">
+                        {opt.label}
+                        {active && <Check size={13} aria-hidden="true" />}
+                      </div>
+                      <div className="design-card__desc">{opt.description}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
             <div className="settings-field">
               <div className="settings-label">{t('settings.theme')}</div>
