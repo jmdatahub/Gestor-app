@@ -25,6 +25,20 @@ dist-ssr
 
 # Claude Code (user-local agent settings — keep .claude/launch.json shareable)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+
+# Sibling worktrees (created by `git worktree add Gestor-app-<name>`)
+/Gestor-app-redesign/
+/Gestor-app-mono/
+/Gestor-app-aurora/
+/Gestor-app-bento/
+/Gestor-app-editorial/
+
+# One-off diagnostic scripts (not part of the app)
+scripts/diag2.mjs
+scripts/diag_data.mjs
+scripts/test_api.mjs
 
 # Vite PWA dev artifacts
 **/dev-dist/
