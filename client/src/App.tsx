@@ -4,6 +4,7 @@ import { SkeletonDashboard } from './components/Skeleton'
 
 // App Components
 import AppLayout from './layouts/AppLayout'
+import { DesignFloatingSwitcher } from './components/DesignFloatingSwitcher'
 
 // Lazy Pages
 const Auth = lazy(() => import('./pages/Auth'))
@@ -113,6 +114,8 @@ function App() {
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </Suspense>
+      {/* Global floating design switcher — visible everywhere (auth + logged in) */}
+      <DesignFloatingSwitcher />
     </BrowserRouter>
   )
 }
