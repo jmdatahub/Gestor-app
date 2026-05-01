@@ -276,19 +276,8 @@ export default function Auth() {
               )}
               
               {error && (
-                <div className="auth-error" style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
-                  color: '#f87171',
-                  padding: '12px 16px',
-                  borderRadius: '12px',
-                  marginBottom: '20px',
-                  fontSize: '0.875rem'
-                }}>
-                  <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                <div className="auth-error">
+                  <AlertTriangle size={16} style={{ flexShrink: 0 }} />
                   <span>{error}</span>
                 </div>
               )}

@@ -13,6 +13,8 @@ export const translations: Record<string, Record<string, string>> = {
     'movements.title': 'Movimientos',
     'movements.subtitle': 'Registra y gestiona tus ingresos y gastos',
     'movements.new': 'Nuevo movimiento',
+    'movements.newTitle': 'Nuevo movimiento',
+    'movements.editTitle': 'Editar movimiento',
     'movements.empty': 'No hay movimientos registrados',
     'movements.createFirst': 'Registrar primer movimiento',
     'movements.income': 'Ingresos del mes',

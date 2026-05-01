@@ -454,10 +454,11 @@ export function getMonthName(month: number, locale: string = 'es-ES'): string {
 export async function getAccountBalancesSummary(
   userId: string,
   options: { includeChildrenRollup?: boolean } = {},
-  organizationId?: string | null
+  organizationId?: string | null,
+  signal?: AbortSignal,
 ): Promise<AccountWithBalance[]> {
   // 1. Get raw accounts with balances
-  const accounts = await getAccountsWithBalances(userId, organizationId)
+  const accounts = await getAccountsWithBalances(userId, organizationId, signal)
 
   // 2. If no roll-up, return as is
   if (!options.includeChildrenRollup) {
@@ -513,33 +514,44 @@ export interface FinancialDistribution {
 }
 
 export async function getFinancialDistribution(
-    userId: string, 
-    organizationId?: string | null
+    userId: string,
+    organizationId?: string | null,
+    signal?: AbortSignal,
 ): Promise<FinancialDistribution> {
-  // 1. Get Accounts with Balances
-  const accounts = await getAccountsWithBalances(userId, organizationId)
+  // 1. Get Accounts with Balances — and personal data (investments + goals) in parallel
+  const accountsPromise = getAccountsWithBalances(userId, organizationId, signal)
 
-  // 2. Get Investments Value (Only Personal for now)
   let investmentsAssetsValue = 0
   const investmentSubItems: { [key: string]: number } = {}
   let goalsTotal = 0
   let goalsSubItems: FinancialDistributionSubItem[] = []
 
-  if (!organizationId) {
-      const userInvestments = await getUserInvestments(userId)
-      const invTotals = calculateTotals(userInvestments)
-      investmentsAssetsValue = invTotals.totalValue
+  let accounts: AccountWithBalance[]
 
-      userInvestments.forEach(inv => {
-         const t = inv.type || 'Otros'
-         const val = inv.quantity * (inv.current_price ?? inv.avg_buy_price ?? 0)
-         investmentSubItems[t] = (investmentSubItems[t] || 0) + val
-      })
-      
-      const { data: goals } = await api.get<{ data: any[] }>('/api/v1/savings-goals')
-      
-      goalsTotal = (goals || []).reduce((sum, g) => sum + g.current_amount, 0)
-      goalsSubItems = (goals || []).map(g => ({ name: g.name, value: g.current_amount, color: '#fbcfe8' }))
+  if (!organizationId) {
+    // Fetch accounts, investments, and savings goals in parallel
+    const [fetchedAccounts, userInvestments, goalsRes] = await Promise.all([
+      accountsPromise,
+      getUserInvestments(userId),
+      api.get<{ data: any[] }>('/api/v1/savings-goals', undefined, signal),
+    ])
+
+    accounts = fetchedAccounts
+
+    const invTotals = calculateTotals(userInvestments)
+    investmentsAssetsValue = invTotals.totalValue
+
+    userInvestments.forEach(inv => {
+      const t = inv.type || 'Otros'
+      const val = (inv.quantity ?? 0) * (inv.current_price ?? inv.avg_buy_price ?? 0)
+      investmentSubItems[t] = (investmentSubItems[t] || 0) + val
+    })
+
+    const goals = goalsRes.data || []
+    goalsTotal = goals.reduce((sum, g) => sum + g.current_amount, 0)
+    goalsSubItems = goals.map(g => ({ name: g.name, value: g.current_amount, color: '#fbcfe8' }))
+  } else {
+    accounts = await accountsPromise
   }
 
   // 3. Categorize Accounts

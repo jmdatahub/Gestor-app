@@ -17,17 +17,17 @@ export interface Movement {
 export interface Account { id: string; user_id: string; organization_id?: string | null; name: string; type: string }
 export interface Category { id: string; user_id: string; organization_id?: string | null; name: string; kind: string; color?: string; description?: string | null }
 
-export async function fetchMovements(_userId: string, limit = 50, offset = 0, organizationId?: string | null): Promise<Movement[]> {
+export async function fetchMovements(_userId: string, limit = 50, offset = 0, organizationId?: string | null, signal?: AbortSignal): Promise<Movement[]> {
   const params: Record<string, string | number> = { limit, offset }
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params)
+  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params, signal)
   return data
 }
 
-export async function fetchMovementsForMonth(_userId: string, year: number, month: number, organizationId?: string | null): Promise<Movement[]> {
+export async function fetchMovementsForMonth(_userId: string, year: number, month: number, organizationId?: string | null, signal?: AbortSignal): Promise<Movement[]> {
   const params: Record<string, string | number> = { limit: 500, year, month }
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params)
+  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params, signal)
   return data
 }
 
@@ -86,9 +86,10 @@ export type CreateMovementInput = Omit<Movement, 'id' | 'created_at'>
 export async function fetchMonthlyMovements(
   userId: string,
   organizationId?: string | null,
+  signal?: AbortSignal,
 ): Promise<Movement[]> {
   const now = new Date()
-  return fetchMovementsForMonth(userId, now.getFullYear(), now.getMonth() + 1, organizationId)
+  return fetchMovementsForMonth(userId, now.getFullYear(), now.getMonth() + 1, organizationId, signal)
 }
 
 export interface MonthlySummary {
@@ -107,10 +108,11 @@ export function calculateMonthlySummary(movements: Movement[]): MonthlySummary {
 export async function getPendingClassificationCount(
   _userId: string,
   organizationId?: string | null,
+  signal?: AbortSignal,
 ): Promise<number> {
   const params: Record<string, string | number> = { status: 'pending', limit: 1 }
   if (organizationId) params.org_id = organizationId
-  const { total } = await api.get<{ data: Movement[]; total: number }>('/api/v1/movements', params)
+  const { total } = await api.get<{ data: Movement[]; total: number }>('/api/v1/movements', params, signal)
   return total ?? 0
 }
 

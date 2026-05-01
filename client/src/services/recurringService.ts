@@ -35,8 +35,8 @@ export async function deleteRecurringRule(id: string): Promise<void> {
   await api.delete(`/api/v1/recurring-rules/${id}`)
 }
 
-export async function fetchPendingMovements(_userId: string): Promise<Movement[]> {
-  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', { status: 'pending', limit: 200 })
+export async function fetchPendingMovements(_userId: string, signal?: AbortSignal): Promise<Movement[]> {
+  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', { status: 'pending', limit: 200 }, signal)
   return data
 }
 
@@ -59,8 +59,8 @@ export async function generatePendingMovementsForUser(_userId: string): Promise<
   return 0
 }
 
-export async function getPendingMovementsCount(_userId: string): Promise<number> {
-  const movements = await fetchPendingMovements(_userId)
+export async function getPendingMovementsCount(_userId: string, signal?: AbortSignal): Promise<number> {
+  const movements = await fetchPendingMovements(_userId, signal)
   return movements.length
 }
 

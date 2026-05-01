@@ -21,10 +21,13 @@ import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../compon
 import { UiField } from '../../components/ui/UiField'
 import { UiTextarea } from '../../components/ui/UiTextarea'
 import { useToast } from '../../components/Toast'
+import { useSettings } from '../../context/SettingsContext'
+import { formatEUR, formatDate as formatDateUtil } from '../../utils/format'
 
 export default function SavingsList() {
   const navigate = useNavigate()
   const { t } = useI18n()
+  const { settings } = useSettings()
   const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const toast = useToast()
@@ -108,7 +111,10 @@ export default function SavingsList() {
     if (!selectedGoalId) return
     setSubmitting(true)
 
-    if (!user) return
+    if (!user) {
+      setSubmitting(false)
+      return
+    }
 
     try {
       await addContributionMutation.mutateAsync({
@@ -120,8 +126,10 @@ export default function SavingsList() {
       setShowContribModal(false)
       resetContribForm()
       loadGoals()
-    } catch (error) {
+      toast.success(t('savings.contrib.success') || 'Aportación añadida', t('savings.contrib.successDesc') || 'La aportación se ha registrado correctamente')
+    } catch (error: any) {
       console.error('Error adding contribution:', error)
+      toast.error(t('common.error') || 'Error', error?.message || 'No se pudo añadir la aportación')
     } finally {
       setSubmitting(false)
     }
@@ -148,18 +156,11 @@ export default function SavingsList() {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount)
+    return formatEUR(amount, settings)
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    })
+    return formatDateUtil(date, settings)
   }
 
   const getProgress = (goal: SavingsGoal) => {

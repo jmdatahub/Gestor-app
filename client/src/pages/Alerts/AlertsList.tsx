@@ -51,6 +51,7 @@ import { Breadcrumbs } from '../../components/Breadcrumbs'
 import { SkeletonList } from '../../components/Skeleton'
 import { UiCard } from '../../components/ui/UiCard'
 import { AlertRuleWizard } from '../../components/domain/AlertRuleWizard'
+import { useToast } from '../../components/Toast'
 
 type FilterType = 'all' | 'unread' | 'info' | 'warning' | 'danger'
 type SortMode = 'date' | 'severity'
@@ -58,6 +59,7 @@ type SortMode = 'date' | 'severity'
 export default function AlertsList() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const toast = useToast()
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [rules, setRules] = useState<AlertRule[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,44 +116,74 @@ export default function AlertsList() {
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const handleToggleRule = async (ruleId: string, isActive: boolean) => {
-    await toggleAlertRule(ruleId, !isActive)
-    setRules(prev => prev.map(r => r.id === ruleId ? { ...r, is_active: !isActive } : r))
+    try {
+      await toggleAlertRule(ruleId, !isActive)
+      setRules(prev => prev.map(r => r.id === ruleId ? { ...r, is_active: !isActive } : r))
+    } catch (error: any) {
+      console.error('Error toggling rule:', error)
+      toast.error('Error', error?.message || 'No se pudo cambiar el estado de la regla')
+    }
   }
 
   const handleDeleteRule = async (ruleId: string) => {
-    await deleteAlertRule(ruleId)
-    setRules(prev => prev.filter(r => r.id !== ruleId))
+    try {
+      await deleteAlertRule(ruleId)
+      setRules(prev => prev.filter(r => r.id !== ruleId))
+    } catch (error: any) {
+      console.error('Error deleting rule:', error)
+      toast.error('Error', error?.message || 'No se pudo eliminar la regla')
+    }
   }
 
   const handleMarkAsRead = async (alertId: string) => {
-    await markAsRead(alertId)
-    setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, is_read: true } : a))
-    setStats(prev => ({ ...prev, unread: Math.max(0, prev.unread - 1) }))
+    try {
+      await markAsRead(alertId)
+      setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, is_read: true } : a))
+      setStats(prev => ({ ...prev, unread: Math.max(0, prev.unread - 1) }))
+    } catch (error: any) {
+      console.error('Error marking as read:', error)
+      toast.error('Error', error?.message || 'No se pudo marcar como leída')
+    }
   }
 
   const handleMarkAllAsRead = async () => {
     if (!user) return
-    await markAllAsRead(user.id)
-    setAlerts(prev => prev.map(a => ({ ...a, is_read: true })))
-    setStats(prev => ({ ...prev, unread: 0 }))
+    try {
+      await markAllAsRead(user.id)
+      setAlerts(prev => prev.map(a => ({ ...a, is_read: true })))
+      setStats(prev => ({ ...prev, unread: 0 }))
+    } catch (error: any) {
+      console.error('Error marking all as read:', error)
+      toast.error('Error', error?.message || 'No se pudo marcar todo como leído')
+    }
   }
 
   const handleDelete = async (alertId: string) => {
     const alert = alerts.find(a => a.id === alertId)
-    await deleteAlert(alertId)
-    setAlerts(prev => prev.filter(a => a.id !== alertId))
-    if (alert && !alert.is_read) {
-      setStats(prev => ({ ...prev, unread: Math.max(0, prev.unread - 1), total: prev.total - 1 }))
-    } else {
-      setStats(prev => ({ ...prev, total: prev.total - 1 }))
+    try {
+      await deleteAlert(alertId)
+      setAlerts(prev => prev.filter(a => a.id !== alertId))
+      if (alert && !alert.is_read) {
+        setStats(prev => ({ ...prev, unread: Math.max(0, prev.unread - 1), total: prev.total - 1 }))
+      } else {
+        setStats(prev => ({ ...prev, total: prev.total - 1 }))
+      }
+    } catch (error: any) {
+      console.error('Error deleting alert:', error)
+      toast.error('Error', error?.message || 'No se pudo eliminar la alerta')
     }
   }
 
   const handleSnooze = async (alertId: string, hours: number) => {
-    const until = getSnoozeUntil(hours)
-    await snoozeAlert(alertId, until)
-    setAlerts(prev => prev.filter(a => a.id !== alertId))
-    setSnoozeMenuId(null)
+    try {
+      const until = getSnoozeUntil(hours)
+      await snoozeAlert(alertId, until)
+      setAlerts(prev => prev.filter(a => a.id !== alertId))
+      setSnoozeMenuId(null)
+    } catch (error: any) {
+      console.error('Error snoozing alert:', error)
+      toast.error('Error', error?.message || 'No se pudo posponer la alerta')
+    }
   }
 
   const handleQuickAction = (alert: Alert) => {

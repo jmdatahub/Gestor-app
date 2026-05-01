@@ -27,6 +27,8 @@ import { Breadcrumbs } from '../../components/Breadcrumbs'
 import { useI18n } from '../../hooks/useI18n'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { useToast } from '../../components/Toast'
+import { useSettings } from '../../context/SettingsContext'
+import { formatEUR, formatDate as formatDateUtil } from '../../utils/format'
 
 export default function AccountDetail() {
   const { id } = useParams<{ id: string }>()
@@ -34,6 +36,7 @@ export default function AccountDetail() {
   const { t } = useI18n()
   const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()
+  const { settings } = useSettings()
   
   const [account, setAccount] = useState<AccountWithBalance | null>(null)
   const [movements, setMovements] = useState<Movement[]>([])
@@ -143,8 +146,9 @@ export default function AccountDetail() {
     try {
       await toggleAccountActive(account.id, !account.is_active)
       loadData()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error toggling account:', error)
+      toast.error(t('common.error'), error?.message || 'No se pudo cambiar el estado de la cuenta')
     }
   }
 
@@ -168,18 +172,11 @@ export default function AccountDetail() {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount)
+    return formatEUR(amount, settings)
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    })
+    return formatDateUtil(date, settings)
   }
 
   if (loading) {

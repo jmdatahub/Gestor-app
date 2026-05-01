@@ -104,6 +104,8 @@ export const organizations = pgTable("organizations", {
 }, (table) => [
 	index("idx_organizations_deleted_at").using("btree", table.deletedAt.asc().nullsLast().op("timestamptz_ops")).where(sql`(deleted_at IS NOT NULL)`),
 	index("idx_organizations_parent_id").using("btree", table.parentId.asc().nullsLast().op("uuid_ops")),
+	index("idx_organizations_owner_id").using("btree", table.ownerId.asc().nullsLast().op("uuid_ops")),
+	uniqueIndex("idx_organizations_slug_unique").using("btree", table.slug.asc().nullsLast().op("text_ops")).where(sql`(slug IS NOT NULL)`),
 	foreignKey({
 			columns: [table.deletedBy],
 			foreignColumns: [users.id],
@@ -139,6 +141,7 @@ export const paymentMethods = pgTable("payment_methods", {
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
 	index("idx_payment_methods_user").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_payment_methods_organization_id").using("btree", table.organizationId.asc().nullsLast().op("uuid_ops")).where(sql`(organization_id IS NOT NULL)`),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
@@ -153,7 +156,7 @@ export const paymentMethods = pgTable("payment_methods", {
 export const savingsGoals = pgTable("savings_goals", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
 	userId: uuid("user_id").notNull(),
-	name: text(),
+	name: text().notNull(),
 	targetAmount: numeric("target_amount"),
 	currentAmount: numeric("current_amount").default('0').notNull(),
 	accountId: uuid("account_id"),
@@ -178,7 +181,7 @@ export const savingsGoals = pgTable("savings_goals", {
 			columns: [table.accountId],
 			foreignColumns: [accounts.id],
 			name: "savings_goals_account_id_fkey"
-		}),
+		}).onDelete("set null"),
 	foreignKey({
 			columns: [table.organizationId],
 			foreignColumns: [organizations.id],
@@ -206,6 +209,7 @@ export const debtMovements = pgTable("debt_movements", {
 	note: text(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
+	index("idx_debt_movements_debt_id").using("btree", table.debtId.asc().nullsLast().op("uuid_ops")),
 	foreignKey({
 			columns: [table.debtId],
 			foreignColumns: [debts.id],
@@ -233,6 +237,7 @@ export const investmentAssets = pgTable("investment_assets", {
 	symbol: text(),
 	notes: text(),
 }, (table) => [
+	index("idx_investment_assets_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
@@ -259,6 +264,7 @@ export const debts = pgTable("debts", {
 }, (table) => [
 	index("idx_debts_deleted_at").using("btree", table.deletedAt.asc().nullsLast().op("timestamptz_ops")).where(sql`(deleted_at IS NOT NULL)`),
 	index("idx_debts_organization_id").using("btree", table.organizationId.asc().nullsLast().op("uuid_ops")),
+	index("idx_debts_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
 	foreignKey({
 			columns: [table.organizationId],
 			foreignColumns: [organizations.id],
@@ -289,11 +295,14 @@ export const investmentPositions = pgTable("investment_positions", {
 	currentPrice: numeric("current_price").notNull(),
 	lastUpdate: date("last_update").notNull(),
 }, (table) => [
+	index("idx_investment_positions_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_investment_positions_asset_id").using("btree", table.assetId.asc().nullsLast().op("uuid_ops")),
+	index("idx_investment_positions_account_id").using("btree", table.accountId.asc().nullsLast().op("uuid_ops")),
 	foreignKey({
 			columns: [table.accountId],
 			foreignColumns: [accounts.id],
 			name: "investment_positions_account_id_fkey"
-		}),
+		}).onDelete("set null"),
 	foreignKey({
 			columns: [table.assetId],
 			foreignColumns: [investmentAssets.id],
@@ -314,6 +323,9 @@ export const investmentPriceHistory = pgTable("investment_price_history", {
 	date: date().default(sql`CURRENT_DATE`).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
+	index("idx_investment_price_history_investment_id").using("btree", table.investmentId.asc().nullsLast().op("uuid_ops")),
+	index("idx_investment_price_history_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_investment_price_history_date").using("btree", table.date.desc().nullsFirst().op("date_ops")),
 	foreignKey({
 			columns: [table.investmentId],
 			foreignColumns: [investments.id],
@@ -346,6 +358,8 @@ export const monthlySnapshots = pgTable("monthly_snapshots", {
 	totalCash: numeric("total_cash").notNull(),
 	totalInvestmentsValue: numeric("total_investments_value").notNull(),
 }, (table) => [
+	index("idx_monthly_snapshots_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_monthly_snapshots_month").using("btree", table.month.desc().nullsFirst().op("date_ops")),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
@@ -356,7 +370,7 @@ export const monthlySnapshots = pgTable("monthly_snapshots", {
 export const investments = pgTable("investments", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
 	userId: uuid("user_id").notNull(),
-	name: text(),
+	name: text().notNull(),
 	type: text().default('stock'),
 	symbol: text(),
 	quantity: numeric({ precision: 20, scale:  8 }).default('0'),
@@ -419,6 +433,7 @@ export const alertRules = pgTable("alert_rules", {
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
 	index("idx_alert_rules_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	uniqueIndex("idx_alert_rules_user_type_name_unique").using("btree", table.userId.asc().nullsLast().op("uuid_ops"), table.type.asc().nullsLast().op("text_ops"), table.name.asc().nullsLast().op("text_ops")),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
@@ -440,6 +455,7 @@ export const alerts = pgTable("alerts", {
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
 	index("idx_alerts_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_alerts_is_read").using("btree", table.isRead.asc().nullsLast().op("bool_ops")).where(sql`(is_read = false)`),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
@@ -492,6 +508,7 @@ export const organizationInvitations = pgTable("organization_invitations", {
 	expiresAt: timestamp("expires_at", { withTimezone: true, mode: 'string' }).default(sql`(now() + '7 days'::interval)`),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
+	index("idx_organization_invitations_email").using("btree", table.email.asc().nullsLast().op("text_ops")),
 	foreignKey({
 			columns: [table.invitedBy],
 			foreignColumns: [users.id],
@@ -562,11 +579,12 @@ export const recurringRules = pgTable("recurring_rules", {
 	index("idx_recurring_rules_deleted_at").using("btree", table.deletedAt.asc().nullsLast().op("timestamptz_ops")).where(sql`(deleted_at IS NOT NULL)`),
 	index("idx_recurring_rules_organization_id").using("btree", table.organizationId.asc().nullsLast().op("uuid_ops")),
 	index("idx_recurring_rules_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_recurring_rules_next_occurrence").using("btree", table.nextOccurrence.asc().nullsLast().op("date_ops")).where(sql`(is_active = true AND deleted_at IS NULL AND next_occurrence IS NOT NULL)`),
 	foreignKey({
 			columns: [table.accountId],
 			foreignColumns: [accounts.id],
 			name: "recurring_rules_account_id_fkey"
-		}),
+		}).onDelete("set null"),
 	foreignKey({
 			columns: [table.categoryId],
 			foreignColumns: [categories.id],
@@ -601,6 +619,7 @@ export const savingsContributions = pgTable("savings_contributions", {
 	note: text(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
+	index("idx_savings_contributions_goal_id").using("btree", table.goalId.asc().nullsLast().op("uuid_ops")),
 	foreignKey({
 			columns: [table.goalId],
 			foreignColumns: [savingsGoals.id],
@@ -621,6 +640,8 @@ export const savingsGoalContributions = pgTable("savings_goal_contributions", {
 	movementId: uuid("movement_id"),
 	notes: text(),
 }, (table) => [
+	index("idx_savings_goal_contributions_goal_id").using("btree", table.goalId.asc().nullsLast().op("uuid_ops")),
+	index("idx_savings_goal_contributions_movement_id").using("btree", table.movementId.asc().nullsLast().op("uuid_ops")).where(sql`(movement_id IS NOT NULL)`),
 	foreignKey({
 			columns: [table.goalId],
 			foreignColumns: [savingsGoals.id],
@@ -670,6 +691,9 @@ export const movements = pgTable("movements", {
 	index("idx_movements_subscription").using("btree", table.isSubscription.asc().nullsLast().op("bool_ops")).where(sql`(is_subscription = true)`),
 	index("idx_movements_subscription_end").using("btree", table.subscriptionEndDate.asc().nullsLast().op("date_ops")).where(sql`(subscription_end_date IS NOT NULL)`),
 	index("idx_movements_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_movements_kind").using("btree", table.kind.asc().nullsLast().op("text_ops")),
+	index("idx_movements_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
+	index("idx_movements_recurring_rule_id").using("btree", table.recurringRuleId.asc().nullsLast().op("uuid_ops")).where(sql`(recurring_rule_id IS NOT NULL)`),
 	foreignKey({
 			columns: [table.accountId],
 			foreignColumns: [accounts.id],
@@ -784,6 +808,7 @@ export const organizationMembers = pgTable("organization_members", {
 	role: appRole().default('member').notNull(),
 	joinedAt: timestamp("joined_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 }, (table) => [
+	index("idx_organization_members_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
 	foreignKey({
 			columns: [table.orgId],
 			foreignColumns: [organizations.id],

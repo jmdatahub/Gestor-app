@@ -241,26 +241,22 @@ export function SelectSearch({
       {isOpen && position && createPortal(
         <div
           ref={dropdownRef}
-          className={`select-menu select-menu--${position.direction}`}
+          className="ui-popover"
           style={{
-            position: 'fixed',
             top: position.top !== undefined ? position.top : 'auto',
             bottom: position.bottom !== undefined ? position.bottom : 'auto',
             left: position.left,
             width: position.width,
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column'
           }}
         >
           {/* Search Input Sticky Top */}
-          <div className="p-2 border-b border-gray-100 sticky top-0 bg-white z-10">
-             <div className="relative">
-                <Search size={14} className="absolute left-2 top-2.5 text-gray-400" />
+          <div className="ui-popover-search">
+             <div style={{ position: 'relative' }}>
+                <Search size={14} className="ui-popover-search-icon" />
                 <input
                   ref={searchInputRef}
                   type="text"
-                  className="w-full pl-8 pr-2 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="ui-popover-search-input"
                   placeholder={searchPlaceholder}
                   value={searchTerm}
                   onChange={(e) => {
@@ -268,15 +264,15 @@ export function SelectSearch({
                       setHighlightedIndex(0)
                       if (onSearchChange) onSearchChange(e.target.value)
                   }}
-                  onKeyDown={handleKeyDown} // Delegate key nav to parent handler logic
+                  onKeyDown={handleKeyDown}
                   onClick={(e) => e.stopPropagation()}
                 />
              </div>
           </div>
 
-          <div className="overflow-y-auto flex-1 max-h-[200px]">
+          <div className="ui-option-list">
             {filteredOptions.length === 0 && !showCreateOption ? (
-               <div className="p-3 text-sm text-gray-500 text-center">No hay resultados</div>
+               <div style={{ padding: '12px', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>No hay resultados</div>
             ) : (
                filteredOptions.map((option, index) => {
                  const isSelected = option.value === value
@@ -285,12 +281,12 @@ export function SelectSearch({
                  return (
                    <div
                      key={option.value}
-                     className={`select-option ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''} ${option.disabled ? 'disabled' : ''}`}
+                     className={`ui-option ${isSelected ? 'is-selected' : ''} ${isHighlighted ? 'is-highlighted' : ''} ${option.disabled ? 'is-disabled' : ''}`}
                      onClick={() => handleSelect(option)}
                      onMouseEnter={() => setHighlightedIndex(index)}
                    >
-                     <span className="truncate">{option.label}</span>
-                     {isSelected && <Check size={14} className="text-primary" />}
+                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{option.label}</span>
+                     {isSelected && <Check size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />}
                    </div>
                  )
                })
@@ -298,12 +294,15 @@ export function SelectSearch({
 
             {showCreateOption && (
                 <div
-                    className={`select-option text-primary ${highlightedIndex === filteredOptions.length ? 'highlighted' : ''}`}
+                    className={`ui-option ${highlightedIndex === filteredOptions.length ? 'is-highlighted' : ''}`}
+                    style={{ color: 'var(--primary)' }}
                     onClick={handleCreate}
                     onMouseEnter={() => setHighlightedIndex(filteredOptions.length)}
                 >
-                    <Plus size={14} className="mr-2" />
-                    Crear "{searchTerm}"
+                    <div className="ui-option-content">
+                        <Plus size={14} />
+                        <span>Crear "{searchTerm}"</span>
+                    </div>
                 </div>
             )}
           </div>

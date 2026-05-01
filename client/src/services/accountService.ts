@@ -21,10 +21,10 @@ export const accountTypes = [
   { value: 'broker', label: 'Broker / Inversión' }, { value: 'other', label: 'Otra' },
 ]
 
-export async function getUserAccounts(_userId: string, organizationId?: string | null): Promise<Account[]> {
+export async function getUserAccounts(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<Account[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Account[] }>('/api/v1/accounts', params)
+  const { data } = await api.get<{ data: Account[] }>('/api/v1/accounts', params, signal)
   return data
 }
 
@@ -77,15 +77,15 @@ export function buildAccountTree(accounts: AccountWithBalance[]): AccountNode[] 
 
 // Backward-compat aliases & helpers
 
-export async function getAccountsWithBalances(_userId: string, organizationId?: string | null): Promise<AccountWithBalance[]> {
+export async function getAccountsWithBalances(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<AccountWithBalance[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: AccountWithBalance[] }>('/api/v1/accounts', params)
+  const { data } = await api.get<{ data: AccountWithBalance[] }>('/api/v1/accounts', params, signal)
   return data
 }
 
-export async function fetchAccountsSummary(_userId: string, organizationId?: string | null): Promise<AccountWithBalance[]> {
-  return getAccountsWithBalances(_userId, organizationId)
+export async function fetchAccountsSummary(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<AccountWithBalance[]> {
+  return getAccountsWithBalances(_userId, organizationId, signal)
 }
 
 export async function toggleAccountActive(id: string, isActive: boolean): Promise<Account> {

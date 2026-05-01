@@ -17,8 +17,8 @@ export const dashboardKeys = {
 export const useAccountsSummary = (userId: string | null, workspaceId: string | null) => {
   return useQuery({
     queryKey: dashboardKeys.accountsSummary(userId!, workspaceId),
-    queryFn: async () => {
-      const data = await fetchAccountsSummary(userId!, workspaceId)
+    queryFn: async ({ signal }) => {
+      const data = await fetchAccountsSummary(userId!, workspaceId, signal)
       return accountSummarySchema.parse(data)
     },
     enabled: !!userId,
@@ -28,8 +28,8 @@ export const useAccountsSummary = (userId: string | null, workspaceId: string | 
 export const useFinancialDistribution = (userId: string | null, workspaceId: string | null) => {
   return useQuery({
     queryKey: dashboardKeys.financialDistribution(userId!, workspaceId),
-    queryFn: async () => {
-      const data = await getFinancialDistribution(userId!, workspaceId)
+    queryFn: async ({ signal }) => {
+      const data = await getFinancialDistribution(userId!, workspaceId, signal)
       return financialDistributionSchema.parse(data)
     },
     enabled: !!userId,
@@ -39,8 +39,8 @@ export const useFinancialDistribution = (userId: string | null, workspaceId: str
 export const useTopAccounts = (userId: string | null, workspaceId: string | null, rollupParents: boolean) => {
   return useQuery({
     queryKey: dashboardKeys.topAccounts(userId!, workspaceId, rollupParents),
-    queryFn: async () => {
-      const accountList = await getAccountBalancesSummary(userId!, { includeChildrenRollup: rollupParents }, workspaceId)
+    queryFn: async ({ signal }) => {
+      const accountList = await getAccountBalancesSummary(userId!, { includeChildrenRollup: rollupParents }, workspaceId, signal)
       if (!accountList) return []
       const validatedList = z.array(accountWithBalanceSchema).parse(accountList)
       return [...validatedList].sort((a, b) => b.balance - a.balance).slice(0, 5)

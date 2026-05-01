@@ -39,7 +39,9 @@ router.post('/login', async (req: Request, res: Response) => {
   if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
     res.status(400).json({ error: 'Email y contraseña requeridos' }); return
   }
-  const user = (await db.select().from(users).where(sql`LOWER(${users.email}) = LOWER(${email})`).limit(1))[0]
+  const user = (await db
+    .select({ id: users.id, email: users.email, name: users.name, role: users.role, avatarUrl: users.avatarUrl, isActive: users.isActive, passwordHash: users.passwordHash })
+    .from(users).where(sql`LOWER(${users.email}) = LOWER(${email})`).limit(1))[0]
   if (!user || !user.passwordHash) { res.status(401).json({ error: 'Credenciales inválidas' }); return }
   if (user.isActive === false) { res.status(403).json({ error: 'Cuenta desactivada' }); return }
   const ok = await bcrypt.compare(password, user.passwordHash)
@@ -113,7 +115,9 @@ router.post('/logout', (_req: Request, res: Response) => {
 router.post('/forgot-password', async (req: Request, res: Response) => {
   const { email } = req.body ?? {}
   if (typeof email !== 'string' || !email) { res.status(400).json({ error: 'Email requerido' }); return }
-  const user = (await db.select().from(users).where(sql`LOWER(${users.email}) = LOWER(${email})`).limit(1))[0]
+  const user = (await db
+    .select({ id: users.id, email: users.email, name: users.name })
+    .from(users).where(sql`LOWER(${users.email}) = LOWER(${email})`).limit(1))[0]
   if (!user) { res.json({ ok: true }); return }
   const token = crypto.randomBytes(32).toString('hex')
   const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString()
@@ -128,7 +132,9 @@ router.post('/reset-password', async (req: Request, res: Response) => {
   if (typeof token !== 'string' || typeof password !== 'string' || password.length < 8) {
     res.status(400).json({ error: 'Token y contraseña (mínimo 8 chars) requeridos' }); return
   }
-  const user = (await db.select().from(users).where(eq(users.passwordResetToken, token)).limit(1))[0]
+  const user = (await db
+    .select({ id: users.id, email: users.email, name: users.name, passwordResetExpires: users.passwordResetExpires })
+    .from(users).where(eq(users.passwordResetToken, token)).limit(1))[0]
   if (!user || !user.passwordResetExpires || new Date(user.passwordResetExpires) < new Date()) {
     res.status(400).json({ error: 'Token inválido o caducado' }); return
   }
@@ -145,7 +151,9 @@ router.post('/change-password', authMiddleware, async (req: Request, res: Respon
   if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || newPassword.length < 8) {
     res.status(400).json({ error: 'Contraseñas requeridas (nueva mínimo 8 chars)' }); return
   }
-  const user = (await db.select().from(users).where(eq(users.id, authReq.userId!)).limit(1))[0]
+  const user = (await db
+    .select({ id: users.id, email: users.email, name: users.name, passwordHash: users.passwordHash })
+    .from(users).where(eq(users.id, authReq.userId!)).limit(1))[0]
   if (!user || !user.passwordHash) { res.status(404).json({ error: 'Usuario no encontrado' }); return }
   const ok = await bcrypt.compare(currentPassword, user.passwordHash)
   if (!ok) { res.status(401).json({ error: 'Contraseña actual incorrecta' }); return }

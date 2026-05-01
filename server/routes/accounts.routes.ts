@@ -4,6 +4,7 @@ import { db } from '../db/connection.js'
 import { accounts } from '../db/schema.js'
 import { and, eq, isNull, asc } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { z } from 'zod'
 
 const router = Router()
 
@@ -48,60 +49,110 @@ function userFilter(req: AuthRequest, orgId?: string | null) {
   return and(eq(accounts.userId, req.userId!), isNull(accounts.organizationId))
 }
 
+const AccountCreateSchema = z.object({
+  name:              z.string().min(1).max(150),
+  type:              z.string().max(50).optional(),
+  description:       z.string().max(500).optional().nullable(),
+  color:             z.string().max(30).optional().nullable(),
+  icon:              z.string().max(50).optional().nullable(),
+  currency:          z.string().max(10).optional(),
+  balance:           z.string().or(z.number()).transform(String).optional(),
+  is_active:         z.boolean().optional(),
+  isActive:          z.boolean().optional(),
+  parent_account_id: z.string().uuid().optional().nullable(),
+  parentAccountId:   z.string().uuid().optional().nullable(),
+  organization_id:   z.string().uuid().optional().nullable(),
+  organizationId:    z.string().uuid().optional().nullable(),
+})
+
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const orgId = req.query.org_id as string | undefined
-  const rows = await db.select().from(accounts)
-    .where(and(userFilter(req, orgId), isNull(accounts.deletedAt)))
-    .orderBy(asc(accounts.createdAt))
-  res.json({ data: rows.map(mapOut) })
+  try {
+    const orgId = req.query.org_id as string | undefined
+    const rows = await db.select().from(accounts)
+      .where(and(userFilter(req, orgId), isNull(accounts.deletedAt)))
+      .orderBy(asc(accounts.createdAt))
+    res.json({ data: rows.map(mapOut) })
+  } catch (err) {
+    console.error('[accounts GET /]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
 })
 
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const id = req.params.id as string
-  const row = (await db.select().from(accounts)
-    .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!)))
-    .limit(1))[0]
-  if (!row) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
-  res.json({ data: mapOut(row) })
+  try {
+    const id = req.params.id as string
+    const row = (await db.select().from(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!)))
+      .limit(1))[0]
+    if (!row) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
+    res.json({ data: mapOut(row) })
+  } catch (err) {
+    console.error('[accounts GET /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
 })
 
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const b = req.body
-  const [row] = await db.insert(accounts).values({
-    name:            b.name,
-    type:            b.type            ?? 'general',
-    description:     b.description     ?? null,
-    color:           b.color           ?? null,
-    icon:            b.icon            ?? null,
-    currency:        b.currency        ?? 'EUR',
-    balance:         b.balance         ?? '0',
-    userId:          req.userId!,
-    isActive:        b.is_active       ?? b.isActive       ?? true,
-    parentAccountId: b.parent_account_id ?? b.parentAccountId ?? null,
-    organizationId:  b.organization_id ?? b.organizationId  ?? null,
-  }).returning()
-  res.status(201).json({ data: mapOut(row) })
+  try {
+    let parsed: z.infer<typeof AccountCreateSchema>
+    try {
+      parsed = AccountCreateSchema.parse(req.body)
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: 'Datos inválidos', details: err.errors }); return
+      }
+      throw err
+    }
+    const b = parsed
+    const [row] = await db.insert(accounts).values({
+      name:            b.name,
+      type:            b.type            ?? 'general',
+      description:     b.description     ?? null,
+      color:           b.color           ?? null,
+      icon:            b.icon            ?? null,
+      currency:        b.currency        ?? 'EUR',
+      balance:         b.balance         ?? '0',
+      userId:          req.userId!,
+      isActive:        b.is_active       ?? b.isActive       ?? true,
+      parentAccountId: b.parent_account_id ?? b.parentAccountId ?? null,
+      organizationId:  b.organization_id ?? b.organizationId  ?? null,
+    }).returning()
+    res.status(201).json({ data: mapOut(row) })
+  } catch (err) {
+    console.error('[accounts POST /]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
 })
 
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const id = req.params.id as string
-  const existing = (await db.select({ id: accounts.id }).from(accounts)
-    .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!))).limit(1))[0]
-  if (!existing) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
-  const [updated] = await db.update(accounts)
-    .set(mapInPartial(req.body) as any)
-    .where(eq(accounts.id, id))
-    .returning()
-  res.json({ data: mapOut(updated) })
+  try {
+    const id = req.params.id as string
+    const existing = (await db.select({ id: accounts.id }).from(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!))).limit(1))[0]
+    if (!existing) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
+    const [updated] = await db.update(accounts)
+      .set(mapInPartial(req.body) as any)
+      .where(eq(accounts.id, id))
+      .returning()
+    res.json({ data: mapOut(updated) })
+  } catch (err) {
+    console.error('[accounts PATCH /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
 })
 
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const id = req.params.id as string
-  const existing = (await db.select({ id: accounts.id }).from(accounts)
-    .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!))).limit(1))[0]
-  if (!existing) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
-  await db.update(accounts).set({ deletedAt: new Date().toISOString() }).where(eq(accounts.id, id))
-  res.json({ ok: true })
+  try {
+    const id = req.params.id as string
+    const existing = (await db.select({ id: accounts.id }).from(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!))).limit(1))[0]
+    if (!existing) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
+    await db.update(accounts).set({ deletedAt: new Date().toISOString() }).where(eq(accounts.id, id))
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[accounts DELETE /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
 })
 
 export default router

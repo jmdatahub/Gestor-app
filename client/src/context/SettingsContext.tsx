@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
 
 // ==============================================
 // TYPES
@@ -129,11 +129,10 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     root.style.removeProperty('--table-row-pad')
   }, [settings.density])
 
-  const updateSettings = (partial: Partial<AppSettings>) => {
-    console.log('[SettingsContext] Updating settings with:', partial)
+  const updateSettings = useCallback((partial: Partial<AppSettings>) => {
     setSettings(prev => {
       const updated = { ...prev }
-      
+
       // Handle nested notifications object
       if (partial.notifications) {
         updated.notifications = {
@@ -141,25 +140,29 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
           ...partial.notifications,
         }
       }
-      
+
       // Apply other settings
       Object.keys(partial).forEach(key => {
         if (key !== 'notifications') {
           (updated as any)[key] = (partial as any)[key]
         }
       })
-      
-      console.log('[SettingsContext] New settings state:', updated)
+
       return updated
     })
-  }
+  }, [])
 
-  const resetSettings = () => {
+  const resetSettings = useCallback(() => {
     setSettings(defaultSettings)
-  }
+  }, [])
+
+  const value = useMemo(
+    () => ({ settings, updateSettings, resetSettings }),
+    [settings, updateSettings, resetSettings],
+  )
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings, resetSettings }}>
+    <SettingsContext.Provider value={value}>
       {children}
     </SettingsContext.Provider>
   )

@@ -210,9 +210,15 @@ export async function getMonthlyInsights(
       }
     }
 
+    // d/e/f) Fetch savings goals, investments, and debts in parallel
+    const [goalsRes, investmentsRes, debtsRes] = await Promise.all([
+      api.get<{ data: any[] }>('/api/v1/savings-goals'),
+      api.get<{ data: any[] }>('/api/v1/investments'),
+      api.get<{ data: any[] }>('/api/v1/debts'),
+    ])
+
     // d) Savings goals progress
-    const { data: allGoals } = await api.get<{ data: any[] }>('/api/v1/savings-goals')
-    const goals = (allGoals || []).filter((g: any) => !g.is_completed)
+    const goals = (goalsRes.data || []).filter((g: any) => !g.is_completed)
 
     for (const goal of (goals || [])) {
       const progress = goal.target_amount > 0 
@@ -232,9 +238,7 @@ export async function getMonthlyInsights(
     }
 
     // e) Investment changes
-    const { data: investments } = await api.get<{ data: any[] }>('/api/v1/investments')
-
-    for (const inv of (investments || [])) {
+    for (const inv of (investmentsRes.data || [])) {
       const changePercent = inv.buy_price > 0 
         ? ((inv.current_price - inv.buy_price) / inv.buy_price) * 100 
         : 0
@@ -258,9 +262,8 @@ export async function getMonthlyInsights(
     const in15Days = new Date()
     in15Days.setDate(now.getDate() + 15)
 
-    const { data: allDebts } = await api.get<{ data: any[] }>('/api/v1/debts')
     const in15DaysStr = in15Days.toISOString().split('T')[0]
-    const debts = (allDebts || []).filter((d: any) =>
+    const debts = (debtsRes.data || []).filter((d: any) =>
       !d.is_closed && d.due_date != null && d.due_date <= in15DaysStr
     )
 

@@ -21,11 +21,13 @@ import { UiCard } from '../../components/ui/UiCard'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiTextarea } from '../../components/ui/UiTextarea'
+import { useToast } from '../../components/Toast'
 
 export default function DebtDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { settings } = useSettings()
+  const toast = useToast()
   const [debt, setDebt] = useState<Debt | null>(null)
   const [movements, setMovements] = useState<DebtMovement[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,13 +74,20 @@ export default function DebtDetail() {
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!id || !debt) return
+
+    const parsedAmount = parseFloat(movementAmount)
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      toast.error('Importe inválido', 'El importe debe ser un número mayor a 0')
+      return
+    }
+
     setSubmitting(true)
 
     try {
       await addDebtMovement({
         debt_id: id,
         type: movementType as 'payment' | 'increase',
-        amount: parseFloat(movementAmount),
+        amount: parsedAmount,
         date: movementDate,
         note: movementNote || null
       })
@@ -86,8 +95,10 @@ export default function DebtDetail() {
       setMovementAmount('')
       setMovementNote('')
       loadData()
-    } catch (error) {
+      toast.success('Movimiento registrado', 'El movimiento se ha añadido correctamente')
+    } catch (error: any) {
       console.error('Error adding movement:', error)
+      toast.error('Error al registrar', error?.message || 'No se pudo añadir el movimiento')
     } finally {
       setSubmitting(false)
     }
@@ -103,8 +114,10 @@ export default function DebtDetail() {
       })
       setEditing(false)
       loadData()
-    } catch (error) {
+      toast.success('Deuda actualizada', 'Los cambios se han guardado correctamente')
+    } catch (error: any) {
       console.error('Error updating debt:', error)
+      toast.error('Error al guardar', error?.message || 'No se pudo actualizar la deuda')
     }
   }
 

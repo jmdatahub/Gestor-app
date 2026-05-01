@@ -14,8 +14,8 @@ export const movementKeys = {
 export const useMonthlyMovementsSummary = (userId: string | null, workspaceId: string | null) => {
   return useQuery({
     queryKey: movementKeys.monthly(userId!, workspaceId),
-    queryFn: async () => {
-      const movements = await fetchMonthlyMovements(userId!, workspaceId)
+    queryFn: async ({ signal }) => {
+      const movements = await fetchMonthlyMovements(userId!, workspaceId, signal)
       const data = calculateMonthlySummary(movements || [])
       return monthlyMovementsSummarySchema.parse(data)
     },
@@ -26,8 +26,8 @@ export const useMonthlyMovementsSummary = (userId: string | null, workspaceId: s
 export const usePendingClassificationCount = (userId: string | null, workspaceId: string | null) => {
   return useQuery({
     queryKey: movementKeys.pendingClassificationCount(userId!, workspaceId),
-    queryFn: async () => {
-      const data = await getPendingClassificationCount(userId!, workspaceId)
+    queryFn: async ({ signal }) => {
+      const data = await getPendingClassificationCount(userId!, workspaceId, signal)
       return z.number().parse(data)
     },
     enabled: !!userId,
@@ -37,7 +37,7 @@ export const usePendingClassificationCount = (userId: string | null, workspaceId
 export const usePendingRecurringCount = (userId: string | null) => {
   return useQuery({
     queryKey: movementKeys.pendingRecurringCount(userId!),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       // Trigger generation in background first
       try {
         const generated = await generatePendingMovementsForUser(userId!)
@@ -47,8 +47,8 @@ export const usePendingRecurringCount = (userId: string | null) => {
       } catch (err) {
         console.error('Error generating recurring:', err)
       }
-      
-      const count = await getPendingMovementsCount(userId!)
+
+      const count = await getPendingMovementsCount(userId!, signal)
       return z.number().parse(count)
     },
     enabled: !!userId,

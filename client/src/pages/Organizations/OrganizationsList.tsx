@@ -9,6 +9,7 @@ import { Plus, Building, Users, ArrowRight, Check, Crown, Shield, User, Eye, Che
 import { UiCard } from '../../components/ui/UiCard'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { UiInput } from '../../components/ui/UiInput'
+import { useToast } from '../../components/Toast'
 
 // Helper to get role icon and color
 const getRoleInfo = (role: string) => {
@@ -31,6 +32,7 @@ export default function OrganizationsList() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { currentWorkspace, workspaces, switchWorkspace, isLoading } = useWorkspace()
+  const toast = useToast()
   
   // Modal State
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -65,7 +67,7 @@ export default function OrganizationsList() {
       window.location.reload()
     } catch (err: any) {
       console.error('Error deleting organization:', err)
-      alert(err.message || 'Error al eliminar la organización')
+      toast.error('Error al eliminar', err.message || 'No se pudo eliminar la organización')
     }
   }
 
@@ -92,7 +94,6 @@ export default function OrganizationsList() {
         setLoadingMembers(prev => new Set(prev).add(orgId))
         try {
           const members = await getOrganizationMembers(orgId)
-          console.log('[DEBUG] OrganizationsList - Members loaded:', members)
           setOrgMembers(prev => ({ ...prev, [orgId]: members }))
         } catch (err) {
           console.error('Error loading members:', err)
@@ -443,7 +444,7 @@ export default function OrganizationsList() {
                     }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                         <Users size={14} />
-                        {members.length > 0 ? `${members.length} miembro${members.length !== 1 ? 's' : ''}` : 'Cargando...'}
+                        {isLoadingMembers ? 'Cargando...' : orgMembers[ws.org_id] ? `${members.length} miembro${members.length !== 1 ? 's' : ''}` : 'Ver miembros'}
                       </span>
                       
                       {/* Parent Org Badge */}

@@ -12,7 +12,7 @@ interface CategoryPickerProps {
   error?: string
 }
 
-export function CategoryPicker({ value, onChange, type: _type = 'expense', label = 'Categoría', error }: CategoryPickerProps) {
+export function CategoryPicker({ value, onChange, type = 'expense', label = 'Categoría', error }: CategoryPickerProps) {
   const [categories, setCategories] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -20,15 +20,28 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 })
   
   const containerRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadCategories()
   }, [])
 
+  // Clear selection when type changes if the current value belongs to the wrong type
+  useEffect(() => {
+    if (!value || value.startsWith('__new__:')) return
+    const selectedCat = categories.find(c => c.id === value)
+    if (selectedCat && selectedCat.type !== type) {
+      onChange('')
+    }
+  }, [type])
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      const inContainer = containerRef.current?.contains(target)
+      const inDropdown = dropdownRef.current?.contains(target)
+      if (!inContainer && !inDropdown) {
         setIsOpen(false)
       }
     }
@@ -53,9 +66,12 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
         setTimeout(() => inputRef.current?.focus(), 50)
       }
 
-      // 3. Add scroll listener to close on scroll (prevent floating)
-      const handleScroll = () => setIsOpen(false)
-      window.addEventListener('scroll', handleScroll, true) // capture=true to catch scroll in modal
+      // 3. Add scroll listener to close on scroll (prevent floating), but ignore scroll inside the dropdown itself
+      const handleScroll = (e: Event) => {
+        if (dropdownRef.current?.contains(e.target as Node)) return
+        setIsOpen(false)
+      }
+      window.addEventListener('scroll', handleScroll, true)
       window.addEventListener('resize', handleScroll)
 
       return () => {
@@ -80,6 +96,7 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
   const normalize = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
   const filtered = categories.filter(c => {
+    if (c.type !== type) return false
     if (!searchTerm.trim()) return true
     return normalize(c.name).startsWith(normalize(searchTerm))
   })
@@ -190,7 +207,7 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
 
         {/* Dropdown (Portal) */}
         {isOpen && createPortal(
-          <div style={{
+          <div ref={dropdownRef} style={{
             position: 'fixed', // Fixed to viewport to escape modal clipping
             top: coords.top,
             left: coords.left,
@@ -204,7 +221,7 @@ export function CategoryPicker({ value, onChange, type: _type = 'expense', label
             zIndex: 9999, // Super high z-index
             overflow: 'hidden',
             animation: 'dropIn 0.15s ease-out',
-            display: 'flex', 
+            display: 'flex',
             flexDirection: 'column'
           }}>
             <style>{`@keyframes dropIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }`}</style>

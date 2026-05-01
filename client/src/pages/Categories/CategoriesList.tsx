@@ -12,10 +12,12 @@ import { UiModal, UiModalBody, UiModalFooter } from '../../components/ui/UiModal
 import { Panel } from '../../components/shared/Panel'
 import { EmptyState } from '../../components/shared/EmptyState'
 import { StatCard } from '../../components/shared/StatCard'
+import { useToast } from '../../components/Toast'
 
 export default function CategoriesList() {
   const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
+  const toast = useToast()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -66,22 +68,28 @@ export default function CategoriesList() {
     e.preventDefault()
     setSubmitting(true)
 
-    if (!user) return
+    if (!user) {
+      setSubmitting(false)
+      return
+    }
 
     try {
       if (editingCategory) {
         // Update existing
         await api.patch('/api/v1/categories/' + editingCategory.id, { name, kind, color })
+        toast.success('Categoría actualizada', `"${name}" se ha guardado correctamente`)
       } else {
         // Create new
         const orgId = currentWorkspace?.id || null
         await api.post('/api/v1/categories', { name, kind, color, organizationId: orgId })
+        toast.success('Categoría creada', `"${name}" se ha creado correctamente`)
       }
 
       setShowModal(false)
       loadCategories()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving category:', error)
+      toast.error('Error al guardar', error?.message || 'No se pudo guardar la categoría')
     } finally {
       setSubmitting(false)
     }
@@ -93,8 +101,10 @@ export default function CategoriesList() {
     try {
       await api.delete('/api/v1/categories/' + categoryId)
       loadCategories()
-    } catch (error) {
+      toast.success('Categoría eliminada', 'La categoría se ha eliminado correctamente')
+    } catch (error: any) {
       console.error('Error deleting category:', error)
+      toast.error('Error al eliminar', error?.message || 'No se pudo eliminar la categoría')
     }
   }
 

@@ -47,7 +47,7 @@ export function useMonthlyTrend(userId: string | null, workspaceId: string | nul
   return useQuery({
     queryKey: trendKeys.monthly(userId!, workspaceId, months),
     enabled: !!userId,
-    queryFn: async (): Promise<MonthlyTrendPoint[]> => {
+    queryFn: async ({ signal }): Promise<MonthlyTrendPoint[]> => {
       const now = new Date()
       const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
       const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1)
@@ -61,7 +61,7 @@ export function useMonthlyTrend(userId: string | null, workspaceId: string | nul
         endDate: toIso(end),
         limit: 5000,
         ...orgParams,
-      })
+      }, signal)
 
       const buckets = new Map<string, MonthlyTrendPoint>()
       for (let i = 0; i < months; i++) {
@@ -90,7 +90,7 @@ export function useDailySpending(userId: string | null, workspaceId: string | nu
   return useQuery({
     queryKey: trendKeys.daily(userId!, workspaceId, days),
     enabled: !!userId,
-    queryFn: async (): Promise<DailySpendingPoint[]> => {
+    queryFn: async ({ signal }): Promise<DailySpendingPoint[]> => {
       const end = new Date()
       end.setHours(0, 0, 0, 0)
       const start = new Date(end)
@@ -106,7 +106,7 @@ export function useDailySpending(userId: string | null, workspaceId: string | nu
         kind: 'expense',
         limit: 5000,
         ...orgParamsDS,
-      })
+      }, signal)
 
       const map = new Map<string, number>()
       for (const row of data ?? []) {
@@ -129,7 +129,7 @@ export function useMonthTopCategories(
   return useQuery({
     queryKey: [...trendKeys.topCategories(userId!, workspaceId, year, month), kind],
     enabled: !!userId,
-    queryFn: async (): Promise<CategorySlice[]> => {
+    queryFn: async ({ signal }): Promise<CategorySlice[]> => {
       const start = new Date(year, month - 1, 1)
       const end = new Date(year, month, 0)
 
@@ -143,7 +143,7 @@ export function useMonthTopCategories(
         kind,
         limit: 5000,
         ...orgParamsCat,
-      })
+      }, signal)
 
       const map = new Map<string, { value: number; color?: string }>()
       for (const row of (data ?? [])) {

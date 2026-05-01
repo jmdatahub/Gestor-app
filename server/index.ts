@@ -27,6 +27,7 @@ import adminRoutes from './routes/admin.routes.js'
 import crmSyncRoutes from './routes/crm-sync.routes.js'
 import notifyRoutes from './routes/notify.routes.js'
 import telegramRoutes from './routes/telegram.routes.js'
+import { processRecurringRules } from './jobs/recurringProcessor.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -42,6 +43,7 @@ app.set('trust proxy', 1)
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false })
+// Stricter limiter for password-reset and change-password endpoints (10 per hour per IP)
 const passwordLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false })
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
@@ -76,8 +78,13 @@ app.get('/api/health', (_req, res) => {
 })
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
-app.use('/api/auth', authLimiter, optionalAuth, authRoutes)
+// Password-reset and change-password get a stricter limiter applied BEFORE the
+// general authLimiter so they are counted separately.  These must be registered
+// before the catch-all /api/auth mount.
+app.use('/api/auth/forgot-password', passwordLimiter)
+app.use('/api/auth/reset-password', passwordLimiter)
 app.use('/api/auth/change-password', passwordLimiter)
+app.use('/api/auth', authLimiter, optionalAuth, authRoutes)
 
 app.use('/api/v1/movements', movementsRoutes)
 app.use('/api/v1/accounts', accountsRoutes)
@@ -118,4 +125,15 @@ app.listen(PORT, () => {
   console.log(`📊 Health: http://localhost:${PORT}/api/health`)
   console.log(`🌍 Env: ${process.env.NODE_ENV || 'development'}`)
   console.log(`🛡️  CORS: ${allowedOrigins.join(', ')}`)
+
+  // ─── Recurring rules processor ────────────────────────────────────────────
+  // Run once on startup to catch up on any missed occurrences, then hourly.
+  processRecurringRules().catch(err =>
+    console.error('[recurringProcessor] Startup run failed:', err)
+  )
+  setInterval(() => {
+    processRecurringRules().catch(err =>
+      console.error('[recurringProcessor] Scheduled run failed:', err)
+    )
+  }, 3_600_000) // every hour
 })

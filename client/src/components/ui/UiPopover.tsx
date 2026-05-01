@@ -132,17 +132,24 @@ export function UiPopover({
   if (isMobile) {
       return createPortal(
           <>
-             <div 
-               className="fixed inset-0 bg-black/50 z-[9998] transition-opacity" 
+             <div
+               className="fixed inset-0 z-[9998] transition-opacity"
+               style={{ background: 'rgba(0,0,0,0.6)', animation: 'fadeIn 0.2s ease-out' }}
                onClick={onClose}
-               style={{ animation: 'fadeIn 0.2s ease-out' }}
              />
-             <div 
+             <div
                ref={contentRef}
-               className={`dp-mobile-sheet fixed bottom-0 left-0 right-0 bg-white rounded-t-xl z-[9999] p-4 flex flex-col max-h-[80vh] overflow-auto shadow-2xl ${className}`}
-               style={{ animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+               className={`dp-mobile-sheet fixed bottom-0 left-0 right-0 z-[9999] flex flex-col max-h-[80vh] overflow-auto ${className}`}
+               style={{
+                 background: 'var(--bg-card)',
+                 borderTop: '1px solid var(--border-color)',
+                 borderRadius: '16px 16px 0 0',
+                 padding: '1rem',
+                 boxShadow: '0 -8px 32px rgba(0,0,0,0.4)',
+                 animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+               }}
              >
-                <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-4 shrink-0" />
+                <div style={{ width: 40, height: 4, background: 'var(--border-color)', borderRadius: 2, margin: '0 auto 1rem' }} />
                 {children}
              </div>
           </>,
@@ -156,14 +163,14 @@ export function UiPopover({
   return createPortal(
     <div
       ref={contentRef}
-      className={`ui-popover fixed bg-white rounded-lg shadow-lg border border-gray-200 z-[9999] overflow-auto ${className}`}
+      className={`ui-popover ${className}`}
       style={{
         top: position.top,
         bottom: position.bottom,
         left: position.left,
         width: position.width,
         maxHeight: position.maxHeight,
-        animation: 'fadeIn 0.15s ease-out',
+        animation: 'popIn 0.15s cubic-bezier(0.16, 1, 0.3, 1)',
         ...style
       }}
       onClick={(e) => e.stopPropagation()}

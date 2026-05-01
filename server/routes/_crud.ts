@@ -66,7 +66,9 @@ export function createCrudRouter(
 
   // POST /
   router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
-    const [row] = await db.insert(table).values({ ...req.body, userId: req.userId! }).returning()
+    // Strip protected fields: userId and organizationId are set server-side only
+    const { userId: _u, organizationId: _o, id: _id, deletedAt: _d, createdAt: _c, updatedAt: _upd, ...safeBody } = req.body ?? {}
+    const [row] = await db.insert(table).values({ ...safeBody, userId: req.userId! }).returning()
     res.status(201).json({ data: row })
   })
 
@@ -76,7 +78,9 @@ export function createCrudRouter(
       .where(and(eq((table as any).id, req.params.id), eq((table as any).userId, req.userId!)))
       .limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'No encontrado' }); return }
-    const [updated] = await db.update(table).set(req.body).where(eq((table as any).id, req.params.id)).returning()
+    // Strip protected fields that must never be overwritten by the client
+    const { userId: _u, organizationId: _o, id: _id, deletedAt: _d, createdAt: _c, updatedAt: _upd, ...safeBody } = req.body ?? {}
+    const [updated] = await db.update(table).set(safeBody).where(eq((table as any).id, req.params.id)).returning()
     res.json({ data: updated })
   })
 

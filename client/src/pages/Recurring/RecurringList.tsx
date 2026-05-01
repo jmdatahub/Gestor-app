@@ -24,6 +24,7 @@ import { UiNumber } from '../../components/ui/UiNumber'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { SkeletonList } from '../../components/Skeleton'
 import { CategoryPicker } from '../../components/domain/CategoryPicker'
+import { useToast } from '../../components/Toast'
 
 export default function RecurringList() {
   const { t, language } = useI18n()
@@ -31,6 +32,7 @@ export default function RecurringList() {
   const { currentWorkspace } = useWorkspace()  // Add workspace context
   const createRuleMutation = useCreateRecurringRule()
   const toggleRuleMutation = useToggleRecurringRuleActive()
+  const toast = useToast()
   const [rules, setRules] = useState<RecurringRule[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [categories, setCategories] = useState<{ id: string; name: string; type: string }[]>([])
@@ -48,6 +50,7 @@ export default function RecurringList() {
   const [dayOfMonth, setDayOfMonth] = useState(1)
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
 
   // Reload when workspace changes
   useEffect(() => {
@@ -67,7 +70,7 @@ export default function RecurringList() {
       setRules(rulesData)
       setAccounts(accountsData)
       setCategories(categoriesResponse.data || [])
-      
+
       const generalAccount = accountsData.find(a => a.type === 'general')
       if (generalAccount) setAccountId(generalAccount.id)
     } catch (error) {
@@ -79,26 +82,57 @@ export default function RecurringList() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError('')
+
+    // Form validation
+    const parsedAmount = parseFloat(amount)
+    if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      setFormError(language === 'es'
+        ? 'El importe debe ser un número positivo.'
+        : 'Amount must be a positive number.')
+      return
+    }
+    if (!accountId) {
+      setFormError(language === 'es'
+        ? 'Selecciona una cuenta.'
+        : 'Please select an account.')
+      return
+    }
+    // Clamp dayOfMonth to 1–31
+    const clampedDay = Math.max(1, Math.min(31, dayOfMonth))
+
     setSubmitting(true)
 
     if (!user) return
 
     try {
       // Calculate initial next_occurrence
-      const nextOccurrence = new Date(startDate)
-      
+      const startDateObj = new Date(startDate)
+
+      let nextOccurrence: Date
+
       if (frequency === 'weekly') {
+        nextOccurrence = new Date(startDateObj)
         const currentDay = nextOccurrence.getDay()
         let daysToAdd = dayOfWeek - currentDay
         if (daysToAdd < 0) daysToAdd += 7
         nextOccurrence.setDate(nextOccurrence.getDate() + daysToAdd)
       } else {
-        const targetDay = Math.min(dayOfMonth, new Date(nextOccurrence.getFullYear(), nextOccurrence.getMonth() + 1, 0).getDate())
-        nextOccurrence.setDate(targetDay)
-        if (nextOccurrence < new Date(startDate)) {
-          nextOccurrence.setMonth(nextOccurrence.getMonth() + 1)
-          const lastDay = new Date(nextOccurrence.getFullYear(), nextOccurrence.getMonth() + 1, 0).getDate()
-          nextOccurrence.setDate(Math.min(dayOfMonth, lastDay))
+        // Monthly: clamp target day to the start month's max days
+        const startYear = startDateObj.getFullYear()
+        const startMonth = startDateObj.getMonth()
+        const maxDaysInStartMonth = new Date(startYear, startMonth + 1, 0).getDate()
+        const targetDay = Math.min(clampedDay, maxDaysInStartMonth)
+
+        nextOccurrence = new Date(startYear, startMonth, targetDay)
+
+        // If the calculated date is before startDate, advance one month and recalculate
+        if (nextOccurrence < startDateObj) {
+          const nextMonth = startMonth + 1
+          const nextYear = nextMonth > 11 ? startYear + 1 : startYear
+          const normalizedMonth = nextMonth > 11 ? 0 : nextMonth
+          const maxDaysInNextMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate()
+          nextOccurrence = new Date(nextYear, normalizedMonth, Math.min(clampedDay, maxDaysInNextMonth))
         }
       }
 
@@ -107,21 +141,32 @@ export default function RecurringList() {
         organization_id: currentWorkspace?.id || null, // Pass organization_id
         account_id: accountId,
         kind,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         category: category || null,
         description: description || null,
         frequency,
         day_of_week: frequency === 'weekly' ? dayOfWeek : null,
-        day_of_month: frequency === 'monthly' ? dayOfMonth : null,
+        day_of_month: frequency === 'monthly' ? clampedDay : null,
         next_occurrence: nextOccurrence.toISOString().split('T')[0]
       }
 
       await createRuleMutation.mutateAsync(input)
+      // Load updated list before closing modal so new rule appears immediately
+      await loadData()
       setShowModal(false)
       resetForm()
-      loadData()
+      toast.success(
+        language === 'es' ? 'Regla creada' : 'Rule created',
+        language === 'es' ? 'La regla recurrente se ha guardado.' : 'The recurring rule has been saved.'
+      )
     } catch (error) {
       console.error('Error creating rule:', error)
+      toast.error(
+        language === 'es' ? 'Error al crear la regla' : 'Failed to create rule',
+        language === 'es'
+          ? 'No se pudo guardar la regla recurrente. Inténtalo de nuevo.'
+          : 'Could not save the recurring rule. Please try again.'
+      )
     } finally {
       setSubmitting(false)
     }
@@ -133,6 +178,12 @@ export default function RecurringList() {
       loadData()
     } catch (error) {
       console.error('Error toggling rule:', error)
+      toast.error(
+        language === 'es' ? 'Error al cambiar estado' : 'Failed to update rule',
+        language === 'es'
+          ? 'No se pudo cambiar el estado de la regla.'
+          : 'Could not update the rule status.'
+      )
     }
   }
 
@@ -145,6 +196,7 @@ export default function RecurringList() {
     setDayOfWeek(1)
     setDayOfMonth(1)
     setStartDate(new Date().toISOString().split('T')[0])
+    setFormError('')
     const generalAccount = accounts.find(a => a.type === 'general')
     if (generalAccount) setAccountId(generalAccount.id)
   }
@@ -254,7 +306,10 @@ export default function RecurringList() {
                       <button
                         className={`btn btn-icon ${rule.is_active ? 'btn-ghost' : 'btn-success'}`}
                         onClick={() => handleToggle(rule)}
-                        title={rule.is_active ? t('common.active') : t('common.inactive')}
+                        title={rule.is_active ? t('recurring.inactive') : t('recurring.active')}
+                        aria-label={rule.is_active
+                          ? (language === 'es' ? 'Desactivar regla' : 'Deactivate rule')
+                          : (language === 'es' ? 'Activar regla' : 'Activate rule')}
                       >
                         {rule.is_active ? <PowerOff size={16} /> : <Power size={16} />}
                       </button>
@@ -269,22 +324,36 @@ export default function RecurringList() {
       )}
 
       {/* Create Modal */}
-      <UiModal 
-        isOpen={showModal} 
-        onClose={() => setShowModal(false)}
+      <UiModal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setFormError('') }}
         title={t('recurring.modal.newTitle')}
         width="500px"
       >
         <form onSubmit={handleCreate}>
           <UiModalBody>
+            {formError && (
+              <div style={{
+                marginBottom: '1rem',
+                padding: '0.625rem 0.875rem',
+                borderRadius: '6px',
+                background: 'var(--danger-light, #fff5f5)',
+                border: '1px solid var(--danger, #e53e3e)',
+                color: 'var(--danger, #e53e3e)',
+                fontSize: '0.875rem'
+              }}>
+                {formError}
+              </div>
+            )}
+
             <div className="form-group">
               <UiField label={t('recurring.modal.type')}>
                 <UiSelect
                   value={kind}
-                  onChange={(val) => setKind(val as 'income' | 'expense')}
+                  onChange={(val) => { setKind(val as 'income' | 'expense'); setCategory('') }}
                   options={[
-                      { value: 'expense', label: t('movements.expense') },
-                      { value: 'income', label: t('movements.income') }
+                      { value: 'expense', label: t('movements.type.expense') },
+                      { value: 'income', label: t('movements.type.income') }
                   ]}
                 />
               </UiField>
@@ -303,7 +372,7 @@ export default function RecurringList() {
               <div className="form-row">
               <div style={{ flex: 1 }}>
                 <UiNumber
-                    label={`${t('recurring.amount')} (€)`}
+                    label={t('recurring.amount')}
                     value={amount}
                     onChange={(val: string) => setAmount(val)}
                     placeholder="0.00"
@@ -369,7 +438,7 @@ export default function RecurringList() {
                         value={dayOfMonth}
                         onChange={(val: string) => {
                             const num = parseInt(val);
-                            if (!isNaN(num)) setDayOfMonth(num);
+                            if (!isNaN(num)) setDayOfMonth(Math.max(1, Math.min(31, num)));
                         }}
                         min={1}
                         max={31}
@@ -390,7 +459,7 @@ export default function RecurringList() {
             </div>
           </UiModalBody>
           <UiModalFooter>
-             <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
+             <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setFormError('') }}>
               {t('common.cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>

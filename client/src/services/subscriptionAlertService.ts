@@ -73,14 +73,13 @@ export async function countPendingSubscriptionAlerts(userId: string): Promise<{
   expiringIn7Days: number
   toCancel: number
 }> {
-  const [expiring, toCancel] = await Promise.all([
-    getExpiringSubscriptions(userId, 7),
-    getSubscriptionsToCancel(userId, 7)
-  ])
+  // Fetch once and derive both counts — avoids two identical API calls.
+  const expiring = await getExpiringSubscriptions(userId, 7)
+  const toCancel = expiring.filter(s => s.auto_renew === false)
 
   return {
     expiringIn7Days: expiring.length,
-    toCancel: toCancel.length
+    toCancel: toCancel.length,
   }
 }
 

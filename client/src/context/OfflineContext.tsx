@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { 
-  isOnline as checkOnline, 
-  onOnlineStatusChange, 
-  syncPendingChanges, 
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react'
+import {
+  isOnline as checkOnline,
+  onOnlineStatusChange,
+  syncPendingChanges,
   getPendingChanges,
   getLastSyncTime,
 } from '../services/offlineService'
@@ -27,39 +27,6 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const { showToast } = useToast()
   const { settings } = useSettings()
 
-  // Monitor online status
-  useEffect(() => {
-    const unsubscribe = onOnlineStatusChange((online) => {
-      setIsOnline(online)
-      
-      if (online) {
-        showToast(
-          settings.language === 'es' ? 'Conexión restaurada' : 'Connection restored',
-          'success'
-        )
-        // Auto-sync when back online
-        syncNow()
-      } else {
-        showToast(
-          settings.language === 'es' ? 'Sin conexión - Modo offline activo' : 'Offline - Changes will sync later',
-          'warning'
-        )
-      }
-    })
-
-    return unsubscribe
-  }, [settings.language])
-
-  // Refresh pending count periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPendingChanges(getPendingChanges().length)
-      setLastSyncAt(getLastSyncTime())
-    }, 5000)
-
-    return () => clearInterval(interval)
-  }, [])
-
   const syncNow = useCallback(async () => {
     if (!checkOnline() || isSyncing) return
 
@@ -71,7 +38,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
       if (result.success > 0) {
         showToast(
-          settings.language === 'es' 
+          settings.language === 'es'
             ? `${result.success} cambio${result.success > 1 ? 's' : ''} sincronizado${result.success > 1 ? 's' : ''}`
             : `${result.success} change${result.success > 1 ? 's' : ''} synced`,
           'success'
@@ -95,10 +62,48 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsSyncing(false)
     }
-  }, [settings.language, isSyncing])
+  }, [isSyncing, settings.language, showToast])
+
+  // Monitor online status — syncNow is stable via useCallback so it is safe in deps
+  useEffect(() => {
+    const unsubscribe = onOnlineStatusChange((online) => {
+      setIsOnline(online)
+
+      if (online) {
+        showToast(
+          settings.language === 'es' ? 'Conexión restaurada' : 'Connection restored',
+          'success'
+        )
+        // Auto-sync when back online
+        syncNow()
+      } else {
+        showToast(
+          settings.language === 'es' ? 'Sin conexión - Modo offline activo' : 'Offline - Changes will sync later',
+          'warning'
+        )
+      }
+    })
+
+    return unsubscribe
+  }, [settings.language, showToast, syncNow])
+
+  // Refresh pending count periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPendingChanges(getPendingChanges().length)
+      setLastSyncAt(getLastSyncTime())
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  const value = useMemo(
+    () => ({ isOnline, pendingChanges, lastSyncAt, isSyncing, syncNow }),
+    [isOnline, pendingChanges, lastSyncAt, isSyncing, syncNow],
+  )
 
   return (
-    <OfflineContext.Provider value={{ isOnline, pendingChanges, lastSyncAt, isSyncing, syncNow }}>
+    <OfflineContext.Provider value={value}>
       {children}
     </OfflineContext.Provider>
   )

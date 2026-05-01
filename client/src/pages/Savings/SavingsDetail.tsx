@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
-  getGoalById, 
+  getGoalById,
   getContributionsByGoal,
   addContribution,
   updateGoal,
@@ -19,11 +19,16 @@ import { UiNumber } from '../../components/ui/UiNumber'
 import { UiSelect } from '../../components/ui/UiSelect'
 import confetti from 'canvas-confetti'
 import { formatISODateString } from '../../utils/date'
+import { useToast } from '../../components/Toast'
+import { useSettings } from '../../context/SettingsContext'
+import { formatEUR, formatDate as formatDateUtil } from '../../utils/format'
 
 export default function SavingsDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const toast = useToast()
+  const { settings } = useSettings()
   const [goal, setGoal] = useState<SavingsGoal | null>(null)
   const [contributions, setContributions] = useState<SavingsContribution[]>([])
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
@@ -82,7 +87,10 @@ export default function SavingsDetail() {
     if (!id || !goal) return
     setSubmitting(true)
 
-    if (!user) return
+    if (!user) {
+      setSubmitting(false)
+      return
+    }
 
     try {
       await addContribution({
@@ -98,8 +106,10 @@ export default function SavingsDetail() {
       setContribNote('')
       setContribAccountId('')
       loadData()
-    } catch (error) {
+      toast.success('Aportación añadida', 'La aportación se ha registrado correctamente')
+    } catch (error: any) {
       console.error('Error adding contribution:', error)
+      toast.error('Error al añadir aportación', error?.message || 'No se pudo registrar la aportación')
     } finally {
       setSubmitting(false)
     }
@@ -116,8 +126,10 @@ export default function SavingsDetail() {
       })
       setEditing(false)
       loadData()
-    } catch (error) {
+      toast.success('Objetivo actualizado', 'Los cambios se han guardado correctamente')
+    } catch (error: any) {
       console.error('Error updating goal:', error)
+      toast.error('Error al guardar', error?.message || 'No se pudo actualizar el objetivo')
     }
   }
 
@@ -131,24 +143,19 @@ export default function SavingsDetail() {
         origin: { y: 0.6 }
       })
       loadData()
-    } catch (error) {
+      toast.success('¡Objetivo completado!', 'Enhorabuena, has alcanzado tu objetivo de ahorro')
+    } catch (error: any) {
       console.error('Error marking goal as completed:', error)
+      toast.error('Error', error?.message || 'No se pudo marcar el objetivo como completado')
     }
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    })
+    return formatDateUtil(date, settings)
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount)
+    return formatEUR(amount, settings)
   }
 
   const getProgress = () => {
@@ -348,7 +355,7 @@ export default function SavingsDetail() {
                   onChange={setContribAccountId}
                   options={[
                     { value: '', label: 'Ninguna (Solo registrar)' },
-                    ...accounts.map(acc => ({ value: acc.id, label: `${acc.name} (${acc.balance} €)` }))
+                    ...accounts.map(acc => ({ value: acc.id, label: `${acc.name} (${formatCurrency(acc.balance)})` }))
                   ]}
                 />
               </div>

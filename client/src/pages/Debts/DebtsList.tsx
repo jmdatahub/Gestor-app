@@ -88,8 +88,6 @@ export default function DebtsList() {
     }, 12000)
 
     try {
-      console.log('[DebtsList] Creating debt...', { direction, counterparty, amount: amountNum })
-      
       const input: CreateDebtInput = {
         user_id: user.id,
         organization_id: currentWorkspace?.id || null, // Pass organization_id
@@ -102,8 +100,6 @@ export default function DebtsList() {
       
       await createDebtMutation.mutateAsync(input)
       clearTimeout(timeoutId)
-      
-      console.log('[DebtsList] Debt created successfully!')
       setShowModal(false)
       resetForm()
       loadDebts()

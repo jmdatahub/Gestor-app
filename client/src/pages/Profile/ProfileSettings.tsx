@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/apiClient'
 import { User, Check, Save, Loader2, Mail, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { useToast } from '../../components/Toast'
+import { useSettings } from '../../context/SettingsContext'
+import { formatDate as formatDateUtil } from '../../utils/format'
 
 // Avatares predefinidos por categorías
 const AVATAR_CATEGORIES = {
@@ -26,6 +29,8 @@ interface UserProfile {
 
 export default function ProfileSettings() {
   const { user: authUser } = useAuth()
+  const toast = useToast()
+  const { settings } = useSettings()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -42,7 +47,7 @@ export default function ProfileSettings() {
 
   useEffect(() => {
     loadProfile()
-  }, [])
+  }, [authUser?.id]) // Re-run if authenticated user changes
 
   const loadProfile = async () => {
     try {
@@ -93,9 +98,9 @@ export default function ProfileSettings() {
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving profile:', error)
-      alert('Error al guardar el perfil')
+      toast.error('Error al guardar', error?.message || 'No se pudo guardar el perfil')
     } finally {
       setSaving(false)
     }
@@ -125,7 +130,7 @@ export default function ProfileSettings() {
   }
 
   const isEmoji = avatarType !== 'default' && avatarType.length <= 2
-  const formatDate = (date?: string) => date ? new Date(date).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'
+  const formatDate = (date?: string) => date ? formatDateUtil(date, settings) : '-'
 
   if (loading) {
     return (

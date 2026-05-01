@@ -7,6 +7,9 @@ import {
   useDiscardPendingMovement,
 } from '../../hooks/queries/useRecurringMutations'
 import { Check, X, ArrowLeft, Clock } from 'lucide-react'
+import { useToast } from '../../components/Toast'
+import { useSettings } from '../../context/SettingsContext'
+import { formatEUR, formatDate as formatDateUtil } from '../../utils/format'
 
 interface PendingMovement {
   id: string
@@ -21,6 +24,8 @@ interface PendingMovement {
 export default function PendingMovements() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const toast = useToast()
+  const { settings } = useSettings()
   const acceptMutation = useAcceptPendingMovement()
   const discardMutation = useDiscardPendingMovement()
   const [movements, setMovements] = useState<PendingMovement[]>([])
@@ -49,8 +54,10 @@ export default function PendingMovements() {
     try {
       await acceptMutation.mutateAsync(id)
       setMovements(prev => prev.filter(m => m.id !== id))
-    } catch (error) {
+      toast.success('Movimiento aceptado', 'El movimiento se ha registrado correctamente')
+    } catch (error: any) {
       console.error('Error accepting:', error)
+      toast.error('Error al aceptar', error?.message || 'No se pudo aceptar el movimiento')
     } finally {
       setProcessing(null)
     }
@@ -62,26 +69,21 @@ export default function PendingMovements() {
     try {
       await discardMutation.mutateAsync(id)
       setMovements(prev => prev.filter(m => m.id !== id))
-    } catch (error) {
+      toast.success('Movimiento descartado', 'El movimiento ha sido descartado')
+    } catch (error: any) {
       console.error('Error discarding:', error)
+      toast.error('Error al descartar', error?.message || 'No se pudo descartar el movimiento')
     } finally {
       setProcessing(null)
     }
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    })
+    return formatDateUtil(date, settings)
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount)
+    return formatEUR(amount, settings)
   }
 
   if (loading) {

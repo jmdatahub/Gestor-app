@@ -13,11 +13,16 @@ import { ArrowLeft, TrendingUp, TrendingDown, Plus, RefreshCw } from 'lucide-rea
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { formatISODateString } from '../../utils/date'
 import { UiNumber } from '../../components/ui/UiNumber'
+import { useToast } from '../../components/Toast'
+import { useSettings } from '../../context/SettingsContext'
+import { formatEUR, formatDate as formatDateUtil } from '../../utils/format'
 
 export default function InvestmentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const toast = useToast()
+  const { settings } = useSettings()
   const [investment, setInvestment] = useState<Investment | null>(null)
   const [history, setHistory] = useState<PriceHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,15 +58,20 @@ export default function InvestmentDetail() {
     if (!id || !investment) return
     setSubmitting(true)
 
-    if (!user) return
+    if (!user) {
+      setSubmitting(false)
+      return
+    }
 
     try {
       await updatePrice(id, user.id, parseFloat(newPrice), priceDate)
       setShowPriceForm(false)
       setNewPrice('')
       loadData()
-    } catch (error) {
+      toast.success('Precio actualizado', 'El precio se ha registrado correctamente')
+    } catch (error: any) {
       console.error('Error updating price:', error)
+      toast.error('Error al actualizar precio', error?.message || 'No se pudo actualizar el precio')
     } finally {
       setSubmitting(false)
     }
@@ -70,18 +80,11 @@ export default function InvestmentDetail() {
 
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount)
+    return formatEUR(amount, settings)
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    })
+    return formatDateUtil(date, settings)
   }
 
   const getTypeName = (typeVal: string) => {
@@ -247,7 +250,7 @@ export default function InvestmentDetail() {
                       title={`${formatDate(entry.date)}: ${formatCurrency(entry.price)}`}
                     />
                     <span style={styles.chartLabel}>
-                      {new Date(entry.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                      {new Date(entry.date).toLocaleDateString(settings.language === 'es' ? 'es-ES' : 'en-US', { day: '2-digit', month: 'short' })}
                     </span>
                   </div>
                 )

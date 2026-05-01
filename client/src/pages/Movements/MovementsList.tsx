@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/apiClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -104,6 +104,7 @@ export default function MovementsList() {
   const updateMovementMutation = useUpdateMovement()
   const deleteMovementMutation = useDeleteMovement()
   const [showConfetti, setShowConfetti] = useState(false)
+  const confettiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
   // New Fields State
   const [provider, setProvider] = useState('')
@@ -176,6 +177,13 @@ export default function MovementsList() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [movementToDelete, setMovementToDelete] = useState<Movement | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  // Clear confetti timer on unmount to avoid memory leak
+  useEffect(() => {
+    return () => {
+      if (confettiTimerRef.current) clearTimeout(confettiTimerRef.current)
+    }
+  }, [])
 
   // Reload when workspace changes
   useEffect(() => {
@@ -282,7 +290,10 @@ export default function MovementsList() {
     setSubmitting(true)
     setAppError(null)
 
-    if (!user) return
+    if (!user) {
+      setSubmitting(false)
+      return
+    }
 
     if (!amount || parseFloat(amount) <= 0) {
       setAppError({ message: 'El importe debe ser mayor que 0' })
@@ -380,7 +391,8 @@ export default function MovementsList() {
         toast.success('Movimiento registrado', type === 'income' ? '¡Ingreso añadido!' : type === 'expense' ? 'Gasto registrado' : 'Inversión guardada')
         // Fire confetti for celebration! 🎉
         setShowConfetti(true)
-        setTimeout(() => setShowConfetti(false), 3000)
+        if (confettiTimerRef.current) clearTimeout(confettiTimerRef.current)
+        confettiTimerRef.current = setTimeout(() => setShowConfetti(false), 3000)
       }
 
       setShowModal(false)
@@ -1105,7 +1117,6 @@ export default function MovementsList() {
                   <UiSelect
                     value={accountId}
                     onChange={handleAccountSelectChange}
-                    options={[
                     options={[
                       ...flatAccounts.map(acc => ({
                         value: acc.id,

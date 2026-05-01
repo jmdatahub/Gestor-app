@@ -100,26 +100,41 @@ export default function Dashboard() {
     const expenseTrend = prev.expense > 0 ? ((current.expense - prev.expense) / prev.expense) * 100 : 0
     const savingsRate = current.income > 0 ? ((current.income - current.expense) / current.income) * 100 : 0
 
+    // No activity this period — skip scoring
+    if (current.income === 0 && current.expense === 0) {
+      return { incomeTrend: 0, expenseTrend: 0, savingsRate: 0, healthScore: 0, healthDescription: 'Sin actividad este mes. Añade movimientos para ver tu salud financiera.' }
+    }
+
     let score = 50
-    if (savingsRate > 30) score += 25
+
+    // Savings rate (primary driver)
+    if (current.income === 0) {
+      // Spending without any income is critical
+      score -= 30
+    } else if (savingsRate > 30) score += 25
     else if (savingsRate > 15) score += 15
     else if (savingsRate > 5) score += 5
     else if (savingsRate < 0) score -= 25
 
-    if (expenseTrend < -5) score += 10
-    else if (expenseTrend > 10) score -= 10
+    // Expense trend only meaningful if there's income
+    if (current.income > 0) {
+      if (expenseTrend < -5) score += 10
+      else if (expenseTrend > 10) score -= 10
+    }
 
     if (incomeTrend > 5) score += 10
     else if (incomeTrend < -10) score -= 10
 
     score = Math.max(0, Math.min(100, score))
-    const desc = savingsRate >= 20
-      ? 'Estás ahorrando de forma excelente este mes.'
-      : savingsRate >= 10
-        ? 'Buen ritmo de ahorro, sigue así.'
-        : savingsRate >= 0
-          ? 'Tu balance es positivo pero el margen es ajustado.'
-          : 'Este mes estás gastando más de lo que ingresas.'
+    const desc = current.income === 0
+      ? 'Sin ingresos registrados este mes. Tus gastos no tienen cobertura.'
+      : savingsRate >= 20
+        ? 'Estás ahorrando de forma excelente este mes.'
+        : savingsRate >= 10
+          ? 'Buen ritmo de ahorro, sigue así.'
+          : savingsRate >= 0
+            ? 'Tu balance es positivo pero el margen es ajustado.'
+            : 'Este mes estás gastando más de lo que ingresas.'
 
     return { incomeTrend, expenseTrend, savingsRate, healthScore: score, healthDescription: desc }
   }, [trendData])

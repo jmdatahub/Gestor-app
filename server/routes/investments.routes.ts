@@ -4,6 +4,7 @@ import { db } from '../db/connection.js'
 import { investments, investmentPriceHistory } from '../db/schema.js'
 import { and, eq, isNull, desc } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { z } from 'zod'
 
 const router = Router()
 
@@ -174,6 +175,11 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 
 router.get('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
+  // Verify the investment belongs to the requesting user
+  const inv = (await db.select({ id: investments.id }).from(investments)
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
+  if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
+
   const rows = await db.select().from(investmentPriceHistory)
     .where(eq(investmentPriceHistory.investmentId, id))
     .orderBy(desc(investmentPriceHistory.date))
@@ -182,12 +188,32 @@ router.get('/:id/price-history', authMiddleware, async (req: AuthRequest, res: R
 
 router.post('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
+  // Verify the investment belongs to the requesting user
+  const inv = (await db.select({ id: investments.id }).from(investments)
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
+  if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
+
+  const PriceSchema = z.object({
+    price: z.string().or(z.number()).transform(String),
+    date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }).strict()
+
+  let body: z.infer<typeof PriceSchema>
+  try {
+    body = PriceSchema.parse(req.body)
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Datos inválidos', details: err.errors }); return
+    }
+    throw err
+  }
+
   const [row] = await db.insert(investmentPriceHistory)
-    .values({ price: req.body.price, date: req.body.date, investmentId: id, userId: req.userId! })
+    .values({ price: body.price, date: body.date, investmentId: id, userId: req.userId! })
     .returning()
   // Sync current_price on the parent investment
   await db.update(investments)
-    .set({ currentPrice: String(req.body.price), updatedAt: new Date().toISOString() })
+    .set({ currentPrice: body.price, updatedAt: new Date().toISOString() })
     .where(eq(investments.id, id))
   res.status(201).json({ data: row })
 })

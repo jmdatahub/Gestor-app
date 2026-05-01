@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
 import { useAuth } from './AuthContext'
 import { getUserOrganizations } from '../services/organizationService'
 
@@ -26,7 +26,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [isSuspended] = useState(false)
   const [userRole, setUserRole] = useState<AppRole | null>(null)
 
-  const fetchWorkspaces = async () => {
+  const fetchWorkspaces = useCallback(async () => {
     if (!user) { setWorkspaces([]); setCurrentWorkspace(null); setIsLoading(false); return }
     try {
       setIsLoading(true)
@@ -42,11 +42,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user])
 
-  useEffect(() => { fetchWorkspaces() }, [user?.id])
+  useEffect(() => { fetchWorkspaces() }, [fetchWorkspaces])
 
-  const switchWorkspace = (orgId: string | null) => {
+  const switchWorkspace = useCallback((orgId: string | null) => {
     if (!orgId || orgId === 'personal') {
       setCurrentWorkspace(null); setUserRole(null)
       localStorage.setItem('last_workspace_id', 'personal')
@@ -58,10 +58,23 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         localStorage.setItem('last_workspace_id', orgId)
       }
     }
-  }
+  }, [workspaces])
+
+  const value = useMemo(
+    () => ({
+      currentWorkspace,
+      workspaces,
+      isLoading,
+      isSuspended,
+      switchWorkspace,
+      refreshWorkspaces: fetchWorkspaces,
+      userRole,
+    }),
+    [currentWorkspace, workspaces, isLoading, isSuspended, switchWorkspace, fetchWorkspaces, userRole],
+  )
 
   return (
-    <WorkspaceContext.Provider value={{ currentWorkspace, workspaces, isLoading, isSuspended, switchWorkspace, refreshWorkspaces: fetchWorkspaces, userRole }}>
+    <WorkspaceContext.Provider value={value}>
       {children}
     </WorkspaceContext.Provider>
   )

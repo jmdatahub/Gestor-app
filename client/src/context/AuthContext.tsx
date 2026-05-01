@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
 import { api } from '../lib/apiClient'
 
 export interface AuthUser {
@@ -25,7 +25,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('auth_token'))
   const [isLoading, setIsLoading] = useState(true)
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     const t = localStorage.getItem('auth_token')
     if (!t) { setUser(null); setIsLoading(false); return }
     try {
@@ -38,26 +38,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { refreshUser() }, [])
+  useEffect(() => { refreshUser() }, [refreshUser])
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     const { token: t, user: u } = await api.post<{ token: string; user: AuthUser }>('/api/auth/login', { email, password })
     localStorage.setItem('auth_token', t)
     setToken(t)
     setUser(u)
-  }
+  }, [])
 
-  const signOut = () => {
+  const signOut = useCallback(() => {
     localStorage.removeItem('auth_token')
     setToken(null)
     setUser(null)
     api.post('/api/auth/logout').catch(() => {})
-  }
+  }, [])
+
+  const value = useMemo(
+    () => ({ user, token, isLoading, signIn, signOut, refreshUser }),
+    [user, token, isLoading, signIn, signOut, refreshUser],
+  )
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, signIn, signOut, refreshUser }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

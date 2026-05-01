@@ -161,6 +161,7 @@ export default function InsightsPage() {
     setLoadingInsights(true)
     getMonthlyInsights(userId, year, month, t, locale)
       .then(setInsights)
+      .catch((err) => console.error('Error refreshing insights:', err))
       .finally(() => setLoadingInsights(false))
   }
 
