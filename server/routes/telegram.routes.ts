@@ -281,7 +281,41 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(200).send('OK'); return
     }
 
-    if (text === '/start') {
+    if (text.startsWith('/start')) {
+      // /start <token> — deep-link auto-link (same logic as /link)
+      const startParts = text.replace(/[<>]/g, '').trim().split(/\s+/)
+      if (startParts.length >= 2) {
+        const rawToken = startParts[1].trim()
+        const tokenHash = await hashToken(rawToken)
+        const tokenData = (await db
+          .select({ userId: apiTokens.userId, organizationId: apiTokens.organizationId, scopes: apiTokens.scopes })
+          .from(apiTokens)
+          .where(eq(apiTokens.tokenHash, tokenHash))
+          .limit(1))[0]
+
+        if (!tokenData) {
+          await sendTelegramMessage(chatId, '❌ Token no encontrado o ya revocado. Genera uno nuevo en Gestor → Ajustes → Tokens API.')
+          res.status(200).send('OK'); return
+        }
+
+        const chatIdStr = chatId.toString()
+        await db.update(profiles).set({ telegramChatId: chatIdStr }).where(eq(profiles.id, tokenData.userId))
+        const newScopes = [...((tokenData.scopes as string[]) || [])].filter(s => !s.startsWith('tg_chat:'))
+        newScopes.push(`tg_chat:${chatIdStr}`)
+        await db.update(apiTokens).set({ scopes: newScopes }).where(eq(apiTokens.tokenHash, tokenHash))
+
+        await sendTelegramMessage(chatId,
+          `✅ <b>¡Cuenta vinculada!</b>\n\nYa puedes registrar gastos e ingresos desde aquí.\n\n` +
+          `<b>⚡ Prueba ahora:</b>\n` +
+          `<code>25 cafe</code> → gasto 25€\n` +
+          `<code>+1200 nomina</code> → ingreso 1.200€\n\n` +
+          `/magia — Crea tus categorías por defecto\n` +
+          `/notifications — Gestionar alertas\n` +
+          `/help — Ayuda completa`)
+        res.status(200).send('OK'); return
+      }
+
+      // Plain /start — welcome message
       await sendTelegramMessage(chatId,
         `👋 <b>¡Hola! Soy el Gestor Bot.</b>\n\n` +
         `Puedo ayudarte a registrar gastos e ingresos al instante y enviarte alertas automáticas de tu cuenta.\n\n` +
@@ -294,7 +328,7 @@ router.post('/', async (req: Request, res: Response) => {
         `/notifications — Gestionar alertas\n` +
         `/magia — Crear categorías por defecto\n` +
         `/help — Ver esta ayuda\n\n` +
-        `<i>Para empezar, ve a Gestor → Ajustes → Tokens API y usa /link &lt;tu_token&gt;</i>`)
+        `<i>Para empezar, ve a Gestor → Ajustes → Tokens API y pulsa "Conectar Telegram"</i>`)
       res.status(200).send('OK'); return
     }
 

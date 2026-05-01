@@ -3,7 +3,7 @@
  * Now supports v2 tokens: Workspaces and Granular Scopes
  */
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Copy, Check, AlertTriangle, Shield, CheckSquare, Square, Building2 } from 'lucide-react'
+import { Plus, Trash2, Copy, Check, AlertTriangle, Shield, CheckSquare, Square, Building2, MessageCircle, ExternalLink } from 'lucide-react'
 import { getApiTokens, createApiToken, revokeApiToken, type ApiToken, API_SCOPES, ApiScope, DEFAULT_SCOPES } from '../../services/apiTokenService'
 import { useToast } from '../Toast'
 import { useAuth } from '../../context/AuthContext'
@@ -11,17 +11,20 @@ import { UiInput } from '../ui/UiInput'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../ui/UiModal'
 import { useWorkspace } from '../../context/WorkspaceContext'
 
+const TELEGRAM_BOT = 'GestorJorgePersonalBot'
+
 function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (id: string) => void }) {
   const [isHovering, setIsHovering] = useState(false)
 
-  // Determine what type of token it is
   const workspaceLabel = token.organization ? `Workspace: ${token.organization.name}` : 'Datos Locales (Personal)'
+  const isTelegramLinked = token.scopes.some(s => s.startsWith('tg_chat:'))
+  const visibleScopes = token.scopes.filter(s => !s.startsWith('tg_chat:') && !s.startsWith('tg_notif:'))
 
   return (
-    <div 
-      style={{ 
-        display: 'flex', 
-        alignItems: 'flex-start', 
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
         justifyContent: 'space-between',
         padding: '12px',
         marginBottom: '8px',
@@ -33,22 +36,38 @@ function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (id: string)
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 500 }}>{token.name}</span>
-          <span style={{ 
-            fontSize: '0.7rem', 
-            padding: '2px 6px', 
-            borderRadius: '4px', 
+          <span style={{
+            fontSize: '0.7rem',
+            padding: '2px 6px',
+            borderRadius: '4px',
             background: token.organization ? 'var(--primary-soft)' : 'var(--bg-secondary)',
             color: 'var(--text-muted)'
           }}>
             {workspaceLabel}
           </span>
+          {isTelegramLinked && (
+            <span style={{
+              fontSize: '0.7rem',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              background: '#29b6f620',
+              color: '#29b6f6',
+              border: '1px solid #29b6f640',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}>
+              <MessageCircle size={11} />
+              Telegram vinculado
+            </span>
+          )}
         </div>
-        
+
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-          {token.scopes.slice(0, 3).map(scope => (
+          {visibleScopes.slice(0, 3).map(scope => (
             <span key={scope} style={{
               fontSize: '0.65rem',
               padding: '2px 4px',
@@ -60,22 +79,43 @@ function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (id: string)
               {scope}
             </span>
           ))}
-          {token.scopes.length > 3 && (
+          {visibleScopes.length > 3 && (
             <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-              +{token.scopes.length - 3} más
+              +{visibleScopes.length - 3} más
             </span>
           )}
         </div>
-        
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-          Creado: {new Date(token.created_at).toLocaleDateString()}
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Creado: {new Date(token.created_at).toLocaleDateString()}
+          </div>
+          {!isTelegramLinked && (
+            <a
+              href={`https://t.me/${TELEGRAM_BOT}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: '0.7rem',
+                color: '#29b6f6',
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              title="Conectar este token con Telegram"
+            >
+              <MessageCircle size={12} />
+              Conectar Telegram
+            </a>
+          )}
         </div>
       </div>
 
       <button
         onClick={() => onRevoke(token.id)}
         className="btn btn-danger"
-        style={{ padding: '6px 8px', opacity: isHovering ? 1 : 0.5 }}
+        style={{ padding: '6px 8px', opacity: isHovering ? 1 : 0.5, marginLeft: '8px', flexShrink: 0 }}
         title="Revocar token"
       >
         <Trash2 size={14} />
@@ -222,29 +262,63 @@ export function ApiTokensSettings() {
         <UiModalBody>
           {newlyCreatedToken ? (
             <div>
-              <div style={{ 
-                display: 'flex', gap: '8px', padding: '12px', background: 'var(--warning-soft)', 
-                borderRadius: 'var(--radius-sm)', marginBottom: '16px', color: 'var(--warning)',
+              {/* Telegram deep-link — primary CTA */}
+              <a
+                href={`https://t.me/${TELEGRAM_BOT}?start=${newlyCreatedToken}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  padding: '14px 20px',
+                  borderRadius: 'var(--radius-md)',
+                  background: '#229ED9',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: '1rem',
+                  textDecoration: 'none',
+                  marginBottom: '16px',
+                  transition: 'opacity 0.2s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+              >
+                <MessageCircle size={20} />
+                Conectar con Telegram
+                <ExternalLink size={14} style={{ opacity: 0.7 }} />
+              </a>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '16px', lineHeight: 1.5 }}>
+                Abre el bot y pulsa <strong>Enviar</strong> — la cuenta se vincula automáticamente.
+              </p>
+
+              <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: '16px 0' }} />
+
+              {/* Token copy — secondary */}
+              <div style={{
+                display: 'flex', gap: '8px', padding: '10px 12px', background: 'var(--warning-soft)',
+                borderRadius: 'var(--radius-sm)', marginBottom: '12px', color: 'var(--warning)',
                 alignItems: 'flex-start'
               }}>
-                <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
-                <span style={{ fontSize: '0.85rem', lineHeight: 1.4 }}>
-                  Copia este token ahora. <strong>No volverás a verlo</strong>. Si lo pierdes tendrás que revocarlo y crear uno nuevo.
+                <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span style={{ fontSize: '0.8rem', lineHeight: 1.4 }}>
+                  Guarda también el token si lo necesitas para integraciones. <strong>No volverás a verlo.</strong>
                 </span>
               </div>
               <div style={{ position: 'relative' }}>
-                <code style={{ 
-                  display: 'block', padding: '16px', background: '#1a1a2e', 
-                  borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: '#22C55E',
+                <code style={{
+                  display: 'block', padding: '12px', background: '#1a1a2e',
+                  borderRadius: 'var(--radius-sm)', fontSize: '0.78rem', color: '#22C55E',
                   wordBreak: 'break-all', paddingRight: '48px', border: '1px solid #2e2e48'
                 }}>
                   {newlyCreatedToken}
                 </code>
-                <button 
+                <button
                   onClick={handleCopy}
                   title="Copiar al portapapeles"
                   style={{
-                    position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                    position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
                     background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer',
                     padding: '8px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}
@@ -365,7 +439,7 @@ export function ApiTokensSettings() {
         </UiModalBody>
         <UiModalFooter>
           {newlyCreatedToken ? (
-            <button className="btn btn-primary" onClick={resetForm}>He guardado mi token</button>
+            <button className="btn btn-primary" onClick={resetForm}>Listo</button>
           ) : (
             <>
               <button className="btn btn-secondary" onClick={resetForm}>Cancelar</button>
