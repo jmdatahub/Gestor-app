@@ -83,8 +83,6 @@ export default function AccountsList() {
       const tree = buildAccountTree(data)
       const flat = flattenAccountTree(tree)
       setFlatAccounts(flat)
-
-      setFlatAccounts(flat)
     } catch (error) {
       console.error('Error loading accounts:', error)
     } finally {
@@ -160,6 +158,7 @@ export default function AccountsList() {
       loadData()
     } catch (error) {
       console.error('Error toggling account:', error)
+      toast.error(t('common.error'), t('accounts.toggleError') || 'No se pudo cambiar el estado de la cuenta')
     }
   }
 
@@ -355,7 +354,7 @@ export default function AccountsList() {
                     key={acc.id} 
                     style={{ opacity: !acc.is_active ? 0.5 : 1 }}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/app/accounts/${acc.id}`)}
+                    onClick={() => acc.type === 'broker' ? navigate('/app/investments') : navigate(`/app/accounts/${acc.id}`)}
                   >
                     <td style={{ padding: '0.75rem 1.5rem', fontWeight: 600 }}>
                       <div style={{ marginLeft: `${acc.level * 1.5}rem` }} className="d-flex items-center gap-2">
