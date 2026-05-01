@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Worktree-isolated cache: avoid React duplicate when sharing node_modules
+  // (junctioned) with the main worktree running on a different port.
+  cacheDir: '.vite-redesign',
   plugins: [
     react(),
     VitePWA({

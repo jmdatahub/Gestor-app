@@ -29,6 +29,9 @@ dist-ssr
 # Vite PWA dev artifacts
 **/dev-dist/
 
+# Vite worktree-isolated cache (cacheDir)
+client/.vite-redesign/
+
 # Plan operativo de migración (contiene credenciales)
 MIGRATION-PLAN.md
 
