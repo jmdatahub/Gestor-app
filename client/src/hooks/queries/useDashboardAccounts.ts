@@ -18,10 +18,12 @@ export const useAccountsSummary = (userId: string | null, workspaceId: string | 
   return useQuery({
     queryKey: dashboardKeys.accountsSummary(userId!, workspaceId),
     queryFn: async ({ signal }) => {
-      const accounts = await fetchAccountsSummary(userId!, workspaceId, signal)
+      const data = await fetchAccountsSummary(userId!, workspaceId, signal)
+      // API returns AccountWithBalance[] — fold into summary shape expected by Dashboard.
+      const accounts = Array.isArray(data) ? data : []
       const liquid = accounts.filter(a => !['savings', 'broker', 'investment'].includes(a.type as string))
       return accountSummarySchema.parse({
-        totalBalance: liquid.reduce((sum, a) => sum + (Number(a.balance) || 0), 0),
+        totalBalance: liquid.reduce((sum, a: any) => sum + (Number(a?.balance) || 0), 0),
         accountCount: liquid.length,
       })
     },
