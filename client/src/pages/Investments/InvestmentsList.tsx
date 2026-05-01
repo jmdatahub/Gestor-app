@@ -540,7 +540,7 @@ export default function InvestmentsList() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(v: number) => [fmt(v), 'Equity']}
+                  formatter={(v: number | string | undefined) => [fmt(Number(v ?? 0)), 'Equity']}
                   contentStyle={{
                     background: 'var(--card-bg)',
                     border: '1px solid var(--border)',

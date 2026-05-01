@@ -118,8 +118,8 @@ export default function InvestmentDetail() {
 
   const curPr = investment.current_price ?? 0
   const buyPr = investment.buy_price ?? investment.avg_buy_price ?? 0
-  const totalValue = investment.quantity * curPr
-  const profitLoss = (curPr - buyPr) * investment.quantity
+  const totalValue = (investment.quantity ?? 0) * curPr
+  const profitLoss = (curPr - buyPr) * (investment.quantity ?? 0)
   const profitPct = buyPr > 0
     ? ((curPr - buyPr) / buyPr) * 100
     : 0
@@ -295,7 +295,7 @@ export default function InvestmentDetail() {
                     {formatCurrency(entry.price)}
                   </td>
                   <td style={{ textAlign: 'right' }}>
-                    {formatCurrency(investment.quantity * entry.price)}
+                    {formatCurrency((investment.quantity ?? 0) * entry.price)}
                   </td>
                 </tr>
               ))}
