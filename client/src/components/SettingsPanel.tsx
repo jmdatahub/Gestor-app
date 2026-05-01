@@ -72,18 +72,23 @@ export default function SettingsPanel({ open, onClose }: Props) {
                             style={{
                               color: opt.previewColors.text,
                               opacity: 0.7,
-                              fontSize: 8,
                             }}
                           >
                             123
                           </span>
                         </div>
                       </div>
-                      <div className="design-card__name">
-                        {opt.label}
-                        {active && <Check size={13} aria-hidden="true" />}
+                      <div className="design-card__body">
+                        <div className="design-card__name">{opt.label}</div>
+                        <div className="design-card__desc">{opt.description}</div>
                       </div>
-                      <div className="design-card__desc">{opt.description}</div>
+                      {active ? (
+                        <span className="design-card__check" aria-hidden="true">
+                          <Check size={14} strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <span className="design-card__check-empty" aria-hidden="true" />
+                      )}
                     </button>
                   )
                 })}

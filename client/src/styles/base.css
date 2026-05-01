@@ -220,21 +220,22 @@ a:hover { color: var(--primary-hover); }
 
 /* ==============================================
    DESIGN PICKER (Settings Panel)
-   Visual selector for the [data-design] attribute.
-   Stays neutral — same shape across all designs.
+   Horizontal card list — preview left, text right.
+   Roomy layout for narrow side-panels.
    ============================================== */
 .design-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   width: 100%;
 }
 
 .design-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px;
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
   background: var(--bg-card);
   border: 1.5px solid var(--border-color);
   border-radius: 12px;
@@ -242,45 +243,47 @@ a:hover { color: var(--primary-hover); }
   text-align: left;
   font-family: inherit;
   color: var(--text-primary);
-  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
   position: relative;
-  overflow: hidden;
+  width: 100%;
 }
 .design-card:hover {
   border-color: var(--text-muted);
-  box-shadow: var(--shadow-md);
 }
-.design-card:active { transform: scale(0.99); }
 .design-card--active {
   border-color: var(--primary);
+  background: var(--primary-soft);
   box-shadow: 0 0 0 3px var(--primary-soft);
+}
+[data-theme='dark'] .design-card--active {
+  background: rgba(91, 71, 224, 0.10);
 }
 
 .design-card__preview {
-  width: 100%;
-  height: 64px;
-  border-radius: 8px;
+  width: 56px;
+  height: 40px;
+  border-radius: 7px;
+  border: 1px solid rgba(0,0,0,0.06);
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .design-card__preview-card {
   width: 70%;
-  height: 38px;
-  border-radius: 6px;
-  padding: 6px;
+  height: 24px;
+  border-radius: 4px;
+  padding: 4px 4px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10);
 }
 
 .design-card__preview-bar {
   width: 50%;
-  height: 4px;
+  height: 3px;
   border-radius: 2px;
 }
 
@@ -289,26 +292,54 @@ a:hover { color: var(--primary-hover); }
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   align-self: flex-end;
+  font-size: 7px !important;
+  line-height: 1;
+}
+
+.design-card__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .design-card__name {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .design-card__desc {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.design-card__check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.design-card__check-empty {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 /* ==============================================
