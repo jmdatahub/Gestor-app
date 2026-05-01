@@ -27,13 +27,34 @@ import adminRoutes from './routes/admin.routes.js'
 import crmSyncRoutes from './routes/crm-sync.routes.js'
 import notifyRoutes from './routes/notify.routes.js'
 import telegramRoutes from './routes/telegram.routes.js'
+import { setMyCommands } from './services/telegram.service.js'
 import { processRecurringRules } from './jobs/recurringProcessor.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
 
-if (isProduction && !process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET must be set in production')
+// ─── Required env var validation ─────────────────────────────────────────────
+// Fail fast with a clear message instead of a cryptic runtime crash.
+const REQUIRED_ENV_VARS = [
+  'JWT_SECRET',
+  'DATABASE_URL',
+] as const
+
+const PRODUCTION_ONLY_VARS = [
+  'CORS_ORIGIN',
+] as const
+
+const missingVars = REQUIRED_ENV_VARS.filter(v => !process.env[v])
+if (missingVars.length > 0) {
+  console.error(`FATAL: Missing required environment variables: ${missingVars.join(', ')}`)
   process.exit(1)
+}
+
+if (isProduction) {
+  const missingProdVars = PRODUCTION_ONLY_VARS.filter(v => !process.env[v])
+  if (missingProdVars.length > 0) {
+    console.error(`FATAL: Missing required production environment variables: ${missingProdVars.join(', ')}`)
+    process.exit(1)
+  }
 }
 
 const app = express()
@@ -70,7 +91,9 @@ app.use(cors({
   },
   credentials: true,
 }))
-app.use(express.json({ limit: '10mb' }))
+// Tight JSON body cap — none of our endpoints accept anything close to
+// hundreds of KB. Keeping this low blunts JSON-parser DoS attempts.
+app.use(express.json({ limit: '256kb' }))
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
@@ -120,11 +143,16 @@ if (isProduction) {
 // ─── Error handler ────────────────────────────────────────────────────────────
 app.use(errorHandler)
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n🚀 Gestor API running at http://localhost:${PORT}`)
   console.log(`📊 Health: http://localhost:${PORT}/api/health`)
   console.log(`🌍 Env: ${process.env.NODE_ENV || 'development'}`)
   console.log(`🛡️  CORS: ${allowedOrigins.join(', ')}`)
+
+  // ─── Register Telegram bot commands on startup ───────────────────────────
+  setMyCommands().catch(err =>
+    console.error('[telegram] setMyCommands failed:', err)
+  )
 
   // ─── Recurring rules processor ────────────────────────────────────────────
   // Run once on startup to catch up on any missed occurrences, then hourly.
@@ -137,3 +165,30 @@ app.listen(PORT, () => {
     )
   }, 3_600_000) // every hour
 })
+
+// ─── Graceful shutdown ────────────────────────────────────────────────────────
+// Close the HTTP server (stop accepting new connections) and the DB pool
+// before the process exits so in-flight requests finish cleanly and the
+// Postgres connection pool is drained without abrupt termination errors.
+async function shutdown(signal: string) {
+  console.log(`\n[shutdown] Received ${signal} — shutting down gracefully…`)
+  server.close(async () => {
+    try {
+      const { sql } = await import('./db/connection.js')
+      await sql.end({ timeout: 5 })
+      console.log('[shutdown] DB pool closed.')
+    } catch (err) {
+      console.error('[shutdown] Error closing DB pool:', err)
+    }
+    process.exit(0)
+  })
+
+  // Force-exit after 10 s if graceful shutdown stalls.
+  setTimeout(() => {
+    console.error('[shutdown] Graceful shutdown timed out — forcing exit.')
+    process.exit(1)
+  }, 10_000).unref()
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'))
+process.on('SIGINT', () => void shutdown('SIGINT'))

@@ -77,6 +77,27 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
   }
 }
 
+export async function setMyCommands(): Promise<void> {
+  if (!TELEGRAM_TOKEN) return
+  try {
+    const commands = [
+      { command: 'link',          description: 'Vincular tu cuenta de Gestor' },
+      { command: 'notifications', description: 'Gestionar alertas (on/off)' },
+      { command: 'magia',         description: 'Crear categorias por defecto' },
+      { command: 'help',          description: 'Ver ayuda completa' },
+      { command: 'start',         description: 'Bienvenida e instrucciones' },
+    ]
+    const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/setMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commands }),
+    })
+    if (!resp.ok) console.error('[telegram] setMyCommands error:', await resp.text())
+  } catch (err) {
+    console.error('[telegram] setMyCommands exception:', err)
+  }
+}
+
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
