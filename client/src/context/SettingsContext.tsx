@@ -8,13 +8,14 @@ export type Language = 'es' | 'en'
 export type Density = 'compact' | 'normal' | 'large'
 export type DateFormat = 'dd/MM/yyyy' | 'MM/dd/yyyy'
 export type DecimalSeparator = 'comma' | 'dot'
-export type Design = 'crafted' | 'mono' | 'aurora' | 'bento' | 'editorial'
+export type Design = 'original' | 'crafted' | 'mono' | 'aurora' | 'bento' | 'editorial'
 
 export const DESIGN_OPTIONS: { value: Design; label: string; description: string; previewColors: { bg: string; surface: string; accent: string; text: string } }[] = [
+  { value: 'original',  label: 'Original',          description: 'El estilo de siempre: sidebar oscuro, gradiente indigo, paleta clásica.',           previewColors: { bg: '#F3F4F6', surface: '#FFFFFF', accent: '#4F46E5', text: '#0F172A' } },
   { value: 'crafted',   label: 'Premium Crafted',   description: 'Cálido tipo papel, serif Fraunces para números, sidebar light con barra violeta.', previewColors: { bg: '#FAFAF7', surface: '#FFFFFF', accent: '#5B47E0', text: '#1F1E1B' } },
-  { value: 'mono',      label: 'Mono Linear',       description: 'Monocromo denso power-user. Inter Tight + JetBrains Mono. Radii muy pequeños.', previewColors: { bg: '#FFFFFF', surface: '#FAFAFA', accent: '#3D63DD', text: '#0A0A0A' } },
-  { value: 'aurora',    label: 'Glass Aurora',      description: 'Dark forzado, glassmorphism, gradiente aurora rosa→violeta→azul→teal.',         previewColors: { bg: '#05050B', surface: 'rgba(255,255,255,0.06)', accent: '#B045FF', text: '#F8F9FF' } },
-  { value: 'bento',     label: 'Bento Claycard',    description: 'Cremoso pastel, claymorphism, KPI grid asimétrico. Friendly y acogedor.',         previewColors: { bg: '#F4F1EA', surface: '#FFFFFF', accent: '#FF8A65', text: '#1F1B14' } },
+  { value: 'mono',      label: 'Mono Linear',       description: 'Monocromo denso power-user. Inter Tight + JetBrains Mono. Radii muy pequeños.',    previewColors: { bg: '#FFFFFF', surface: '#FAFAFA', accent: '#3D63DD', text: '#0A0A0A' } },
+  { value: 'aurora',    label: 'Glass Aurora',      description: 'Dark forzado, glassmorphism, gradiente aurora rosa→violeta→azul→teal.',           previewColors: { bg: '#05050B', surface: 'rgba(255,255,255,0.06)', accent: '#B045FF', text: '#F8F9FF' } },
+  { value: 'bento',     label: 'Bento Claycard',    description: 'Cremoso pastel, claymorphism, KPI grid asimétrico. Friendly y acogedor.',           previewColors: { bg: '#F4F1EA', surface: '#FFFFFF', accent: '#FF8A65', text: '#1F1B14' } },
   { value: 'editorial', label: 'Editorial Magazine',description: 'Tipografía Fraunces gigante, oxblood + cream, hairlines negras, radii 0.',          previewColors: { bg: '#F2EEE6', surface: '#FFFFFF', accent: '#7C2128', text: '#0A0908' } },
 ]
 
@@ -52,7 +53,7 @@ const defaultNotifications: NotificationSettings = {
 
 const defaultSettings: AppSettings = {
   theme: 'light',
-  design: 'crafted',
+  design: 'original',
   language: 'es',
   density: 'normal',
   densityPercent: 50, // 25=compact, 50=normal, 75=comfortable
@@ -85,20 +86,24 @@ interface SettingsProviderProps {
 
 export function SettingsProvider({ children }: SettingsProviderProps) {
   const [settings, setSettings] = useState<AppSettings>(() => {
-    // Load from localStorage on init
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored)
-        // Merge with defaults to ensure all fields exist
+        // Migration: reset 'crafted' (silent old default) back to 'original'.
+        let design = parsed.design as Design | undefined
+        if (!localStorage.getItem('design_v2_react_init')) {
+          if (design === 'crafted') design = 'original'
+          localStorage.setItem('design_v2_react_init', '1')
+        }
         return {
           ...defaultSettings,
           ...parsed,
+          design: design ?? defaultSettings.design,
           notifications: {
             ...defaultNotifications,
             ...(parsed.notifications || {}),
           },
-          // Ensure rollupAccountsByParent exists if missing in stored
           rollupAccountsByParent: parsed.rollupAccountsByParent ?? defaultSettings.rollupAccountsByParent
         }
       }

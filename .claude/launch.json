@@ -4,9 +4,38 @@
     {
       "name": "gestor-app",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 5180,
-      "cwd": "app-clean"
+      "runtimeArgs": ["run", "dev:client"],
+      "port": 5180
+    },
+    {
+      "name": "design-premium",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd Gestor-app-redesign\\client && npm run dev"],
+      "port": 5181
+    },
+    {
+      "name": "design-mono",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd Gestor-app-mono\\client && npm run dev"],
+      "port": 5182
+    },
+    {
+      "name": "design-aurora",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd Gestor-app-aurora\\client && npm run dev"],
+      "port": 5183
+    },
+    {
+      "name": "design-bento",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd Gestor-app-bento\\client && npm run dev"],
+      "port": 5184
+    },
+    {
+      "name": "design-editorial",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd Gestor-app-editorial\\client && npm run dev"],
+      "port": 5185
     }
   ]
 }

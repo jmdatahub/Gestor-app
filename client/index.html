@@ -15,12 +15,21 @@
       // Bootstrap design + theme BEFORE React mounts to avoid FOUC.
       (function () {
         try {
-          var d = localStorage.getItem('app_design') || 'crafted';
+          // Migration: if we previously defaulted to 'crafted' silently,
+          // reset that selection so users see 'original' (their original look).
+          // Their explicit picks via Settings keep working from here on.
+          if (!localStorage.getItem('design_v2_initialized')) {
+            if (localStorage.getItem('app_design') === 'crafted') {
+              localStorage.removeItem('app_design');
+            }
+            localStorage.setItem('design_v2_initialized', '1');
+          }
+          var d = localStorage.getItem('app_design') || 'original';
           var t = localStorage.getItem('app_theme') || 'light';
           document.documentElement.setAttribute('data-design', d);
           document.documentElement.setAttribute('data-theme', t);
         } catch (e) {
-          document.documentElement.setAttribute('data-design', 'crafted');
+          document.documentElement.setAttribute('data-design', 'original');
         }
       })();
     </script>
