@@ -27,6 +27,7 @@ import adminRoutes from './routes/admin.routes.js'
 import crmSyncRoutes from './routes/crm-sync.routes.js'
 import notifyRoutes from './routes/notify.routes.js'
 import telegramRoutes from './routes/telegram.routes.js'
+import { setMyCommands } from './services/telegram.service.js'
 import { processRecurringRules } from './jobs/recurringProcessor.js'
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -125,6 +126,11 @@ app.listen(PORT, () => {
   console.log(`📊 Health: http://localhost:${PORT}/api/health`)
   console.log(`🌍 Env: ${process.env.NODE_ENV || 'development'}`)
   console.log(`🛡️  CORS: ${allowedOrigins.join(', ')}`)
+
+  // ─── Register Telegram bot commands ─────────────────────────────────────
+  setMyCommands().catch(err =>
+    console.error('[telegram] setMyCommands failed:', err)
+  )
 
   // ─── Recurring rules processor ────────────────────────────────────────────
   // Run once on startup to catch up on any missed occurrences, then hourly.
