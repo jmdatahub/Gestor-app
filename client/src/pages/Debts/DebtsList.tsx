@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { fetchDebts, type Debt, type CreateDebtInput } from '../../services/debtService'
 import { useCreateDebt } from '../../hooks/queries/useDebtMutations'
-import { Plus, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Plus, AlertCircle, CheckCircle2, Clock, ChevronRight } from 'lucide-react'
 import { useI18n } from '../../hooks/useI18n'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { formatISODateString } from '../../utils/date'
@@ -22,7 +22,7 @@ export default function DebtsList() {
   const { t, language } = useI18n()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { currentWorkspace } = useWorkspace()  // Add workspace context
+  const { currentWorkspace } = useWorkspace()
   const toast = useToast()
   const createDebtMutation = useCreateDebt()
   const [debts, setDebts] = useState<Debt[]>([])
@@ -30,22 +30,20 @@ export default function DebtsList() {
   const [activeTab, setActiveTab] = useState<'i_owe' | 'they_owe_me'>('i_owe')
   const [showModal, setShowModal] = useState(false)
 
-  // Form state
   const [direction, setDirection] = useState<'i_owe' | 'they_owe_me'>('i_owe')
   const [counterparty, setCounterparty] = useState('')
   const [amount, setAmount] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
-  // Reload when workspace changes
   useEffect(() => {
     loadDebts()
   }, [currentWorkspace])
 
   const loadDebts = async () => {
     if (!user) return
-
     try {
       const orgId = currentWorkspace?.id || null
       const data = await fetchDebts(user.id, orgId)
@@ -57,13 +55,10 @@ export default function DebtsList() {
     }
   }
 
-  const [formError, setFormError] = useState<string | null>(null)
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
-    
-    // Validación previa
+
     if (!counterparty.trim()) {
       setFormError('El nombre de la contraparte es obligatorio')
       return
@@ -81,7 +76,6 @@ export default function DebtsList() {
       return
     }
 
-    // Timeout de seguridad (12s)
     const timeoutId = setTimeout(() => {
       setSubmitting(false)
       setFormError('La operación tardó demasiado. Verifica tu conexión.')
@@ -90,14 +84,14 @@ export default function DebtsList() {
     try {
       const input: CreateDebtInput = {
         user_id: user.id,
-        organization_id: currentWorkspace?.id || null, // Pass organization_id
+        organization_id: currentWorkspace?.id || null,
         direction,
         counterparty_name: counterparty.trim(),
         total_amount: amountNum,
         due_date: dueDate || null,
         description: description.trim() || null
       }
-      
+
       await createDebtMutation.mutateAsync(input)
       clearTimeout(timeoutId)
       setShowModal(false)
@@ -105,27 +99,18 @@ export default function DebtsList() {
       loadDebts()
     } catch (err: unknown) {
       clearTimeout(timeoutId)
-      console.error('[DebtsList] Error creating debt:', err)
-      
-      // Mostrar error técnico completo para debugging
       let errorMsg = 'Error al crear la deuda.'
       let technicalDetail = ''
-      
+
       if (err && typeof err === 'object') {
         const supaError = err as { message?: string; details?: string; hint?: string; code?: string }
         technicalDetail = supaError.message || JSON.stringify(err)
-        
-        // Add extra details if available
         if (supaError.details) technicalDetail += ` | ${supaError.details}`
         if (supaError.hint) technicalDetail += ` | Hint: ${supaError.hint}`
         if (supaError.code) technicalDetail += ` | Code: ${supaError.code}`
       }
-      
-      // Display both user-friendly message and technical detail
-      if (technicalDetail) {
-        errorMsg += ` [${technicalDetail}]`
-      }
-      
+
+      if (technicalDetail) errorMsg += ` [${technicalDetail}]`
       setFormError(errorMsg)
     } finally {
       setSubmitting(false)
@@ -155,20 +140,27 @@ export default function DebtsList() {
     })
   }
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | string | null | undefined) => {
+    const n = Number(amount ?? 0)
+    const safe = Number.isFinite(n) ? n : 0
     return new Intl.NumberFormat(language === 'es' ? 'es-ES' : 'en-US', {
       style: 'currency',
       currency: 'EUR'
-    }).format(amount)
+    }).format(safe)
   }
 
   if (loading) {
     return (
-       <div className="d-flex items-center justify-center" style={{ minHeight: '200px' }}>
-         <div className="spinner"></div>
+      <div className="d-flex items-center justify-center" style={{ minHeight: '200px' }}>
+        <div className="spinner"></div>
       </div>
     )
   }
+
+  const activeDebts = filteredDebts.filter(d => !d.is_closed)
+  const totalPending = activeDebts.reduce((s, d) => s + (Number(d.remaining_amount) || 0), 0)
+  const overdueCount = activeDebts.filter(d => isOverdue(d)).length
+  const closedCount = filteredDebts.filter(d => d.is_closed).length
 
   return (
     <div className="page-container">
@@ -196,128 +188,252 @@ export default function DebtsList() {
         />
       </div>
 
+      {/* Summary Strip */}
+      {filteredDebts.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+          <div style={{
+            padding: '14px 18px',
+            background: 'var(--card-bg)',
+            borderRadius: 12,
+            border: '1px solid var(--border)',
+            borderTop: `3px solid ${activeTab === 'i_owe' ? '#ef4444' : 'var(--success)'}`
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              Total pendiente
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: activeTab === 'i_owe' ? '#ef4444' : 'var(--success)' }}>
+              {formatCurrency(totalPending)}
+            </div>
+          </div>
+          <div style={{
+            padding: '14px 18px',
+            background: 'var(--card-bg)',
+            borderRadius: 12,
+            border: '1px solid var(--border)',
+            borderTop: '3px solid var(--primary)'
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              Activas
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{activeDebts.length}</div>
+          </div>
+          <div style={{
+            padding: '14px 18px',
+            background: 'var(--card-bg)',
+            borderRadius: 12,
+            border: '1px solid var(--border)',
+            borderTop: `3px solid ${overdueCount > 0 ? '#ef4444' : 'var(--border)'}`
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              Vencidas
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: overdueCount > 0 ? '#ef4444' : 'var(--text-secondary)' }}>
+              {overdueCount}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Debts List */}
       {filteredDebts.length === 0 ? (
         <UiCard className="p-12 d-flex flex-col items-center justify-center text-center">
-            <p className="text-secondary">{t('debts.empty')}</p>
+          <p className="text-secondary">{t('debts.empty')}</p>
         </UiCard>
       ) : (
-        <div className="d-flex flex-col gap-4">
-          {filteredDebts.map((debt) => (
-            <div 
-              key={debt.id}
-              className="cursor-pointer"
-              onClick={() => navigate(`/app/debts/${debt.id}`)}
-              style={{ transition: 'all 0.2s ease-in-out' }}
-              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)'
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)'
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                e.currentTarget.style.boxShadow = ''
-              }}
-            >
-              <UiCard 
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filteredDebts.map((debt) => {
+            const totalAmt = Number(debt.total_amount ?? 0) || 0
+            const remainingAmt = Number(debt.remaining_amount ?? 0) || 0
+            const paidAmt = totalAmt - remainingAmt
+            const paidPct = totalAmt > 0 ? Math.min(100, Math.max(0, (paidAmt / totalAmt) * 100)) : 0
+            const overdue = isOverdue(debt)
+            const statusColor = debt.is_closed ? '#22c55e' : overdue ? '#ef4444' : 'var(--primary)'
+            const initial = debt.counterparty_name?.charAt(0)?.toUpperCase() || '?'
+
+            return (
+              <div
+                key={debt.id}
+                onClick={() => navigate(`/app/debts/${debt.id}`)}
                 style={{
-                  borderLeft: debt.is_closed
-                    ? '4px solid var(--success)'
-                    : isOverdue(debt)
-                      ? '4px solid var(--danger)'
-                      : '4px solid var(--primary)'
+                  background: 'var(--card-bg)',
+                  border: '1px solid var(--border)',
+                  borderLeft: `4px solid ${statusColor}`,
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                }}
+                onMouseEnter={e => {
+                  const el = e.currentTarget as HTMLDivElement
+                  el.style.transform = 'translateY(-2px)'
+                  el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)'
+                }}
+                onMouseLeave={e => {
+                  const el = e.currentTarget as HTMLDivElement
+                  el.style.transform = ''
+                  el.style.boxShadow = ''
                 }}
               >
-                <div>
-                    <div className="card-header pb-2 border-0">
-                        <div className="d-flex justify-between items-start">
-                            <div>
-                                <h3 className="text-lg font-bold">{debt.counterparty_name}</h3>
-                                {debt.description && (
-                                    <p style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{debt.description}</p>
-                                )}
-                            </div>
-                            <div className="text-right">
-                                <div className="text-xl font-bold">{formatCurrency(debt.remaining_amount)}</div>
-                                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
-                                    {t('debts.ofTotal')} {formatCurrency(debt.total_amount)}
-                                </div>
-                            </div>
-                        </div>
+                {/* Top row: Avatar + Name/Desc + Amount */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                  {/* Avatar */}
+                  <div style={{
+                    width: 46,
+                    height: 46,
+                    borderRadius: '50%',
+                    background: `${statusColor}22`,
+                    color: statusColor,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: 19,
+                    flexShrink: 0,
+                    border: `1.5px solid ${statusColor}44`,
+                  }}>
+                    {initial}
+                  </div>
+
+                  {/* Name + Description */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 3, lineHeight: 1.2 }}>
+                      {debt.counterparty_name}
                     </div>
-                    <div className="card-footer bg-transparent border-t border-gray-100 pt-3 flex justify-between items-center">
-                        <div className="d-flex items-center gap-2 text-sm">
-                            {debt.due_date && (
-                                <span style={{ 
-                                    color: isOverdue(debt) ? '#ef4444' : '#475569',
-                                    fontWeight: 500,
-                                    fontSize: 13
-                                }}>
-                                    📅 {t('debts.dueDate')}: {formatDate(debt.due_date)}
-                                </span>
-                            )}
-                        </div>
-                        <div>
-                            {debt.is_closed ? (
-                                <span className="badge badge-success">
-                                <CheckCircle2 size={14} style={{ marginRight: '4px' }} />
-                                {t('debts.closed')}
-                                </span>
-                            ) : isOverdue(debt) ? (
-                                <span className="badge badge-danger">
-                                <AlertCircle size={14} style={{ marginRight: '4px' }} />
-                                {t('debts.overdue')}
-                                </span>
-                            ) : (
-                                <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    padding: '4px 10px',
-                                    borderRadius: 6,
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
-                                    color: '#92400e',
-                                    border: '1px solid #fcd34d'
-                                }}>⏳ {t('debts.pending')}</span>
-                            )}
-                        </div>
+                    {debt.description && (
+                      <div style={{
+                        fontSize: 13,
+                        color: 'var(--text-secondary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '100%',
+                      }}>
+                        {debt.description}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Amount + chevron */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: statusColor, lineHeight: 1.2 }}>
+                        {formatCurrency(remainingAmt)}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        de {formatCurrency(totalAmt)}
+                      </div>
                     </div>
+                    <ChevronRight size={18} style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
+                  </div>
                 </div>
-            </UiCard>
-            </div>
-          ))}
+
+                {/* Progress bar */}
+                {!debt.is_closed && totalAmt > 0 && (
+                  <div style={{ marginTop: 14, marginBottom: 2 }}>
+                    <div style={{
+                      height: 5,
+                      background: 'var(--border)',
+                      borderRadius: 3,
+                      overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${paidPct}%`,
+                        background: statusColor,
+                        borderRadius: 3,
+                        transition: 'width 0.5s ease',
+                      }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{paidPct.toFixed(0)}% pagado</span>
+                      <span>Pendiente: {formatCurrency(remainingAmt)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer: date + badge */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+                  <div>
+                    {debt.due_date ? (
+                      <span style={{
+                        fontSize: 12,
+                        color: overdue ? '#ef4444' : 'var(--text-secondary)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}>
+                        <Clock size={12} />
+                        {overdue ? 'Vencida: ' : 'Vence: '}{formatDate(debt.due_date)}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                  </div>
+
+                  <div>
+                    {debt.is_closed ? (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0',
+                      }}>
+                        <CheckCircle2 size={13} />
+                        {t('debts.closed')}
+                      </span>
+                    ) : overdue ? (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca',
+                      }}>
+                        <AlertCircle size={13} />
+                        {t('debts.overdue')}
+                      </span>
+                    ) : (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                        background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+                      }}>
+                        <Clock size={13} />
+                        {t('debts.pending')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
       {/* Create Modal */}
-      <UiModal 
-        isOpen={showModal} 
-        onClose={() => { setShowModal(false); setFormError(null); }}
+      <UiModal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setFormError(null) }}
         width="500px"
       >
         <form onSubmit={handleCreate}>
           <div className="p-4 border-b">
             <h3 className="text-lg font-semibold">{t('debts.new')}</h3>
           </div>
-          
-          {/* Error Banner */}
+
           {formError && (
             <div className="mx-4 mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm">
               <strong>⚠️ Error:</strong> {formError}
             </div>
           )}
-          
+
           <UiModalBody>
             <div className="form-group">
               <UiField label={t('debts.modal.type')}>
                 <UiSelect
-                    value={direction}
-                    onChange={(val) => setDirection(val as 'i_owe' | 'they_owe_me')}
-                    options={[
-                        { value: 'i_owe', label: t('debts.iOwe') },
-                        { value: 'they_owe_me', label: t('debts.theyOweMe') },
-                    ]}
+                  value={direction}
+                  onChange={(val) => setDirection(val as 'i_owe' | 'they_owe_me')}
+                  options={[
+                    { value: 'i_owe', label: t('debts.iOwe') },
+                    { value: 'they_owe_me', label: t('debts.theyOweMe') },
+                  ]}
                 />
               </UiField>
             </div>
@@ -364,7 +480,7 @@ export default function DebtsList() {
             </div>
           </UiModalBody>
           <UiModalFooter>
-             <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setFormError(null); }}>
+            <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); setFormError(null) }}>
               {t('common.cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
