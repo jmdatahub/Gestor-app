@@ -422,16 +422,23 @@
 /* =============================
    INPUTS / FORM CONTROLS
    ============================= */
+input, textarea, select, button {
+  font-family: inherit;
+}
+
 .ui-control,
 .ui-input,
 .ui-textarea,
 .ui-select-trigger,
-.ui-input-container {
+.ui-input-container,
+input.ui-input,
+textarea.ui-textarea {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-color) !important;
   border-radius: 9px !important;
   height: var(--control-height);
-  font-size: 0.875rem;
+  font-family: var(--font-sans) !important;
+  font-size: 0.875rem !important;
   color: var(--text-primary) !important;
   transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
   font-feature-settings: var(--font-feature-default);
