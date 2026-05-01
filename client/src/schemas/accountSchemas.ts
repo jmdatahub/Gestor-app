@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const accountTypeSchema = z.enum(['general', 'savings', 'cash', 'bank', 'broker', 'other'])
+export const accountTypeSchema = z.enum(['general', 'savings', 'cash', 'bank', 'broker', 'other', 'investment', 'checking', 'credit'])
 
 export const accountSchema = z.object({
   id: z.string().uuid(),
@@ -13,6 +13,9 @@ export const accountSchema = z.object({
   parent_account_id: z.string().uuid().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  currency: z.string().nullable().optional(),
 })
 
 export const accountWithBalanceSchema = accountSchema.extend({

@@ -237,11 +237,11 @@ export default function Dashboard() {
 
       <div className="stat-grid stat-grid--4" style={{ marginBottom: 20 }}>
         <StatCard
-          label={t('dashboard.balance')}
+          label="Balance líquido"
           value={formatCurrency(accountsSummary.totalBalance)}
           icon={<Wallet size={18} />}
           tone="primary"
-          helper={`${accountsSummary.accountCount} ${accountsSummary.accountCount === 1 ? 'cuenta' : 'cuentas'}`}
+          helper={`${accountsSummary.accountCount} ${accountsSummary.accountCount === 1 ? 'cuenta' : 'cuentas'} · sin ahorro/broker`}
           sparkline={netSparkline}
         />
         <StatCard

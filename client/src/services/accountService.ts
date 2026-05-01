@@ -18,7 +18,9 @@ export interface CreateAccountInput {
 export const accountTypes = [
   { value: 'general', label: 'General' }, { value: 'savings', label: 'Ahorro' },
   { value: 'cash', label: 'Efectivo' }, { value: 'bank', label: 'Cuenta Bancaria' },
-  { value: 'broker', label: 'Broker / Inversión' }, { value: 'other', label: 'Otra' },
+  { value: 'broker', label: 'Broker / Inversión' }, { value: 'investment', label: 'Inversión' },
+  { value: 'checking', label: 'Cuenta Corriente' }, { value: 'credit', label: 'Crédito' },
+  { value: 'other', label: 'Otra' },
 ]
 
 export async function getUserAccounts(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<Account[]> {
