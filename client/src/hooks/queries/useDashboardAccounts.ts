@@ -18,8 +18,12 @@ export const useAccountsSummary = (userId: string | null, workspaceId: string | 
   return useQuery({
     queryKey: dashboardKeys.accountsSummary(userId!, workspaceId),
     queryFn: async ({ signal }) => {
-      const data = await fetchAccountsSummary(userId!, workspaceId, signal)
-      return accountSummarySchema.parse(data)
+      const accounts = await fetchAccountsSummary(userId!, workspaceId, signal)
+      const liquid = accounts.filter(a => !['savings', 'broker', 'investment'].includes(a.type as string))
+      return accountSummarySchema.parse({
+        totalBalance: liquid.reduce((sum, a) => sum + (Number(a.balance) || 0), 0),
+        accountCount: liquid.length,
+      })
     },
     enabled: !!userId,
   })
