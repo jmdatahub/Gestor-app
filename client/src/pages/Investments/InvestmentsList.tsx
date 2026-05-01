@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -24,8 +24,19 @@ import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { useToast } from '../../components/Toast'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 
 const FALLBACK_EUR_USD = 0.92
+
+const TYPE_COLORS: Record<string, string> = {
+  crypto:      '#8b5cf6',
+  stock:       '#3b82f6',
+  etf:         '#06b6d4',
+  bond:        '#10b981',
+  real_estate: '#f59e0b',
+  commodity:   '#f97316',
+  other:       '#6b7280',
+}
 
 // ── Inline styles ────────────────────────────────────────────────────────────
 const S = {
@@ -327,11 +338,16 @@ export default function InvestmentsList() {
       }
       if (editingId) {
         await updateMut.mutateAsync({ id: editingId, updates: input as any })
+        toast.success(t('investments.updated') || 'Inversión actualizada', `"${name}" se ha guardado correctamente`)
       } else {
         await createMut.mutateAsync(input)
+        toast.success(t('investments.created') || 'Inversión creada', `"${name}" se ha añadido a tu cartera`)
       }
       setShowCreateModal(false); resetForm(); loadData()
-    } catch (e) { console.error(e) }
+    } catch (e: any) {
+      console.error(e)
+      toast.error(t('common.error') || 'Error', e?.message || 'No se pudo guardar la inversión')
+    }
     finally { setSubmitting(false) }
   }
 
@@ -346,14 +362,24 @@ export default function InvestmentsList() {
       })
       setShowPriceModal(false); setSelectedInv(null); setNewPrice('')
       loadData()
-    } catch (e) { console.error(e) }
+      toast.success(t('investments.priceUpdated') || 'Precio actualizado', 'El precio se ha registrado correctamente')
+    } catch (e: any) {
+      console.error(e)
+      toast.error(t('common.error') || 'Error', e?.message || 'No se pudo actualizar el precio')
+    }
     finally { setSubmitting(false) }
   }
 
   const handleDelete = async (inv: Investment) => {
     if (!confirm(`¿Eliminar la inversión "${inv.name}"?`)) return
-    try { await deleteMut.mutateAsync(inv.id); loadData() }
-    catch (e) { console.error(e) }
+    try {
+      await deleteMut.mutateAsync(inv.id)
+      loadData()
+      toast.success(t('investments.deleted') || 'Inversión eliminada', `"${inv.name}" se ha eliminado`)
+    } catch (e: any) {
+      console.error(e)
+      toast.error(t('common.error') || 'Error', e?.message || 'No se pudo eliminar la inversión')
+    }
   }
 
   const resetForm = () => {
@@ -384,6 +410,23 @@ export default function InvestmentsList() {
   const totals   = calculateTotals(investments)
   const hasCrypto = investments.some(i => (i.type ?? i.asset_type) === 'crypto')
   const totalEquityEur = investments.reduce((s, i) => s + equityEur(i), 0)
+
+  const allocationByType = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const inv of investments) {
+      const key = inv.type ?? inv.asset_type ?? 'other'
+      map[key] = (map[key] ?? 0) + equityEur(inv)
+    }
+    return Object.entries(map)
+      .map(([type, value]) => ({
+        type,
+        value,
+        pct: totalEquityEur > 0 ? (value / totalEquityEur) * 100 : 0,
+        label: investmentTypes.find(t => t.value === type)?.label ?? type,
+        color: TYPE_COLORS[type] ?? TYPE_COLORS.other,
+      }))
+      .sort((a, b) => b.value - a.value)
+  }, [investments, totalEquityEur, liveRates]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="d-flex items-center justify-center" style={{ minHeight: 200 }}>
@@ -463,6 +506,88 @@ export default function InvestmentsList() {
           </div>
         </div>
       </div>
+
+      {/* ── Portfolio allocation ── */}
+      {investments.length > 0 && (
+        <div style={{
+          borderRadius: 12,
+          border: '1px solid var(--border)',
+          background: 'var(--card-bg)',
+          padding: '16px 20px',
+          marginBottom: '1.5rem',
+          display: 'grid',
+          gridTemplateColumns: '160px 1fr',
+          gap: '24px',
+          alignItems: 'center',
+        }}>
+          {/* Donut */}
+          <div style={{ position: 'relative', width: 160, height: 160 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={allocationByType}
+                  dataKey="value"
+                  nameKey="label"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={48}
+                  outerRadius={72}
+                  paddingAngle={2}
+                  strokeWidth={0}
+                >
+                  {allocationByType.map(entry => (
+                    <Cell key={entry.type} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(v: number) => [fmt(v), 'Equity']}
+                  contentStyle={{
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    fontSize: '0.78rem',
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            {/* Center label */}
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total</span>
+              <span style={{ fontSize: '0.82rem', fontWeight: 800, fontFamily: 'monospace', lineHeight: 1.2 }}>{fmt(totalEquityEur)}</span>
+            </div>
+          </div>
+
+          {/* Legend + bars */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
+              Distribución de la cartera
+            </div>
+            {allocationByType.map(entry => (
+              <div key={entry.type} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color, flexShrink: 0, display: 'inline-block' }} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{entry.label}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{fmt(entry.value)}</span>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, fontFamily: 'monospace', minWidth: 42, textAlign: 'right' }}>{entry.pct.toFixed(1)}%</span>
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div style={{ height: 4, borderRadius: 2, background: 'rgba(107,114,128,0.12)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${entry.pct}%`, background: entry.color, borderRadius: 2, transition: 'width 0.4s ease' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Investment cards ── */}
       {investments.length === 0 ? (
