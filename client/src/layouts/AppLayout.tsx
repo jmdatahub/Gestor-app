@@ -179,42 +179,44 @@ export default function AppLayout() {
       {isSwitchingWorkspace && (
         <div style={{
           position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15, 23, 42, 0.8)',
-          backdropFilter: 'blur(12px)',
+          inset: 0,
+          background: 'var(--bg-overlay)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           zIndex: 99999,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          animation: 'fadeIn 0.3s ease-out'
+          animation: 'premium-fade-in 220ms ease-out'
         }}>
           <div style={{
-            width: 80, height: 80,
-            borderRadius: 24,
-            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+            width: 64, height: 64,
+            borderRadius: 16,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-display)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 24,
-            boxShadow: '0 0 40px var(--primary-soft)',
-            animation: 'pulse 1.5s infinite'
+            marginBottom: 20,
+            boxShadow: 'var(--shadow-lg)',
           }}>
-            <Building size={40} color="white" />
+            <Building size={28} strokeWidth={1.5} />
           </div>
-          <h2 style={{ 
-            color: 'white', 
-            fontSize: 24, 
-            fontWeight: 700, 
-            letterSpacing: '-0.5px',
-            animation: 'slideUp 0.5s ease-out'
+          <h2 style={{
+            fontFamily: 'var(--font-display)',
+            color: 'var(--text-display)',
+            fontSize: 22,
+            fontWeight: 500,
+            letterSpacing: '-0.02em',
           }}>
-            Cambiando Espacio de Trabajo...
+            Cambiando espacio de trabajo
           </h2>
-          <p style={{ 
-            color: 'var(--text-secondary)', 
-            marginTop: 8,
-            animation: 'slideUp 0.6s ease-out'
+          <p style={{
+            color: 'var(--text-secondary)',
+            marginTop: 6,
+            fontSize: 14,
           }}>
-             Un momento por favor
+            Un momento por favor
           </p>
         </div>
       )}
@@ -258,16 +260,20 @@ export default function AppLayout() {
               title={isCollapsed ? t(item.key) : ''}
             >
               <div className="nav-item-icon" style={{ position: 'relative' }}>
-                <item.icon size={20} />
+                <item.icon size={18} strokeWidth={1.75} />
                 {item.path === '/app/dashboard' && pendingInvitations > 0 && (
                   <span style={{
                     position: 'absolute',
-                    top: -4, right: -4,
-                    minWidth: 18, height: 18,
+                    top: -3, right: -5,
+                    minWidth: 14, height: 14,
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                    color: 'white', fontSize: 10, fontWeight: 700,
-                    animation: 'pulse 2s infinite'
+                    background: 'var(--danger)',
+                    color: 'var(--bg-card)',
+                    fontSize: 9,
+                    fontWeight: 600,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '2px solid var(--bg-sidebar)',
+                    fontVariantNumeric: 'tabular-nums',
                   }}>
                     {pendingInvitations}
                   </span>
@@ -275,13 +281,15 @@ export default function AppLayout() {
                 {item.path === '/app/patrimonio' && pendingDebts > 0 && (
                   <span style={{
                     position: 'absolute',
-                    top: -4, right: -4,
-                    minWidth: 16, height: 16,
+                    top: -3, right: -5,
+                    minWidth: 14, height: 14,
                     borderRadius: '50%',
-                    background: '#ef4444',
-                    color: 'white', fontSize: 9, fontWeight: 700,
+                    background: 'var(--danger)',
+                    color: 'var(--bg-card)',
+                    fontSize: 9, fontWeight: 600,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    border: '1px solid var(--sidebar-bg)'
+                    border: '2px solid var(--bg-sidebar)',
+                    fontVariantNumeric: 'tabular-nums',
                   }}>
                     {pendingDebts}
                   </span>
@@ -291,13 +299,8 @@ export default function AppLayout() {
                 {t(item.key)}
               </span>
               {item.path === '/app/dashboard' && pendingInvitations > 0 && !isCollapsed && (
-                <span style={{
-                  marginLeft: 'auto', padding: '2px 8px', borderRadius: 10,
-                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                  color: 'white', fontSize: 11, fontWeight: 600,
-                  boxShadow: '0 2px 6px rgba(239,68,68,0.4)'
-                }}>
-                  {pendingInvitations} 📩
+                <span className="pill pill--danger" style={{ marginLeft: 'auto' }}>
+                  {pendingInvitations}
                 </span>
               )}
             </NavLink>
@@ -306,9 +309,8 @@ export default function AppLayout() {
           {/* Separator */}
           <div style={{
             height: 1,
-            background: 'var(--border-color)',
-            margin: '8px 16px',
-            opacity: 0.5,
+            background: 'var(--border-subtle)',
+            margin: '12px 12px',
           }} />
 
           {/* Configuración */}

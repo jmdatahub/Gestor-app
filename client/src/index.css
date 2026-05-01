@@ -8,6 +8,9 @@
 
 @import './styles/advanced.css';
 
+/* Premium overlay — must be LAST so it wins specificity battles. */
+@import './styles/premium.css';
+
 /* ==============================================
    TABLES
    ============================================== */
