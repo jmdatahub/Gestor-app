@@ -36,6 +36,7 @@ import {
   useDailySpending,
   useMonthTopCategories,
 } from '../../hooks/queries/useDashboardTrend'
+import { useToast } from '../../components/Toast'
 
 function prevMonth(year: number, month: number) {
   return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 }
@@ -51,6 +52,7 @@ export default function InsightsPage() {
   const { t, language } = useI18n()
   const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()
+  const toast = useToast()
   const locale = language === 'es' ? 'es-ES' : 'en-US'
   const currency = 'EUR'
   const workspaceId = currentWorkspace?.id || null
@@ -67,18 +69,21 @@ export default function InsightsPage() {
     if (!userId) return
     let cancelled = false
     setLoadingInsights(true)
-    getMonthlyInsights(userId, year, month, t, locale)
+    getMonthlyInsights(userId, year, month, t, locale, workspaceId)
       .then((data) => {
         if (!cancelled) setInsights(data)
       })
-      .catch((err) => console.error('Error loading insights:', err))
+      .catch((err) => {
+        console.error('Error loading insights:', err)
+        if (!cancelled) toast.error(t('insights.errorTitle') || 'Error', t('insights.errorDesc') || 'No se pudieron cargar los análisis.')
+      })
       .finally(() => {
         if (!cancelled) setLoadingInsights(false)
       })
     return () => {
       cancelled = true
     }
-  }, [userId, year, month, t, locale])
+  }, [userId, year, month, t, locale, workspaceId])
 
   const { data: trend6 = [] } = useMonthlyTrend(userId, workspaceId, 6)
   const { data: trend12 = [] } = useMonthlyTrend(userId, workspaceId, 12)
@@ -159,9 +164,12 @@ export default function InsightsPage() {
   const handleRefresh = () => {
     if (!userId) return
     setLoadingInsights(true)
-    getMonthlyInsights(userId, year, month, t, locale)
+    getMonthlyInsights(userId, year, month, t, locale, workspaceId)
       .then(setInsights)
-      .catch((err) => console.error('Error refreshing insights:', err))
+      .catch((err) => {
+        console.error('Error refreshing insights:', err)
+        toast.error(t('insights.errorTitle') || 'Error', t('insights.errorDesc') || 'No se pudieron cargar los análisis.')
+      })
       .finally(() => setLoadingInsights(false))
   }
 
@@ -181,7 +189,7 @@ export default function InsightsPage() {
             className="btn btn-secondary btn-icon"
             onClick={handleRefresh}
             disabled={loadingInsights}
-            title="Actualizar análisis"
+            title={t('insights.refresh')}
           >
             <RefreshCw size={18} className={loadingInsights ? 'animate-spin' : ''} />
           </button>
@@ -192,8 +200,8 @@ export default function InsightsPage() {
         className="mb-4"
         padding="tight"
         icon={<CalendarRange size={16} />}
-        title="Periodo de análisis"
-        subtitle={`Comparando ${periodLabel} vs ${prevPeriodLabel}`}
+        title={t('insights.periodTitle')}
+        subtitle={t('insights.periodSubtitle') + ` ${periodLabel} vs ${prevPeriodLabel}`}
         actions={
           <button
             className="btn btn-primary"
@@ -228,54 +236,54 @@ export default function InsightsPage() {
 
       <div className="stat-grid mb-4">
         <StatCard
-          label="Ingresos"
+          label={t('insights.stat.income')}
           value={formatCurrency(currentIncome)}
           tone="success"
           icon={<TrendingUp size={18} />}
-          trend={{ value: incomeTrend, label: 'vs mes anterior' }}
-          helper={`Anterior: ${formatCurrency(prevIncome)}`}
+          trend={{ value: incomeTrend, label: t('insights.stat.vsPrevMonth') }}
+          helper={`${t('insights.stat.previous')}: ${formatCurrency(prevIncome)}`}
           sparkline={incomeSparkline}
         />
         <StatCard
-          label="Gastos"
+          label={t('insights.stat.expenses')}
           value={formatCurrency(currentExpense)}
           tone="danger"
           icon={<TrendingDown size={18} />}
-          trend={{ value: expenseTrend, label: 'vs mes anterior', invert: true }}
-          helper={`Anterior: ${formatCurrency(prevExpense)}`}
+          trend={{ value: expenseTrend, label: t('insights.stat.vsPrevMonth'), invert: true }}
+          helper={`${t('insights.stat.previous')}: ${formatCurrency(prevExpense)}`}
           sparkline={expenseSparkline}
         />
         <StatCard
-          label="Balance"
+          label={t('insights.stat.balance')}
           value={formatCurrency(currentNet)}
           tone={currentNet >= 0 ? 'primary' : 'danger'}
           icon={<Wallet size={18} />}
-          helper={currentNet >= 0 ? 'Superávit del mes' : 'Déficit del mes'}
+          helper={currentNet >= 0 ? t('insights.stat.surplus') : t('insights.stat.deficit')}
           sparkline={netSparkline}
         />
         <StatCard
-          label="Tasa de ahorro"
+          label={t('insights.stat.savingsRate')}
           value={`${savingsRate.toFixed(1)}%`}
           tone={savingsRate >= 20 ? 'success' : savingsRate >= 0 ? 'warning' : 'danger'}
           icon={<Sparkles size={18} />}
-          trend={savingsRateTrend !== 0 ? { value: savingsRateTrend, label: 'pp vs mes anterior' } : undefined}
-          helper={savingsRate >= 20 ? 'Muy saludable' : savingsRate >= 10 ? 'Aceptable' : 'Revisar gastos'}
+          trend={savingsRateTrend !== 0 ? { value: savingsRateTrend, label: t('insights.stat.ppVsPrevMonth') } : undefined}
+          helper={savingsRate >= 20 ? t('insights.stat.veryHealthy') : savingsRate >= 10 ? t('insights.stat.acceptable') : t('insights.stat.reviewExpenses')}
         />
       </div>
 
       <div className="dash-grid mb-4">
         <div className="col-8">
           <Panel
-            title="Evolución mensual"
-            subtitle="Ingresos, gastos y neto en los últimos 12 meses"
+            title={t('insights.chart.monthlyEvolution')}
+            subtitle={t('insights.chart.monthlyEvolutionSubtitle')}
             icon={<BarChart2 size={16} />}
           >
             {trend12.length === 0 ? (
               <EmptyState
                 compact
                 icon={<BarChart2 size={24} />}
-                title="Sin datos"
-                description="Añade movimientos para ver tu evolución."
+                title={t('insights.noData')}
+                description={t('insights.noDataDesc')}
               />
             ) : (
               <AreaTrendChart data={trend12} showNet height={300} currency={currency} locale={locale} />
@@ -284,24 +292,24 @@ export default function InsightsPage() {
         </div>
         <div className="col-4">
           <Panel
-            title="Comparativa rápida"
+            title={t('insights.chart.quickCompare')}
             subtitle={`${periodLabel} vs ${prevPeriodLabel}`}
             icon={<ArrowLeftRight size={16} />}
           >
             <div className="cat-row" style={{ borderBottom: '1px solid var(--border-color)' }}>
-              <span className="cat-row__name">Ingresos</span>
+              <span className="cat-row__name">{t('insights.stat.income')}</span>
               <span className="cat-row__amount" style={{ color: 'var(--chart-positive)' }}>
                 {formatCurrency(currentIncome)}
               </span>
             </div>
             <div className="cat-row" style={{ borderBottom: '1px solid var(--border-color)' }}>
-              <span className="cat-row__name">Gastos</span>
+              <span className="cat-row__name">{t('insights.stat.expenses')}</span>
               <span className="cat-row__amount" style={{ color: 'var(--chart-negative)' }}>
                 {formatCurrency(currentExpense)}
               </span>
             </div>
             <div className="cat-row" style={{ borderBottom: '1px solid var(--border-color)' }}>
-              <span className="cat-row__name">Balance</span>
+              <span className="cat-row__name">{t('insights.stat.balance')}</span>
               <span
                 className="cat-row__amount"
                 style={{ color: currentNet >= 0 ? 'var(--chart-positive)' : 'var(--chart-negative)' }}
@@ -310,7 +318,7 @@ export default function InsightsPage() {
               </span>
             </div>
             <div className="cat-row">
-              <span className="cat-row__name">Δ Gastos</span>
+              <span className="cat-row__name">Δ {t('insights.stat.expenses')}</span>
               <span
                 className="cat-row__amount"
                 style={{ color: expenseTrend > 0 ? 'var(--chart-negative)' : 'var(--chart-positive)' }}
@@ -320,7 +328,7 @@ export default function InsightsPage() {
               </span>
             </div>
             <div className="cat-row">
-              <span className="cat-row__name">Δ Ingresos</span>
+              <span className="cat-row__name">Δ {t('insights.stat.income')}</span>
               <span
                 className="cat-row__amount"
                 style={{ color: incomeTrend >= 0 ? 'var(--chart-positive)' : 'var(--chart-negative)' }}
@@ -336,7 +344,7 @@ export default function InsightsPage() {
       <div className="dash-grid mb-4">
         <div className="col-5">
           <Panel
-            title="Distribución de gastos"
+            title={t('insights.chart.spendingDistribution')}
             subtitle={periodLabel}
           >
             {catsLoading ? (
@@ -345,7 +353,7 @@ export default function InsightsPage() {
               <EmptyState
                 compact
                 title={t('insights.noDataSpending')}
-                description="Sin gastos registrados este mes."
+                description={t('insights.noDataSpendingDesc')}
               />
             ) : (
               <>
@@ -354,7 +362,7 @@ export default function InsightsPage() {
                   height={240}
                   currency={currency}
                   locale={locale}
-                  centerLabel="Total"
+                  centerLabel={t('insights.chart.total')}
                   centerValue={formatCurrency(currentExpense)}
                   thickness="medium"
                 />
@@ -370,15 +378,15 @@ export default function InsightsPage() {
         </div>
         <div className="col-7">
           <Panel
-            title="Comparativa por categoría"
-            subtitle={`Top gastos ${periodLabel} vs ${prevPeriodLabel}`}
+            title={t('insights.chart.categoryCompare')}
+            subtitle={`${t('insights.chart.topExpenses')} ${periodLabel} vs ${prevPeriodLabel}`}
             icon={<ArrowLeftRight size={16} />}
           >
             {categoryCompare.length === 0 ? (
               <EmptyState
                 compact
-                title="Sin datos comparativos"
-                description="Necesitamos al menos un mes con gastos para comparar."
+                title={t('insights.noComparativeData')}
+                description={t('insights.noComparativeDataDesc')}
               />
             ) : (
               <ComparisonBars
@@ -397,11 +405,11 @@ export default function InsightsPage() {
 
       <Panel
         className="mb-4"
-        title="Patrón de gasto diario"
-        subtitle="Mapa de calor de los últimos 126 días"
+        title={t('insights.chart.dailyPattern')}
+        subtitle={t('insights.chart.dailyPatternSubtitle')}
       >
         {daily.length === 0 ? (
-          <EmptyState compact title="Sin datos" description="Añade movimientos para ver tu patrón diario." />
+          <EmptyState compact title={t('insights.noData')} description={t('insights.noDataDesc')} />
         ) : (
           <HeatmapCalendar data={daily} weeks={18} tone="danger" currency={currency} locale={locale} />
         )}
@@ -410,7 +418,7 @@ export default function InsightsPage() {
       <Panel
         title={t('insights.detailedAnalysis')}
         icon={<Lightbulb size={16} />}
-        subtitle="Detectamos patrones relevantes en tu actividad financiera"
+        subtitle={t('insights.detailedAnalysisSubtitle')}
       >
         {loadingInsights ? (
           <div className="stat-grid">

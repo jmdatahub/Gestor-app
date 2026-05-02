@@ -1,7 +1,12 @@
 import type { Request, Response, NextFunction } from 'express'
 import { ZodError } from 'zod'
+import { logger } from '../lib/logger.js'
 
-export function errorHandler(err: Error | ZodError, _req: Request, res: Response, _next: NextFunction): void {
+const isProduction = process.env.NODE_ENV === 'production'
+
+export function errorHandler(err: Error | ZodError, req: Request, res: Response, _next: NextFunction): void {
+  const requestId = req.headers['x-request-id'] as string | undefined
+
   if (err instanceof ZodError) {
     res.status(422).json({
       error: 'Error de validación',
@@ -11,10 +16,19 @@ export function errorHandler(err: Error | ZodError, _req: Request, res: Response
   }
 
   const message = err.message || 'Error desconocido'
-  console.error('❌', message, err.stack)
+
+  // Always log full details server-side (stack helps diagnosis in production too)
+  logger.error(message, {
+    requestId,
+    method: req.method,
+    path: req.path,
+    // Stack trace is server-side only — never sent to the client
+    stack: err.stack,
+  })
 
   res.status(500).json({
     error: 'Error interno del servidor',
-    message: process.env.NODE_ENV === 'development' ? message : undefined,
+    // Expose message only in development; never expose stack to clients
+    ...(isProduction ? {} : { message }),
   })
 }

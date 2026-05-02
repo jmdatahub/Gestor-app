@@ -87,15 +87,11 @@ export default function RecurringList() {
     // Form validation
     const parsedAmount = parseFloat(amount)
     if (!amount || isNaN(parsedAmount) || parsedAmount <= 0) {
-      setFormError(language === 'es'
-        ? 'El importe debe ser un número positivo.'
-        : 'Amount must be a positive number.')
+      setFormError(t('recurring.error.invalidAmount'))
       return
     }
     if (!accountId) {
-      setFormError(language === 'es'
-        ? 'Selecciona una cuenta.'
-        : 'Please select an account.')
+      setFormError(t('recurring.error.noAccount'))
       return
     }
     // Clamp dayOfMonth to 1–31
@@ -156,16 +152,14 @@ export default function RecurringList() {
       setShowModal(false)
       resetForm()
       toast.success(
-        language === 'es' ? 'Regla creada' : 'Rule created',
-        language === 'es' ? 'La regla recurrente se ha guardado.' : 'The recurring rule has been saved.'
+        t('recurring.toast.created'),
+        t('recurring.toast.createdDesc')
       )
     } catch (error) {
       console.error('Error creating rule:', error)
       toast.error(
-        language === 'es' ? 'Error al crear la regla' : 'Failed to create rule',
-        language === 'es'
-          ? 'No se pudo guardar la regla recurrente. Inténtalo de nuevo.'
-          : 'Could not save the recurring rule. Please try again.'
+        t('recurring.toast.createError'),
+        t('recurring.toast.createErrorDesc')
       )
     } finally {
       setSubmitting(false)
@@ -179,10 +173,8 @@ export default function RecurringList() {
     } catch (error) {
       console.error('Error toggling rule:', error)
       toast.error(
-        language === 'es' ? 'Error al cambiar estado' : 'Failed to update rule',
-        language === 'es'
-          ? 'No se pudo cambiar el estado de la regla.'
-          : 'Could not update the rule status.'
+        t('recurring.toast.toggleError'),
+        t('recurring.toast.toggleErrorDesc')
       )
     }
   }
@@ -288,7 +280,7 @@ export default function RecurringList() {
                     </td>
                     <td style={{ padding: '0.75rem 1.5rem' }}>
                       <span className={`badge ${rule.kind === 'income' ? 'badge-success' : 'badge-danger'}`}>
-                        {rule.kind === 'income' ? t('movements.income') : t('movements.expense')}
+                        {rule.kind === 'income' ? t('movements.type.income') : t('movements.type.expense')}
                       </span>
                     </td>
                     <td style={{ padding: '0.75rem 1.5rem' }}>{rule.account?.name || '-'}</td>
@@ -307,9 +299,7 @@ export default function RecurringList() {
                         className={`btn btn-icon ${rule.is_active ? 'btn-ghost' : 'btn-success'}`}
                         onClick={() => handleToggle(rule)}
                         title={rule.is_active ? t('recurring.inactive') : t('recurring.active')}
-                        aria-label={rule.is_active
-                          ? (language === 'es' ? 'Desactivar regla' : 'Deactivate rule')
-                          : (language === 'es' ? 'Activar regla' : 'Activate rule')}
+                        aria-label={rule.is_active ? t('recurring.deactivate') : t('recurring.activate')}
                       >
                         {rule.is_active ? <PowerOff size={16} /> : <Power size={16} />}
                       </button>
@@ -333,15 +323,19 @@ export default function RecurringList() {
         <form onSubmit={handleCreate}>
           <UiModalBody>
             {formError && (
-              <div style={{
-                marginBottom: '1rem',
-                padding: '0.625rem 0.875rem',
-                borderRadius: '6px',
-                background: 'var(--danger-light, #fff5f5)',
-                border: '1px solid var(--danger, #e53e3e)',
-                color: 'var(--danger, #e53e3e)',
-                fontSize: '0.875rem'
-              }}>
+              <div
+                role="alert"
+                aria-live="assertive"
+                style={{
+                  marginBottom: '1rem',
+                  padding: '0.625rem 0.875rem',
+                  borderRadius: '6px',
+                  background: 'var(--danger-light, #fff5f5)',
+                  border: '1px solid var(--danger, #e53e3e)',
+                  color: 'var(--danger, #e53e3e)',
+                  fontSize: '0.875rem'
+                }}
+              >
                 {formError}
               </div>
             )}
@@ -360,7 +354,7 @@ export default function RecurringList() {
             </div>
 
             <div className="form-group">
-              <UiField label={t('recurring.account')}>
+              <UiField label={t('recurring.account')} required>
                 <UiSelect
                   value={accountId}
                   onChange={setAccountId}

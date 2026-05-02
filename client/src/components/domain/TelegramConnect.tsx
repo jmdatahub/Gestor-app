@@ -102,7 +102,9 @@ export function TelegramConnect() {
 
   // ── DISCONNECTED — flow active (QR + link) ───────────────────
   if (flow) {
-    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=${encodeURIComponent(flow.url)}`
+    // Validate that the URL starts with https:// to prevent javascript:/data: injection
+    const safeFlowUrl = flow.url.startsWith('https://') ? flow.url : '#'
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=${encodeURIComponent(safeFlowUrl)}`
     return (
       <div className="tg-card tg-card--flow">
         <div className="tg-flow-header">
@@ -143,7 +145,7 @@ export function TelegramConnect() {
 
           <div className="tg-flow-actions">
             <a
-              href={flow.url}
+              href={safeFlowUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="tg-btn tg-btn--brand"

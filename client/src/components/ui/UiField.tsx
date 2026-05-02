@@ -1,4 +1,4 @@
-
+import { useId } from 'react';
 
 export interface UiFieldProps {
   label?: string | React.ReactNode
@@ -7,27 +7,32 @@ export interface UiFieldProps {
   children: React.ReactNode
   className?: string
   id?: string
+  required?: boolean
 }
 
-export function UiField({ label, error, hint, children, className = '', id }: UiFieldProps) {
+export function UiField({ label, error, hint, children, className = '', id, required }: UiFieldProps) {
+  const generatedId = useId();
+  const fieldId = id || generatedId;
+
   return (
     <div className={`ui-field ${className}`}>
       {label && (
-        <label htmlFor={id} className={`ui-label ${error ? 'text-danger' : ''}`}>
+        <label htmlFor={fieldId} className={`ui-label ${error ? 'text-danger' : ''}`}>
           {label}
+          {required && <span className="ui-required" aria-hidden="true"> *</span>}
         </label>
       )}
-      
+
       {children}
-      
+
       {hint && !error && (
-        <p className="ui-hint">{hint}</p>
+        <p id={`${fieldId}-hint`} className="ui-hint">{hint}</p>
       )}
-      
+
       {error && (
-         <p className="ui-error">
-            <span>•</span> {error}
-         </p>
+        <p id={`${fieldId}-error`} className="ui-error" role="alert" aria-live="polite">
+          <span>•</span> {error}
+        </p>
       )}
     </div>
   )

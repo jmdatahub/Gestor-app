@@ -411,7 +411,7 @@ export default function SavingsList() {
           <UiModalBody>
             {/* Error Banner */}
             {formError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-2">
+              <div role="alert" aria-live="assertive" className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-2">
                 <AlertTriangle size={16} className="mt-0.5 shrink-0" />
                 <div>
                   <strong>Error:</strong> {formError}
@@ -425,6 +425,7 @@ export default function SavingsList() {
                 onChange={(e) => setGoalName(e.target.value)}
                 placeholder="Ej: Viaje a Japón"
                 required
+                autoFocus
               />
             </div>
             <div className="mb-4">
@@ -485,6 +486,7 @@ export default function SavingsList() {
                 step="0.01"
                 min={0.01}
                 required
+                autoFocus
               />
             </div>
             <div className="mb-4">

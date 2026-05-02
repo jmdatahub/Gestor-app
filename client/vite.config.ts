@@ -1,13 +1,21 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { compression } from 'vite-plugin-compression2'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    // Emit gzip and brotli side-car files (.gz / .br) alongside the build output.
+    // The web server (nginx / Caddy) serves them automatically when the client
+    // supports the encoding, reducing transfer sizes by ~70-80%.
+    compression({ algorithm: 'gzip', exclude: [/\.(br)$/, /\.(gz)$/] }),
+    compression({ algorithm: 'brotliCompress', exclude: [/\.(br)$/, /\.(gz)$/] }),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' keeps the new SW in waiting state so we can show a
+      // "Nueva versión disponible" banner before reloading (issue #1).
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'favicon.ico', 'apple-touch-icon-180x180.png'],
       manifest: {
         name: 'Mi Panel Financiero',
@@ -48,15 +56,19 @@ export default defineConfig({
         // Don't cache the chunky exceljs bundle — it's lazy and rarely needed offline.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
         globIgnores: ['**/exceljs.min*.js'],
-        // Network-first for API calls so users get fresh data when online.
+        // Network-first for GET API calls so users get fresh data when online
+        // but fall back to the cache when offline (issue #3).
+        // Only GET requests are cached — POST/PATCH/DELETE mutations are never
+        // cached; the offline queue in apiClient.ts handles those instead.
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            urlPattern: ({ url, request }) =>
+              url.pathname.startsWith('/api/') && request.method === 'GET',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
               networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 50, maxAgeSeconds: 5 * 60 },
+              expiration: { maxEntries: 100, maxAgeSeconds: 5 * 60 },
             },
           },
           {

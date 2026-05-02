@@ -14,6 +14,8 @@ import { EmptyState } from '../../components/shared/EmptyState'
 import { StatCard } from '../../components/shared/StatCard'
 import { useToast } from '../../components/Toast'
 
+const DEFAULT_COLOR = '#818cf8'
+
 export default function CategoriesList() {
   const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()  // Add workspace context
@@ -25,9 +27,11 @@ export default function CategoriesList() {
 
   // Form state
   const [name, setName] = useState('')
+  const [nameError, setNameError] = useState('')
   const [kind, setKind] = useState<string>('expense')
-  const [color, setColor] = useState('#818cf8')
+  const [color, setColor] = useState(DEFAULT_COLOR)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Reload when workspace changes
   useEffect(() => {
@@ -43,6 +47,7 @@ export default function CategoriesList() {
       setCategories(data)
     } catch (error) {
       console.error('Error loading categories:', error)
+      toast.error('Error al cargar', 'No se pudieron cargar las categorías')
     } finally {
       setLoading(false)
     }
@@ -51,21 +56,43 @@ export default function CategoriesList() {
   const handleOpenCreate = () => {
     setEditingCategory(null)
     setName('')
+    setNameError('')
     setKind('expense')
-    setColor(getDefaultCategoryColor(categories.length))
+    setColor(getDefaultCategoryColor(categories.length) || DEFAULT_COLOR)
     setShowModal(true)
   }
 
   const handleOpenEdit = (category: Category) => {
     setEditingCategory(category)
     setName(category.name)
+    setNameError('')
     setKind(category.kind as 'income' | 'expense')
-    setColor(category.color || getDefaultCategoryColor(categories.findIndex(c => c.id === category.id)))
+    setColor(category.color || getDefaultCategoryColor(categories.findIndex(c => c.id === category.id)) || DEFAULT_COLOR)
     setShowModal(true)
+  }
+
+  const validateName = (value: string): string => {
+    const trimmed = value.trim()
+    if (!trimmed) return 'El nombre es obligatorio'
+    if (trimmed.length < 2) return 'El nombre debe tener al menos 2 caracteres'
+    // Duplicate check (case-insensitive, same kind, excluding the current one being edited)
+    const duplicate = categories.find(
+      c => c.name.trim().toLowerCase() === trimmed.toLowerCase() &&
+           c.kind === kind &&
+           (!editingCategory || c.id !== editingCategory.id)
+    )
+    if (duplicate) return `Ya existe una categoría de ${kind === 'expense' ? 'gasto' : 'ingreso'} con ese nombre`
+    return ''
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Prevent double-submit
+    if (submitting) return
+
+    const err = validateName(name)
+    if (err) { setNameError(err); return }
+
     setSubmitting(true)
 
     if (!user) {
@@ -73,16 +100,19 @@ export default function CategoriesList() {
       return
     }
 
+    // Ensure color always has a valid value
+    const safeColor = color || DEFAULT_COLOR
+
     try {
       if (editingCategory) {
         // Update existing
-        await api.patch('/api/v1/categories/' + editingCategory.id, { name, kind, color })
-        toast.success('Categoría actualizada', `"${name}" se ha guardado correctamente`)
+        await api.patch('/api/v1/categories/' + editingCategory.id, { name: name.trim(), kind, color: safeColor })
+        toast.success('Categoría actualizada', `"${name.trim()}" se ha guardado correctamente`)
       } else {
         // Create new
         const orgId = currentWorkspace?.id || null
-        await api.post('/api/v1/categories', { name, kind, color, organizationId: orgId })
-        toast.success('Categoría creada', `"${name}" se ha creado correctamente`)
+        await api.post('/api/v1/categories', { name: name.trim(), kind, color: safeColor, organizationId: orgId })
+        toast.success('Categoría creada', `"${name.trim()}" se ha creado correctamente`)
       }
 
       setShowModal(false)
@@ -97,14 +127,28 @@ export default function CategoriesList() {
 
   const handleDelete = async (categoryId: string) => {
     if (!confirm('¿Eliminar esta categoría?')) return
+    // Prevent double-click
+    if (deleting) return
 
+    setDeleting(true)
     try {
+      // Check if category is in use by movements
+      const { data: usageData } = await api.get<{ count: number }>(`/api/v1/categories/${categoryId}/usage`)
+      if (usageData && usageData.count > 0) {
+        const proceed = confirm(
+          `Esta categoría está asignada a ${usageData.count} movimiento${usageData.count > 1 ? 's' : ''}. ` +
+          `Al eliminarla, esos movimientos quedarán sin categoría. ¿Continuar?`
+        )
+        if (!proceed) { setDeleting(false); return }
+      }
       await api.delete('/api/v1/categories/' + categoryId)
       loadCategories()
       toast.success('Categoría eliminada', 'La categoría se ha eliminado correctamente')
     } catch (error: any) {
       console.error('Error deleting category:', error)
       toast.error('Error al eliminar', error?.message || 'No se pudo eliminar la categoría')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -223,8 +267,13 @@ export default function CategoriesList() {
               <UiInput
                 label="Nombre"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  if (nameError) setNameError(validateName(e.target.value))
+                }}
+                onBlur={() => setNameError(validateName(name))}
                 placeholder="Ej: Comida, Transporte..."
+                error={nameError}
                 required
               />
             </div>
@@ -272,21 +321,20 @@ export default function CategoriesList() {
                 <button
                     type="button"
                     className="btn btn-ghost text-danger"
-                    onClick={() => {
-                        if (confirm('¿Seguro que quieres eliminar esta categoría?')) {
-                            handleDelete(editingCategory.id)
-                            setShowModal(false)
-                        }
+                    disabled={deleting}
+                    onClick={async () => {
+                        await handleDelete(editingCategory.id)
+                        setShowModal(false)
                     }}
                 >
-                    Eliminar
+                    {deleting ? 'Eliminando...' : 'Eliminar'}
                 </button>
                 )}
             </div>
             <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
+            <button type="submit" className="btn btn-primary" disabled={submitting || deleting}>
               {submitting ? 'Guardando...' : 'Guardar'}
             </button>
           </UiModalFooter>

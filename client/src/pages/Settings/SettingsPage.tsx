@@ -7,7 +7,7 @@ import { UiField } from '../../components/ui/UiField'
 import { useSettings, type Theme, type Language, type Density, type DateFormat, type DecimalSeparator, type NotificationSettings } from '../../context/SettingsContext'
 
 export default function SettingsPage() {
-  const { settings, updateSettings } = useSettings()
+  const { settings, updateSettings, resetSettings: ctxResetSettings } = useSettings()
   const [activeTab, setActiveTab] = useState<'general' | 'notifications'>('general')
 
   const themeOptions = [
@@ -39,8 +39,7 @@ export default function SettingsPage() {
 
   const resetSettings = () => {
     if (confirm('¿Restaurar todos los ajustes a los valores predeterminados?')) {
-        localStorage.removeItem('app_settings');
-        window.location.reload();
+      ctxResetSettings()
     }
   }
 

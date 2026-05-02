@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { PieChart as PieIcon, Disc, Circle, Activity, Grid } from 'lucide-react'
+import { storage } from '../../lib/storage'
 
 type ChartStyle = 'donut' | 'pie' | 'thin' | 'half' | 'spaced'
 
@@ -21,7 +22,7 @@ const VALID_STYLES: ChartStyle[] = ['donut', 'pie', 'thin', 'half', 'spaced']
 
 function getStoredStyle(): ChartStyle {
   try {
-    const v = localStorage.getItem(STORAGE_KEY)
+    const v = storage.get(STORAGE_KEY)
     if (v && VALID_STYLES.includes(v as ChartStyle)) return v as ChartStyle
   } catch { /* ignore */ }
   return 'donut'
@@ -110,7 +111,7 @@ export function DonutChart({
     setFade(true)
     setTimeout(() => {
       setChartStyle(style)
-      try { localStorage.setItem(STORAGE_KEY, style) } catch { /* ignore */ }
+      try { storage.set(STORAGE_KEY, style) } catch { /* ignore */ }
       setTimeout(() => setFade(false), 30)
     }, 160)
   }

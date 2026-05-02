@@ -1,8 +1,21 @@
 import { Router, Request, Response } from 'express'
 import { db } from '../db/connection.js'
 import { sql } from 'drizzle-orm'
+import rateLimit from 'express-rate-limit'
+import crypto from 'crypto'
 
 const router = Router()
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+// CRM sync endpoints: 60 requests per minute per IP (prevents hammering)
+const crmLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down' },
+})
+router.use(crmLimiter)
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -12,13 +25,28 @@ function validateApiKey(req: Request, res: Response): boolean {
     res.status(503).json({ error: 'CRM sync not configured on this server' })
     return false
   }
-  const key = req.headers['x-api-key']
-  if (!key || key !== secret) {
+  const keyHeader = req.headers['x-api-key']
+  const key = Array.isArray(keyHeader) ? keyHeader[0] : keyHeader
+  if (!key) {
+    res.status(401).json({ error: 'Unauthorized', message: 'Invalid or missing x-api-key header' })
+    return false
+  }
+  // Timing-safe comparison to prevent timing attacks
+  try {
+    const secretBuf = Buffer.from(secret)
+    const keyBuf = Buffer.from(key)
+    if (secretBuf.length !== keyBuf.length || !crypto.timingSafeEqual(secretBuf, keyBuf)) {
+      res.status(401).json({ error: 'Unauthorized', message: 'Invalid or missing x-api-key header' })
+      return false
+    }
+  } catch {
     res.status(401).json({ error: 'Unauthorized', message: 'Invalid or missing x-api-key header' })
     return false
   }
   return true
 }
+
+const _isProd = process.env.NODE_ENV === 'production'
 
 // ─── Org resolution (cached 5 min) ────────────────────────────────────────────
 
@@ -33,28 +61,39 @@ async function resolveOrg(res: Response): Promise<{ orgId: string; userId: strin
     return { orgId: _cachedOrgId, userId: _cachedUserId }
   }
   const name = process.env.CRM_SYNC_ORG_NAME || 'Soul IA'
-  const orgs = await db.execute(sql`
-    SELECT id FROM organizations WHERE name ILIKE ${'%' + name + '%'} LIMIT 1
-  `)
-  const orgId = (orgs as any[])[0]?.id as string | undefined
-  if (!orgId) {
-    res.status(404).json({ error: 'Organization not found', message: `No organization matching "${name}"` })
+  try {
+    const orgs = await db.execute(sql`
+      SELECT id FROM organizations WHERE name ILIKE ${'%' + name + '%'} LIMIT 1
+    `)
+    const orgId = (orgs as any[])[0]?.id as string | undefined
+    if (!orgId) {
+      res.status(404).json({ error: 'Organization not found', message: `No organization matching "${name}"` })
+      return null
+    }
+    const members = await db.execute(sql`
+      SELECT user_id FROM organization_members
+      WHERE org_id = ${orgId}
+      ORDER BY role ASC LIMIT 1
+    `)
+    const userId = (members as any[])[0]?.user_id as string | undefined
+    if (!userId) {
+      res.status(500).json({ error: 'No owner found for organization' })
+      return null
+    }
+    _cachedOrgId = orgId
+    _cachedUserId = userId
+    _cachedAt = now
+    return { orgId, userId }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[crm-sync/resolveOrg]', msg)
+    // Never expose DB internals in production
+    res.status(500).json({
+      error: 'Database error resolving organization',
+      ...(_isProd ? {} : { message: msg }),
+    })
     return null
   }
-  const members = await db.execute(sql`
-    SELECT user_id FROM organization_members
-    WHERE org_id = ${orgId}
-    ORDER BY role ASC LIMIT 1
-  `)
-  const userId = (members as any[])[0]?.user_id as string | undefined
-  if (!userId) {
-    res.status(500).json({ error: 'No owner found for organization' })
-    return null
-  }
-  _cachedOrgId = orgId
-  _cachedUserId = userId
-  _cachedAt = now
-  return { orgId, userId }
 }
 
 function getActorEmail(req: Request): string | null {
@@ -78,7 +117,32 @@ function isHard(req: Request) { return req.query.hard === '1' || req.query.hard 
 function handleError(res: Response, err: unknown, ctx: string) {
   const msg = err instanceof Error ? err.message : String(err)
   console.error(`[crm-sync/${ctx}]`, msg)
-  return res.status(500).json({ error: 'Internal server error', context: ctx, message: msg })
+  // Never expose internal error details (DB messages, table names) in production
+  return res.status(500).json({
+    error: 'Internal server error',
+    context: ctx,
+    ...(_isProd ? {} : { message: msg }),
+  })
+}
+
+// ─── Retry helper ─────────────────────────────────────────────────────────────
+// Retries a DB operation up to `maxAttempts` times on transient errors.
+async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3, delayMs = 300): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      const msg = err instanceof Error ? err.message : String(err)
+      // Only retry on transient/connection errors
+      const isTransient = /connection|timeout|ECONNRESET|ETIMEDOUT|deadlock/i.test(msg)
+      if (!isTransient || attempt === maxAttempts) throw err
+      console.warn(`[crm-sync/retry] attempt ${attempt} failed (${msg}), retrying in ${delayMs}ms`)
+      await new Promise(resolve => setTimeout(resolve, delayMs * attempt))
+    }
+  }
+  throw lastErr
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -115,7 +179,7 @@ router.get('/overview', async (req: Request, res: Response) => {
 
     for (const t of TABLES) {
       try {
-        const rows = await db.execute(sql`
+        const rows: any[] = await db.execute(sql`
           SELECT id, created_at, updated_at, deleted_at,
                  created_by_email, updated_by_email,
                  COALESCE(${sql.raw(t.titleCol)}::text, '') AS title
@@ -124,8 +188,8 @@ router.get('/overview', async (req: Request, res: Response) => {
             AND (created_by_email = ${email} OR updated_by_email = ${email})
           ORDER BY updated_at DESC
           LIMIT ${lim}
-        `)
-        for (const r of rows as any[]) {
+        `) as any[]
+        for (const r of rows) {
           const label = `${t.label}: ${r.title || '(sin título)'}`
           if (r.created_by_email === email && r.created_at) {
             out.push({ table: t.name, id: r.id, action: 'create', at: r.created_at, label })
@@ -338,10 +402,12 @@ function mountCrud(path: string, cfg: CrudConfig) {
     }
     try {
       const cols = Object.keys(payload).map(k => sql.raw(k))
-      const vals = Object.values(payload)
+      const vals: unknown[] = Object.values(payload)
       const colList = cols.reduce((acc: any, c, i) => i === 0 ? c : sql`${acc}, ${c}`)
-      const valList = vals.reduce((acc: any, v, i) => i === 0 ? sql`${v}` : sql`${acc}, ${v}`)
-      const rows = await db.execute(sql`INSERT INTO ${sql.raw(table)} (${colList}) VALUES (${valList}) RETURNING *`)
+      const valList = vals.reduce((acc: any, v, i) => i === 0 ? sql`${v}` : sql`${acc}, ${v}`, undefined as any)
+      const rows = await withRetry(() =>
+        db.execute(sql`INSERT INTO ${sql.raw(table)} (${colList}) VALUES (${valList}) RETURNING *`)
+      )
       return res.status(201).json((rows as any[])[0])
     } catch (err) { return handleError(res, err, table) }
   })
@@ -471,7 +537,9 @@ router.post('/movements', async (req: Request, res: Response) => {
     const vals = Object.values(payload)
     const colList = cols.reduce((acc: any, c, i) => i === 0 ? c : sql`${acc}, ${c}`)
     const valList = vals.reduce((acc: any, v, i) => i === 0 ? sql`${v}` : sql`${acc}, ${v}`)
-    const rows = await db.execute(sql`INSERT INTO movements (${colList}) VALUES (${valList}) RETURNING *`)
+    const rows = await withRetry(() =>
+      db.execute(sql`INSERT INTO movements (${colList}) VALUES (${valList}) RETURNING *`)
+    )
     return res.status(201).json((rows as any[])[0])
   } catch (err) { return handleError(res, err, 'movements') }
 })

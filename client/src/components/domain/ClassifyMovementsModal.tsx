@@ -57,7 +57,8 @@ export function ClassifyMovementsModal({ isOpen, onClose }: Props) {
   }, [isOpen, userId, load])
 
   const handleCategoryChange = async (mov: Movement, categoryId: string) => {
-    if (!categoryId || savingId) return
+    // Guard: category must be a non-empty string
+    if (!categoryId || !categoryId.trim() || savingId) return
     setSavingId(mov.id)
     try {
       await updateMovement(mov.id, { category_id: categoryId })
@@ -66,7 +67,12 @@ export function ClassifyMovementsModal({ isOpen, onClose }: Props) {
       queryClient.invalidateQueries({ queryKey: trendKeys.all })
       const remaining = movements.filter(m => m.id !== mov.id)
       setMovements(remaining)
-      if (remaining.length === 0) setAllDone(true)
+      if (remaining.length === 0) {
+        setAllDone(true)
+        // Auto-close the modal shortly after the "all done" message so the user
+        // sees the success state before the dialog disappears.
+        setTimeout(() => onClose(), 1500)
+      }
       toast.success('Categoría asignada', 'El movimiento ha sido clasificado.')
     } catch {
       toast.error('Error', 'No se pudo guardar la categoría.')

@@ -10,7 +10,13 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Gate: only build the Docker image once CI (lint + typecheck + tests) passes.
+  ci:
+    name: Wait for CI
+    uses: ./.github/workflows/ci.yml
+
   build-and-push:
+    needs: ci
     runs-on: ubuntu-latest
     permissions:
       contents: read

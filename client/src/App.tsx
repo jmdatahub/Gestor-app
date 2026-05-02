@@ -44,6 +44,8 @@ const ExportPage = lazy(() => import('./pages/Export/ExportPage'))
 const OrganizationsList = lazy(() => import('./pages/Organizations/OrganizationsList'))
 const OrganizationDetail = lazy(() => import('./pages/Organizations/OrganizationDetail'))
 const AdminPanel = lazy(() => import('./pages/Admin/AdminPanel'))
+const PaymentMethodsPage = lazy(() => import('./pages/PaymentMethods/PaymentMethodsPage'))
+const ProvidersPage = lazy(() => import('./pages/Providers/ProvidersPage'))
 
 function App() {
   return (
@@ -83,6 +85,8 @@ function App() {
             <Route path="config" element={<ConfigHub />}>
               <Route index element={<Navigate to="categorias" replace />} />
               <Route path="categorias" element={<CategoriesList />} />
+              <Route path="metodos-pago" element={<PaymentMethodsPage />} />
+              <Route path="proveedores" element={<ProvidersPage />} />
               <Route path="exportar" element={<ExportPage />} />
               <Route path="organizaciones" element={<OrganizationsList />} />
               <Route path="admin" element={<AdminPanel />} />

@@ -9,12 +9,17 @@ import {
 import { useToast } from '../components/Toast'
 import { useSettings } from './SettingsContext'
 
+// How long before cached data is considered stale when offline (5 minutes).
+const STALE_THRESHOLD_MS = 5 * 60 * 1000
+
 interface OfflineContextValue {
   isOnline: boolean
   pendingChanges: number
   lastSyncAt: number | null
   isSyncing: boolean
   syncNow: () => Promise<void>
+  /** True when offline AND the last successful sync was more than 5 minutes ago. */
+  isDataStale: boolean
 }
 
 const OfflineContext = createContext<OfflineContextValue | undefined>(undefined)
@@ -97,9 +102,15 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval)
   }, [])
 
+  // Stale data indicator (issue #6): data is stale when offline and the last
+  // sync was more than STALE_THRESHOLD_MS ago (or has never synced).
+  const isDataStale =
+    !isOnline &&
+    (lastSyncAt === null || Date.now() - lastSyncAt > STALE_THRESHOLD_MS)
+
   const value = useMemo(
-    () => ({ isOnline, pendingChanges, lastSyncAt, isSyncing, syncNow }),
-    [isOnline, pendingChanges, lastSyncAt, isSyncing, syncNow],
+    () => ({ isOnline, pendingChanges, lastSyncAt, isSyncing, syncNow, isDataStale }),
+    [isOnline, pendingChanges, lastSyncAt, isSyncing, syncNow, isDataStale],
   )
 
   return (

@@ -1,0 +1,5 @@
+Contact: mailto:Adriansoulia@gmail.com
+Expires: 2027-05-02T00:00:00.000Z
+Preferred-Languages: es, en
+Canonical: https://gestor.app/.well-known/security.txt
+Policy: https://gestor.app/security-policy

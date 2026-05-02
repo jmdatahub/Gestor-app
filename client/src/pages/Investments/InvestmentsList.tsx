@@ -34,8 +34,9 @@ const TYPE_COLORS: Record<string, string> = {
   etf:         '#06b6d4',
   bond:        '#10b981',
   real_estate: '#f59e0b',
-  commodity:   '#f97316',
-  other:       '#6b7280',
+  commodity:    '#f97316',
+  collectible:  '#ec4899',
+  other:        '#6b7280',
 }
 
 // ── Inline styles ────────────────────────────────────────────────────────────
@@ -793,7 +794,7 @@ export default function InvestmentsList() {
           <UiModalBody>
             <div className="d-flex gap-2 mb-3">
               <div style={{ flex: 2 }}>
-                <UiInput label="Nombre" value={name} onChange={e => setName(e.target.value)} placeholder="Bitcoin, Lamine Yamal cards…" required />
+                <UiInput label="Nombre" value={name} onChange={e => setName(e.target.value)} placeholder="Bitcoin, Lamine Yamal cards…" required autoFocus />
               </div>
               <div style={{ flex: 1 }}>
                 <UiInput label="Símbolo" value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} placeholder="BTC, ETH…" />

@@ -11,6 +11,7 @@ import {
   escapeHtml,
   type ForceReply,
 } from '../services/telegram.service.js'
+import { sendWelcomeEmail } from '../services/email.service.js'
 
 const router = Router()
 
@@ -128,7 +129,7 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         const targetUser = (await db
-          .select({ email: users.email })
+          .select({ email: users.email, name: users.name })
           .from(users)
           .where(eq(users.id, targetUserId))
           .limit(1))[0]
@@ -136,6 +137,11 @@ router.post('/', async (req: Request, res: Response) => {
 
         if (action === 'app') {
           await db.update(users).set({ isActive: true }).where(eq(users.id, targetUserId))
+          // Send welcome email to the newly approved user (non-blocking)
+          if (targetUser?.email) {
+            sendWelcomeEmail(targetUser.email, targetUser.name || '')
+              .catch(err => console.warn('[telegram-webhook/approve] welcome email failed:', err))
+          }
           await editMessageText(chatId, msgId,
             `✅ <b>Usuario aprobado</b>\n\n👤 ${escapeHtml(targetEmail)}\nYa puede iniciar sesión.`)
         } else {

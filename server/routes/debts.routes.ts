@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { debts, debtMovements } from '../db/schema.js'
-import { and, eq, isNull, desc } from 'drizzle-orm'
+import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
 const router = Router()
@@ -43,14 +43,14 @@ function mapIn(body: Record<string, any>) {
   const dir = body.direction ?? (body.debt_type === 'owed_to_me' ? 'they_owe_me' : body.debt_type)
   if (dir != null) out.direction = dir
   const name = body.counterparty_name ?? body.counterpartyName ?? body.title
-  if (name != null) out.counterpartyName = name
+  if (name != null) out.counterpartyName = typeof name === 'string' ? name.slice(0, 100) : name
   const total = body.total_amount ?? body.totalAmount
   if (total != null) out.totalAmount = String(total)
   const remaining = body.remaining_amount ?? body.remainingAmount
   if (remaining != null) out.remainingAmount = String(remaining)
   const due = body.due_date ?? body.dueDate
   if (due != null) out.dueDate = due
-  if (body.description != null) out.description = body.description
+  if (body.description != null) out.description = typeof body.description === 'string' ? body.description.slice(0, 500) : body.description
   const closed = body.is_closed ?? body.isClosed ?? body.is_settled ?? body.isSettled
   if (closed != null) out.isClosed = closed
   const org = body.organization_id ?? body.organizationId
@@ -65,9 +65,16 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const filter = orgId
       ? eq(debts.organizationId, orgId)
       : and(eq(debts.userId, req.userId!), isNull(debts.organizationId))
-    const rows = await db.select().from(debts).where(and(filter, isNull(debts.deletedAt)))
-      .orderBy(desc(debts.createdAt))
-    res.json({ data: rows.map(r => mapOut(r as any)) })
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const offset = Number(req.query.offset) || 0
+    const whereClause = and(filter, isNull(debts.deletedAt))
+    const [rows, [{ total }]] = await Promise.all([
+      db.select().from(debts).where(whereClause)
+        .orderBy(desc(debts.createdAt))
+        .limit(limit).offset(offset),
+      db.select({ total: count() }).from(debts).where(whereClause),
+    ])
+    res.json({ data: rows.map(r => mapOut(r as any)), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[debts GET /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -136,10 +143,17 @@ router.get('/:debtId/movements', authMiddleware, async (req: AuthRequest, res: R
     const debt = (await db.select({ id: debts.id }).from(debts)
       .where(and(eq(debts.id, req.params.debtId as string), eq(debts.userId, req.userId!))).limit(1))[0]
     if (!debt) { res.status(404).json({ error: 'Deuda no encontrada' }); return }
-    const rows = await db.select().from(debtMovements)
-      .where(eq(debtMovements.debtId, req.params.debtId as string))
-      .orderBy(desc(debtMovements.date))
-    res.json({ data: rows.map(r => mapOutMovement(r as any)) })
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const offset = Number(req.query.offset) || 0
+    const movWhere = eq(debtMovements.debtId, req.params.debtId as string)
+    const [rows, [{ total }]] = await Promise.all([
+      db.select().from(debtMovements)
+        .where(movWhere)
+        .orderBy(desc(debtMovements.date))
+        .limit(limit).offset(offset),
+      db.select({ total: count() }).from(debtMovements).where(movWhere),
+    ])
+    res.json({ data: rows.map(r => mapOutMovement(r as any)), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[debts GET /:debtId/movements]', err)
     res.status(500).json({ error: 'Error interno del servidor' })

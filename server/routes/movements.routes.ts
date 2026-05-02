@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
-import { movements } from '../db/schema.js'
-import { eq, and, desc, gte, lte, isNull, sql } from 'drizzle-orm'
+import { movements, accounts } from '../db/schema.js'
+import { eq, and, desc, gte, lte, isNull, sql, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { z } from 'zod'
 
 const router = Router()
 
@@ -26,7 +27,7 @@ function mapIn(body: Record<string, any>) {
   if (body.date        != null) out.date        = body.date
   if (body.kind        != null) out.kind        = body.kind
   if (body.amount      != null) out.amount      = String(body.amount)
-  if (body.description != null) out.description = body.description
+  if (body.description != null) out.description = typeof body.description === 'string' ? body.description.slice(0, 500) : body.description
   if (body.status      != null) out.status      = body.status
   const acct = body.account_id ?? body.accountId; if (acct != null) out.accountId = acct
   const cat  = body.category_id ?? body.categoryId; if (cat  !== undefined) out.categoryId = cat ?? null
@@ -34,6 +35,15 @@ function mapIn(body: Record<string, any>) {
   const biz  = body.is_business ?? body.isBusiness; if (biz  != null) out.isBusiness = biz
   return out
 }
+
+const TransferSchema = z.object({
+  from_account_id: z.string().uuid(),
+  to_account_id:   z.string().uuid(),
+  amount:          z.number().positive(),
+  date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  description:     z.string().max(500).optional().nullable(),
+  org_id:          z.string().uuid().optional().nullable(),
+}).strict()
 
 // GET /api/v1/movements
 // Query params: limit, offset, startDate, endDate, kind, status, orgId, personal
@@ -55,13 +65,16 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (req.query.orgId) conditions.push(eq(movements.organizationId, String(req.query.orgId)))
     if (req.query.personal === 'true') conditions.push(isNull(movements.organizationId))
 
-    const rows = await db.select().from(movements)
-      .where(and(...conditions))
-      .orderBy(desc(movements.date), desc(movements.createdAt))
-      .limit(limit)
-      .offset(offset)
+    const [rows, [{ total }]] = await Promise.all([
+      db.select().from(movements)
+        .where(and(...conditions))
+        .orderBy(desc(movements.date), desc(movements.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: count() }).from(movements).where(and(...conditions)),
+    ])
 
-    res.json({ data: rows.map(r => mapOut(r as any)), limit, offset })
+    res.json({ data: rows.map(r => mapOut(r as any)), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[movements GET /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -78,6 +91,72 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     res.json({ data: mapOut(row as any) })
   } catch (err) {
     console.error('[movements GET /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+})
+
+// POST /api/v1/movements/transfer — creates a transfer_out + transfer_in pair
+router.post('/transfer', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    let body: z.infer<typeof TransferSchema>
+    try {
+      body = TransferSchema.parse(req.body)
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: 'Datos inválidos', details: (err as z.ZodError).issues }); return
+      }
+      throw err
+    }
+
+    const { from_account_id, to_account_id, amount, date, description, org_id } = body
+
+    if (from_account_id === to_account_id) {
+      res.status(400).json({ error: 'La cuenta de origen y destino no pueden ser la misma' }); return
+    }
+
+    // Verify both accounts belong to the requesting user
+    const [fromAccount, toAccount] = await Promise.all([
+      db.select({ id: accounts.id }).from(accounts)
+        .where(and(eq(accounts.id, from_account_id), eq(accounts.userId, req.userId!)))
+        .limit(1),
+      db.select({ id: accounts.id }).from(accounts)
+        .where(and(eq(accounts.id, to_account_id), eq(accounts.userId, req.userId!)))
+        .limit(1),
+    ])
+
+    if (!fromAccount[0]) { res.status(404).json({ error: 'Cuenta de origen no encontrada' }); return }
+    if (!toAccount[0]) { res.status(404).json({ error: 'Cuenta de destino no encontrada' }); return }
+
+    const orgId = org_id ?? null
+
+    const [outRow, inRow] = await db.transaction(async (tx) => {
+      return Promise.all([
+        tx.insert(movements).values({
+          userId:         req.userId!,
+          accountId:      from_account_id,
+          kind:           'transfer_out' as any,
+          amount:         String(amount),
+          date,
+          description:    description ?? null,
+          status:         'confirmed',
+          organizationId: orgId,
+        } as any).returning(),
+        tx.insert(movements).values({
+          userId:         req.userId!,
+          accountId:      to_account_id,
+          kind:           'transfer_in' as any,
+          amount:         String(amount),
+          date,
+          description:    description ?? null,
+          status:         'confirmed',
+          organizationId: orgId,
+        } as any).returning(),
+      ])
+    })
+
+    res.status(201).json({ data: { out: mapOut(outRow[0] as any), in: mapOut(inRow[0] as any) } })
+  } catch (err) {
+    console.error('[movements POST /transfer]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
   }
 })

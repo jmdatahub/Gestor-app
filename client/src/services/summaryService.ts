@@ -36,18 +36,21 @@ export interface NetWorthSummary {
 }
 
 // Helper to get date ranges
+// Uses string arithmetic to avoid local-timezone-to-UTC shift from toISOString()
 function getMonthRange(year: number, month: number): { start: string; end: string } {
-  const start = new Date(year, month - 1, 1).toISOString().split('T')[0]
-  const end = new Date(year, month, 0).toISOString().split('T')[0]
-  return { start, end }
+  const y = String(year)
+  const m = String(month).padStart(2, '0')
+  // Last day of month: day 0 of next month
+  const lastDay = new Date(year, month, 0).getDate()
+  const d = String(lastDay).padStart(2, '0')
+  return { start: `${y}-${m}-01`, end: `${y}-${m}-${d}` }
 }
 
 // Format currency
-// Format currency
-export function formatCurrency(amount: number, locale: string = 'es-ES'): string {
+export function formatCurrency(amount: number, locale: string = 'es-ES', currency: string = 'EUR'): string {
   return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'EUR'
+    currency,
   }).format(amount)
 }
 

@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, Check, Star, GripVertical, CreditCard } from 'lucide-react'
+import { Plus, Trash2, Edit2, Star, CreditCard, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
-  getPaymentMethods, 
-  createPaymentMethod, 
-  updatePaymentMethod, 
-  deletePaymentMethod, 
+  getPaymentMethods,
+  createPaymentMethod,
+  updatePaymentMethod,
+  deletePaymentMethod,
   setDefaultPaymentMethod,
-  type PaymentMethod 
+  type PaymentMethod
 } from '../../services/paymentMethodService'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../ui/UiModal'
 import { UiInput } from '../ui/UiInput'
-import { UiField } from '../ui/UiField'
 import { useToast } from '../Toast'
 
 export function PaymentMethodsSettings() {
@@ -20,10 +19,14 @@ export function PaymentMethodsSettings() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null)
-  
-  // Form State
+
+  // Form state
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<PaymentMethod | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const toast = useToast()
 
@@ -82,31 +85,35 @@ export function PaymentMethodsSettings() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('¿Estás seguro de eliminar este método de pago?')) return
-
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
     try {
-      const success = await deletePaymentMethod(id)
+      setDeleting(true)
+      const success = await deletePaymentMethod(deleteTarget.id)
       if (success) {
         toast.success('Eliminado', 'Método de pago eliminado')
+        setDeleteTarget(null)
         loadMethods()
       } else {
-         toast.error('Error', 'No se pudo eliminar (quizás está en uso)')
+        toast.error('Error', 'No se pudo eliminar (quizás está en uso)')
       }
     } catch (error) {
-       console.error('Error deleting:', error)
+      console.error('Error deleting:', error)
+      toast.error('Error', 'No se pudo eliminar el método de pago')
+    } finally {
+      setDeleting(false)
     }
   }
 
   async function handleSetDefault(id: string) {
     try {
       if (!user) return
-
       await setDefaultPaymentMethod(user.id, id)
       loadMethods()
       toast.success('Actualizado', 'Método por defecto cambiado')
     } catch (error) {
       console.error('Error setting default:', error)
+      toast.error('Error', 'No se pudo cambiar el método por defecto')
     }
   }
 
@@ -114,9 +121,18 @@ export function PaymentMethodsSettings() {
 
   return (
     <div className="space-y-3">
+      {/* Empty state */}
+      {methods.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-10 text-center text-gray-400 dark:text-gray-500">
+          <CreditCard size={36} className="mb-3 opacity-40" />
+          <p className="text-sm font-medium">Sin métodos de pago</p>
+          <p className="text-xs mt-1">Añade tu primer método de pago para asignarlo a movimientos</p>
+        </div>
+      )}
+
       {methods.map((method) => (
-        <div 
-          key={method.id} 
+        <div
+          key={method.id}
           className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-xl group hover:border-primary/30 transition-all"
         >
           <div className="flex items-center gap-3">
@@ -126,46 +142,46 @@ export function PaymentMethodsSettings() {
             `}>
               {method.is_default ? <Star size={14} fill="currentColor" /> : <CreditCard size={14} />}
             </div>
-            
+
             <div>
               <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
-                  {method.name}
-                  {method.is_default && <span className="ml-2 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Default</span>}
+                {method.name}
+                {method.is_default && <span className="ml-2 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Default</span>}
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {!method.is_default && (
-               <button 
-                 onClick={() => handleSetDefault(method.id)}
-                 className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
-                 title="Marcar como por defecto"
-               >
-                 <Star size={14} />
-               </button>
+              <button
+                onClick={() => handleSetDefault(method.id)}
+                className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors"
+                title="Marcar como por defecto"
+              >
+                <Star size={14} />
+              </button>
             )}
-            
-            <button 
-               onClick={() => handleOpenModal(method)}
-               className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
-               title="Editar"
+
+            <button
+              onClick={() => handleOpenModal(method)}
+              className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
+              title="Editar"
             >
-               <Edit2 size={14} />
+              <Edit2 size={14} />
             </button>
-            
-            <button 
-               onClick={() => handleDelete(method.id)}
-               className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-               title="Eliminar"
+
+            <button
+              onClick={() => setDeleteTarget(method)}
+              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+              title="Eliminar"
             >
-               <Trash2 size={14} />
+              <Trash2 size={14} />
             </button>
           </div>
         </div>
       ))}
 
-      <button 
+      <button
         onClick={() => handleOpenModal()}
         className="w-full py-2 flex items-center justify-center gap-2 text-primary bg-primary/5 hover:bg-primary/10 border border-dashed border-primary/20 rounded-xl transition-all font-medium text-sm"
       >
@@ -173,13 +189,13 @@ export function PaymentMethodsSettings() {
         Añadir método de pago
       </button>
 
-      {/* Modal */}
+      {/* Create / Edit modal */}
       <UiModal isOpen={showModal} onClose={() => setShowModal(false)} width="400px">
         <UiModalHeader>
           {editingMethod ? 'Editar método' : 'Nuevo método de pago'}
         </UiModalHeader>
         <UiModalBody>
-          <UiInput 
+          <UiInput
             label="Nombre"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -189,12 +205,42 @@ export function PaymentMethodsSettings() {
         </UiModalBody>
         <UiModalFooter>
           <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-          <button 
-            className="btn btn-primary" 
+          <button
+            className="btn btn-primary"
             onClick={handleSave}
             disabled={!name.trim() || saving}
           >
             {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </UiModalFooter>
+      </UiModal>
+
+      {/* Delete confirmation modal */}
+      <UiModal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} width="400px">
+        <UiModalHeader>Eliminar método de pago</UiModalHeader>
+        <UiModalBody>
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              ¿Eliminar <strong>{deleteTarget?.name}</strong>? Esta acción no se puede deshacer.
+              Los movimientos que usaban este método quedarán sin asignación.
+            </p>
+          </div>
+        </UiModalBody>
+        <UiModalFooter>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setDeleteTarget(null)}
+            disabled={deleting}
+          >
+            Cancelar
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={handleConfirmDelete}
+            disabled={deleting}
+          >
+            {deleting ? 'Eliminando...' : 'Eliminar'}
           </button>
         </UiModalFooter>
       </UiModal>

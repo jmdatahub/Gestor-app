@@ -42,16 +42,22 @@ export async function getMonthlyInsights(
   year: number,
   month: number,
   t: (key: string, params?: any) => string,
-  locale: string = 'es-ES'
+  locale: string = 'es-ES',
+  workspaceId?: string | null
 ): Promise<Insight[]> {
   const insights: Insight[] = []
-  
+
   // Helper to format currency
   const formatCurrency = (amount: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' }).format(amount)
   const currentRange = getMonthRange(year, month)
   const prev = getPrevMonth(year, month)
   const prevRange = getMonthRange(prev.year, prev.month)
   const periodLabel = `${month}/${year} vs ${prev.month}/${prev.year}`
+
+  // Workspace scoping: use orgId when in a workspace, otherwise filter personal movements
+  const orgParams: Record<string, string> = workspaceId
+    ? { orgId: workspaceId }
+    : { personal: 'true' }
 
   try {
     // Get movements for both months (excluding transfers)
@@ -60,13 +66,13 @@ export async function getMonthlyInsights(
         startDate: currentRange.start,
         endDate: currentRange.end,
         limit: 5000,
-        personal: 'true',
+        ...orgParams,
       }),
       api.get<{ data: any[] }>('/api/v1/movements', {
         startDate: prevRange.start,
         endDate: prevRange.end,
         limit: 5000,
-        personal: 'true',
+        ...orgParams,
       }),
     ])
 
@@ -210,83 +216,106 @@ export async function getMonthlyInsights(
       }
     }
 
-    // d/e/f) Fetch savings goals, investments, and debts in parallel
-    const [goalsRes, investmentsRes, debtsRes] = await Promise.all([
+  } catch (error) {
+    console.error('Error generating movement insights:', error)
+    // Return whatever insights were collected before the error
+    return insights
+  }
+
+  // d/e/f) Fetch savings goals, investments, and debts independently so that
+  //        a failure in one does not discard all previously generated insights.
+  try {
+    const [goalsRes, investmentsRes, debtsRes] = await Promise.allSettled([
       api.get<{ data: any[] }>('/api/v1/savings-goals'),
       api.get<{ data: any[] }>('/api/v1/investments'),
       api.get<{ data: any[] }>('/api/v1/debts'),
     ])
 
     // d) Savings goals progress
-    const goals = (goalsRes.data || []).filter((g: any) => !g.is_completed)
+    if (goalsRes.status === 'fulfilled') {
+      const goals = (goalsRes.value.data || []).filter(
+        (g: any) => g.status !== 'completed' && g.is_active !== false
+      )
+      for (const goal of goals) {
+        const targetAmount = Number(goal.target_amount) || 0
+        const currentAmount = Number(goal.current_amount) || 0
+        const progress = targetAmount > 0 ? (currentAmount / targetAmount) * 100 : 0
 
-    for (const goal of (goals || [])) {
-      const progress = goal.target_amount > 0 
-        ? (goal.current_amount / goal.target_amount) * 100 
-        : 0
-
-      if (progress >= 75) {
-        insights.push({
-          id: generateId(),
-          type: 'savings',
-          severity: 'success',
-          title: t('insights.savings.goal.title', { goal: goal.name }),
-          description: t('insights.savings.goal.desc', { percent: progress.toFixed(0), current: formatCurrency(goal.current_amount), target: formatCurrency(goal.target_amount) }),
-          period: 'Progreso actual'
-        })
+        if (progress >= 75) {
+          insights.push({
+            id: generateId(),
+            type: 'savings',
+            severity: 'success',
+            title: t('insights.savings.goal.title', { goal: goal.name }),
+            description: t('insights.savings.goal.desc', {
+              percent: progress.toFixed(0),
+              current: formatCurrency(currentAmount),
+              target: formatCurrency(targetAmount),
+            }),
+            period: 'Progreso actual',
+          })
+        }
       }
     }
 
     // e) Investment changes
-    for (const inv of (investmentsRes.data || [])) {
-      const changePercent = inv.buy_price > 0 
-        ? ((inv.current_price - inv.buy_price) / inv.buy_price) * 100 
-        : 0
+    if (investmentsRes.status === 'fulfilled') {
+      for (const inv of (investmentsRes.value.data || [])) {
+        const buyPrice = Number(inv.buy_price) || 0
+        const currentPrice = Number(inv.current_price) || 0
+        if (buyPrice <= 0) continue
+        const changePercent = ((currentPrice - buyPrice) / buyPrice) * 100
 
-      if (Math.abs(changePercent) >= 10) {
-        insights.push({
-          id: generateId(),
-          type: 'investment',
-          severity: changePercent >= 0 ? 'success' : 'warning',
-          title: changePercent > 0 
-            ? t('insights.investment.change.titlePos', { investment: inv.name, percent: changePercent.toFixed(0) })
-            : t('insights.investment.change.title', { investment: inv.name, percent: changePercent.toFixed(0) }),
-          description: t('insights.investment.change.desc', { buyPrice: formatCurrency(inv.buy_price), currentPrice: formatCurrency(inv.current_price) }),
-          period: 'Desde la compra'
-        })
+        if (Math.abs(changePercent) >= 10) {
+          insights.push({
+            id: generateId(),
+            type: 'investment',
+            severity: changePercent >= 0 ? 'success' : 'warning',
+            title: changePercent > 0
+              ? t('insights.investment.change.titlePos', { investment: inv.name, percent: Math.abs(changePercent).toFixed(0) })
+              : t('insights.investment.change.title', { investment: inv.name, percent: Math.abs(changePercent).toFixed(0) }),
+            description: t('insights.investment.change.desc', {
+              buyPrice: formatCurrency(buyPrice),
+              currentPrice: formatCurrency(currentPrice),
+            }),
+            period: 'Desde la compra',
+          })
+        }
       }
     }
 
     // f) Debts due soon
-    const now = new Date()
-    const in15Days = new Date()
-    in15Days.setDate(now.getDate() + 15)
+    if (debtsRes.status === 'fulfilled') {
+      const now = new Date()
+      const in15Days = new Date()
+      in15Days.setDate(now.getDate() + 15)
+      const in15DaysStr = in15Days.toISOString().split('T')[0]
 
-    const in15DaysStr = in15Days.toISOString().split('T')[0]
-    const debts = (debtsRes.data || []).filter((d: any) =>
-      !d.is_closed && d.due_date != null && d.due_date <= in15DaysStr
-    )
+      const debts = (debtsRes.value.data || []).filter(
+        (d: any) => !d.is_closed && d.due_date != null && d.due_date <= in15DaysStr
+      )
 
-    for (const debt of (debts || [])) {
-      if (debt.remaining_amount > 0) {
+      for (const debt of debts) {
+        const remainingAmount = Number(debt.remaining_amount) || 0
+        if (remainingAmount <= 0) continue
         const dueDate = new Date(debt.due_date)
-        const daysRemaining = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-        
+        const now2 = new Date()
+        const daysRemaining = Math.ceil((dueDate.getTime() - now2.getTime()) / (1000 * 60 * 60 * 24))
+
         if (daysRemaining >= 0 && daysRemaining <= 15) {
           insights.push({
             id: generateId(),
             type: 'debt',
             severity: daysRemaining <= 7 ? 'warning' : 'info',
             title: t('insights.debt.due.title', { creditor: debt.counterparty_name }),
-            description: t('insights.debt.due.desc', { days: daysRemaining, amount: formatCurrency(debt.remaining_amount) }),
-            period: 'Próximo vencimiento'
+            description: t('insights.debt.due.desc', { days: daysRemaining, amount: formatCurrency(remainingAmount) }),
+            period: 'Próximo vencimiento',
           })
         }
       }
     }
-
   } catch (error) {
-    console.error('Error generating insights:', error)
+    console.error('Error generating supplementary insights:', error)
   }
 
   return insights

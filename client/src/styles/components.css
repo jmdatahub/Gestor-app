@@ -188,7 +188,7 @@
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #DC2626;
+  filter: brightness(0.88);
 }
 
 .btn-success {

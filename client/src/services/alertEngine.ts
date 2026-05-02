@@ -1,11 +1,12 @@
 import { createAlert, hasRecentAlert, hasRecentAlertForEntity } from './alertService'
 import type { Alert } from './alertService'
 import { api } from '../lib/apiClient'
+import { storage } from '../lib/storage'
 
 // Sends a Telegram notification for an alert without throwing on failure
 async function notifyTelegram(type: Alert['type'], title: string, message: string): Promise<void> {
   try {
-    const token = localStorage.getItem('auth_token')
+    const token = storage.get('auth_token')
     if (!token) return
 
     await fetch('/api/v1/notify', {

@@ -1,3 +1,5 @@
+import { storage } from '../lib/storage'
+
 export interface TelemetryEvent {
   actionName: string; ok: boolean; code: string; durationMs: number; errorMessage?: string
 }
@@ -12,7 +14,7 @@ const MAX_EVENTS = 500
 const STORAGE_KEY = 'telemetry_events'
 
 export function getEvents(): TelemetryEvent[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
+  try { return JSON.parse(storage.get(STORAGE_KEY) || '[]') } catch { return [] }
 }
 
 export function logEvent(event: TelemetryEvent) {
@@ -20,7 +22,7 @@ export function logEvent(event: TelemetryEvent) {
     const events = getEvents()
     events.push(event)
     if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(events))
+    storage.set(STORAGE_KEY, JSON.stringify(events))
   } catch { /* storage full, ignore */ }
 }
 
@@ -28,7 +30,7 @@ export function getRecentEvents(n = 50): TelemetryEvent[] {
   return getEvents().slice(-n)
 }
 
-export function clearEvents() { localStorage.removeItem(STORAGE_KEY) }
+export function clearEvents() { storage.remove(STORAGE_KEY) }
 
 export function getStats(): TelemetryStats {
   const events = getEvents()

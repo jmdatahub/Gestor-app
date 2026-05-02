@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { savingsGoals, savingsContributions } from '../db/schema.js'
-import { and, eq, isNull, desc } from 'drizzle-orm'
+import { and, eq, isNull, desc, sql, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
 const router = Router()
@@ -34,11 +34,11 @@ function mapOutContribution(row: Record<string, any>) {
 // Accepts snake_case from client, converts to camelCase for Drizzle
 function mapIn(body: Record<string, any>) {
   const out: Record<string, any> = {}
-  const name = body.name; if (name != null) out.name = name
+  const name = body.name; if (name != null) out.name = typeof name === 'string' ? name.slice(0, 100) : name
   const target = body.target_amount ?? body.targetAmount; if (target != null) out.targetAmount = String(target)
   const current = body.current_amount ?? body.currentAmount; if (current != null) out.currentAmount = String(current)
   const date = body.target_date ?? body.targetDate; if (date != null) out.targetDate = date
-  const desc = body.description; if (desc != null) out.description = desc
+  const desc = body.description; if (desc != null) out.description = typeof desc === 'string' ? desc.slice(0, 500) : desc
   const color = body.color; if (color != null) out.color = color
   const icon = body.icon; if (icon != null) out.icon = icon
   const status = body.status; if (status != null) out.status = status
@@ -55,8 +55,15 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const filter = orgId
       ? eq(savingsGoals.organizationId, orgId)
       : and(eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.organizationId))
-    const rows = await db.select().from(savingsGoals).where(filter).orderBy(desc(savingsGoals.createdAt))
-    res.json({ data: rows.map(r => mapOut(r as any)) })
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const offset = Number(req.query.offset) || 0
+    const [rows, [{ total }]] = await Promise.all([
+      db.select().from(savingsGoals).where(filter)
+        .orderBy(desc(savingsGoals.createdAt))
+        .limit(limit).offset(offset),
+      db.select({ total: count() }).from(savingsGoals).where(filter),
+    ])
+    res.json({ data: rows.map(r => mapOut(r as any)), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[savings GET /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -124,10 +131,17 @@ router.get('/:goalId/contributions', authMiddleware, async (req: AuthRequest, re
     const goal = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
       .where(and(eq(savingsGoals.id, req.params.goalId as string), eq(savingsGoals.userId, req.userId!))).limit(1))[0]
     if (!goal) { res.status(404).json({ error: 'Meta no encontrada' }); return }
-    const rows = await db.select().from(savingsContributions)
-      .where(eq(savingsContributions.goalId, req.params.goalId as string))
-      .orderBy(desc(savingsContributions.date))
-    res.json({ data: rows.map(r => mapOutContribution(r as any)) })
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const offset = Number(req.query.offset) || 0
+    const contribWhere = eq(savingsContributions.goalId, req.params.goalId as string)
+    const [rows, [{ total }]] = await Promise.all([
+      db.select().from(savingsContributions)
+        .where(contribWhere)
+        .orderBy(desc(savingsContributions.date))
+        .limit(limit).offset(offset),
+      db.select({ total: count() }).from(savingsContributions).where(contribWhere),
+    ])
+    res.json({ data: rows.map(r => mapOutContribution(r as any)), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[savings GET /:goalId/contributions]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -142,13 +156,17 @@ router.post('/:goalId/contributions', authMiddleware, async (req: AuthRequest, r
     const amount = req.body.amount
     const date   = req.body.date
     if (!amount || !date) { res.status(400).json({ error: 'amount y date son requeridos' }); return }
-    const [row] = await db.insert(savingsContributions)
-      .values({ amount: String(amount), date, notes: req.body.notes ?? req.body.note ?? null, goalId: req.params.goalId as string, userId: req.userId! } as any)
-      .returning()
-    // Update current_amount on the goal
-    const [current] = await db.select({ currentAmount: savingsGoals.currentAmount }).from(savingsGoals).where(eq(savingsGoals.id, req.params.goalId as string)).limit(1)
-    const newAmount = (parseFloat(current?.currentAmount ?? '0') + parseFloat(String(amount))).toFixed(2)
-    await db.update(savingsGoals).set({ currentAmount: newAmount } as any).where(eq(savingsGoals.id, req.params.goalId as string))
+    const goalId = req.params.goalId as string
+    const row = await db.transaction(async (tx) => {
+      const [contribution] = await tx.insert(savingsContributions)
+        .values({ amount: String(amount), date, notes: req.body.notes ?? req.body.note ?? null, goalId, userId: req.userId! } as any)
+        .returning()
+      // Atomically increment current_amount — no separate SELECT needed
+      await tx.update(savingsGoals)
+        .set({ currentAmount: sql`${savingsGoals.currentAmount} + ${String(amount)}` } as any)
+        .where(eq(savingsGoals.id, goalId))
+      return contribution
+    })
     res.status(201).json({ data: mapOutContribution(row as any) })
   } catch (err) {
     console.error('[savings POST /:goalId/contributions]', err)

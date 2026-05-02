@@ -10,6 +10,8 @@ import { getMyPendingInvitations } from '../services/organizationService'
 import { countPendingDebts } from '../services/debtService'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { HeaderWorkspaceSelector } from '../components/layout/HeaderWorkspaceSelector'
+import { storage } from '../lib/storage'
+import { OfflineBanner } from '../components/OfflineBanner'
 
 import {
   LayoutDashboard,
@@ -52,11 +54,11 @@ export default function AppLayout() {
 
   // Sidebar State
   const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const saved = localStorage.getItem('sidebarWidth')
+    const saved = storage.get('sidebarWidth')
     return saved ? parseInt(saved) : DEFAULT_WIDTH
   })
   const [isCollapsed, setIsCollapsed] = useState(() => {
-    return localStorage.getItem('sidebarCollapsed') === 'true'
+    return storage.get('sidebarCollapsed') === 'true'
   })
   const [isResizing, setIsResizing] = useState(false)
   const sidebarRef = useRef<HTMLElement>(null)
@@ -108,11 +110,11 @@ export default function AppLayout() {
 
   // Persist Sidebar State
   useEffect(() => {
-    localStorage.setItem('sidebarWidth', sidebarWidth.toString())
+    storage.set('sidebarWidth', sidebarWidth.toString())
   }, [sidebarWidth])
 
   useEffect(() => {
-    localStorage.setItem('sidebarCollapsed', isCollapsed.toString())
+    storage.set('sidebarCollapsed', isCollapsed.toString())
   }, [isCollapsed])
 
   // Resize Handler
@@ -174,7 +176,11 @@ export default function AppLayout() {
 
   return (
     <div className="app-container">
-      
+      {/* Skip-to-content link for keyboard navigation */}
+      <a href="#main-content" className="skip-link">
+        Saltar al contenido principal
+      </a>
+
       {/* Workspace Switch Transition Overlay */}
       {isSwitchingWorkspace && (
         <div style={{
@@ -339,9 +345,12 @@ export default function AppLayout() {
           <div className="header-logo-badge">MP</div>
           <span className="mobile-logo">Mi Panel</span>
         </div>
-        <button 
+        <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="mobile-menu-btn"
+          aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="mobile-nav"
         >
           {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
@@ -349,15 +358,23 @@ export default function AppLayout() {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="mobile-sidebar">
+        <>
+        {/* Tap-outside overlay to close sidebar */}
+        <div
+          className="mobile-sidebar-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+        <div id="mobile-nav" className="mobile-sidebar" role="dialog" aria-modal="true" aria-label="Menú de navegación">
           <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="sidebar-logo flex items-center gap-3">
               <div className="sidebar-logo-badge">MP</div>
-              <span className="text-white font-bold text-lg">Mi Panel</span>
+              <span className="font-bold text-lg" style={{ color: 'var(--text-inverse)' }}>Mi Panel</span>
             </div>
-            <button 
+            <button
               onClick={() => setMobileMenuOpen(false)}
               className="mobile-menu-btn"
+              aria-label="Cerrar menú"
             >
               <X size={24} />
             </button>
@@ -391,7 +408,7 @@ export default function AppLayout() {
           </nav>
           
           <div className="sidebar-footer">
-            <button onClick={handleSignOut} className="nav-item w-full text-red-400">
+            <button onClick={handleSignOut} className="nav-item w-full" style={{ color: 'var(--danger)' }}>
               <div className="nav-item-icon">
                 <LogOut size={20} />
               </div>
@@ -399,10 +416,11 @@ export default function AppLayout() {
             </button>
           </div>
         </div>
+        </>
       )}
 
       {/* Main Content */}
-      <main className="app-main">
+      <main id="main-content" className="app-main">
         <header className="app-header flex justify-between items-center px-6 h-[80px] border-b border-[var(--border-color)] bg-[var(--bg-header)]">
           <div className="header-brand flex items-center gap-4">
             <h1 className="header-title">{t('app.name')}</h1>
@@ -453,6 +471,9 @@ export default function AppLayout() {
         {/* Settings Panel */}
         <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         
+        {/* Prominent offline / stale-data banner (issues #5 and #6) */}
+        <OfflineBanner />
+
         <div className="p-6 flex-1 overflow-y-auto">
           <ErrorBoundary key={location.pathname}>
             <Outlet />

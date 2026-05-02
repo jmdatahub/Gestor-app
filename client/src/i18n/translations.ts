@@ -314,12 +314,46 @@ export const translations: Record<string, Record<string, string>> = {
     'insights.title': 'Insights Financieros',
     'insights.subtitle': 'Análisis inteligente de tu salud financiera',
     'insights.analyzePeriod': 'Analizar Periodo',
+    'insights.refresh': 'Actualizar análisis',
+    'insights.periodTitle': 'Periodo de análisis',
+    'insights.periodSubtitle': 'Comparando',
     'insights.spendingByCategory': 'Gastos por Categoría',
     'insights.incomeVsExpense': 'Ingresos vs Gastos (6 meses)',
     'insights.noDataSpending': 'Sin datos de gastos',
+    'insights.noDataSpendingDesc': 'Sin gastos registrados este mes.',
     'insights.noInsights': 'Sin insights relevantes',
     'insights.noInsightsDesc': 'No hemos detectado patrones inusuales o consejos para este periodo. Prueba a añadir más movimientos o revisa otro mes.',
     'insights.detailedAnalysis': 'Análisis Detallado',
+    'insights.detailedAnalysisSubtitle': 'Detectamos patrones relevantes en tu actividad financiera',
+    'insights.noData': 'Sin datos',
+    'insights.noDataDesc': 'Añade movimientos para ver tu evolución.',
+    'insights.noComparativeData': 'Sin datos comparativos',
+    'insights.noComparativeDataDesc': 'Necesitamos al menos un mes con gastos para comparar.',
+    'insights.errorTitle': 'Error al cargar',
+    'insights.errorDesc': 'No se pudieron cargar los análisis.',
+    // Insight stat cards
+    'insights.stat.income': 'Ingresos',
+    'insights.stat.expenses': 'Gastos',
+    'insights.stat.balance': 'Balance',
+    'insights.stat.savingsRate': 'Tasa de ahorro',
+    'insights.stat.vsPrevMonth': 'vs mes anterior',
+    'insights.stat.ppVsPrevMonth': 'pp vs mes anterior',
+    'insights.stat.previous': 'Anterior',
+    'insights.stat.surplus': 'Superávit del mes',
+    'insights.stat.deficit': 'Déficit del mes',
+    'insights.stat.veryHealthy': 'Muy saludable',
+    'insights.stat.acceptable': 'Aceptable',
+    'insights.stat.reviewExpenses': 'Revisar gastos',
+    // Insight charts
+    'insights.chart.monthlyEvolution': 'Evolución mensual',
+    'insights.chart.monthlyEvolutionSubtitle': 'Ingresos, gastos y neto en los últimos 12 meses',
+    'insights.chart.quickCompare': 'Comparativa rápida',
+    'insights.chart.spendingDistribution': 'Distribución de gastos',
+    'insights.chart.categoryCompare': 'Comparativa por categoría',
+    'insights.chart.topExpenses': 'Top gastos',
+    'insights.chart.dailyPattern': 'Patrón de gasto diario',
+    'insights.chart.dailyPatternSubtitle': 'Mapa de calor de los últimos 126 días',
+    'insights.chart.total': 'Total',
     
     // Insight Types
     'insights.type.spending': 'Gasto',
@@ -351,8 +385,52 @@ export const translations: Record<string, Record<string, string>> = {
     'insights.investment.change.desc': 'El precio ha pasado de {buyPrice} a {currentPrice}.',
     'insights.debt.due.title': 'Deuda con "{creditor}" próxima a vencer',
     'insights.debt.due.desc': 'Vence en {days} día(s). Pendiente: {amount}.',
+
+    // Days of week
+    'common.sunday': 'Domingo',
+    'common.monday': 'Lunes',
+    'common.tuesday': 'Martes',
+    'common.wednesday': 'Miércoles',
+    'common.thursday': 'Jueves',
+    'common.friday': 'Viernes',
+    'common.saturday': 'Sábado',
+
+    // CategoryPicker
+    'categoryPicker.placeholder': 'Seleccionar categoría...',
+    'categoryPicker.clear': 'Limpiar categoría',
+    'categoryPicker.create': 'Crear "{name}"',
+    'categoryPicker.newCategory': 'Nueva categoría',
+
+    // Recurring — additional keys
+    'recurring.activate': 'Activar regla',
+    'recurring.deactivate': 'Desactivar regla',
+    'recurring.error.invalidAmount': 'El importe debe ser un número positivo.',
+    'recurring.error.noAccount': 'Selecciona una cuenta.',
+    'recurring.toast.created': 'Regla creada',
+    'recurring.toast.createdDesc': 'La regla recurrente se ha guardado.',
+    'recurring.toast.createError': 'Error al crear la regla',
+    'recurring.toast.createErrorDesc': 'No se pudo guardar la regla recurrente. Inténtalo de nuevo.',
+    'recurring.toast.toggleError': 'Error al cambiar estado',
+    'recurring.toast.toggleErrorDesc': 'No se pudo cambiar el estado de la regla.',
+
+    // UiModal close button
+    'common.close': 'Cerrar',
+
+    // UiSelect search
+    'common.searchOptions': 'Buscar opciones',
+    'common.options': 'Opciones',
+    'common.noResults': 'No hay resultados',
+
+    // ErrorBoundary
+    'error.occurred': 'Ha ocurrido un error',
+    'error.details': 'Detalles del error',
+    'error.retry': 'Reintentar',
+
+    // ErrorBanner
+    'error.viewDetails': 'Ver detalles',
+    'error.technicalInfo': 'Información técnica',
   },
-  
+
   en: {
     // App
     'app.name': 'My Finance Panel',
@@ -655,12 +733,46 @@ export const translations: Record<string, Record<string, string>> = {
     'insights.title': 'Financial Insights',
     'insights.subtitle': 'Smart analysis of your financial health',
     'insights.analyzePeriod': 'Analyze Period',
+    'insights.refresh': 'Refresh analysis',
+    'insights.periodTitle': 'Analysis period',
+    'insights.periodSubtitle': 'Comparing',
     'insights.spendingByCategory': 'Expenses by Category',
     'insights.incomeVsExpense': 'Income vs Expenses (6 months)',
     'insights.noDataSpending': 'No expense data',
+    'insights.noDataSpendingDesc': 'No expenses recorded this month.',
     'insights.noInsights': 'No relevant insights',
-    'insights.noInsightsDesc': 'No relevant insights details found.',
+    'insights.noInsightsDesc': 'No unusual patterns or tips detected for this period. Try adding more movements or check another month.',
     'insights.detailedAnalysis': 'Detailed Analysis',
+    'insights.detailedAnalysisSubtitle': 'We detected relevant patterns in your financial activity',
+    'insights.noData': 'No data',
+    'insights.noDataDesc': 'Add movements to see your evolution.',
+    'insights.noComparativeData': 'No comparative data',
+    'insights.noComparativeDataDesc': 'We need at least one month with expenses to compare.',
+    'insights.errorTitle': 'Load error',
+    'insights.errorDesc': 'Could not load the analysis.',
+    // Insight stat cards
+    'insights.stat.income': 'Income',
+    'insights.stat.expenses': 'Expenses',
+    'insights.stat.balance': 'Balance',
+    'insights.stat.savingsRate': 'Savings rate',
+    'insights.stat.vsPrevMonth': 'vs previous month',
+    'insights.stat.ppVsPrevMonth': 'pp vs previous month',
+    'insights.stat.previous': 'Previous',
+    'insights.stat.surplus': 'Monthly surplus',
+    'insights.stat.deficit': 'Monthly deficit',
+    'insights.stat.veryHealthy': 'Very healthy',
+    'insights.stat.acceptable': 'Acceptable',
+    'insights.stat.reviewExpenses': 'Review expenses',
+    // Insight charts
+    'insights.chart.monthlyEvolution': 'Monthly evolution',
+    'insights.chart.monthlyEvolutionSubtitle': 'Income, expenses and net over the last 12 months',
+    'insights.chart.quickCompare': 'Quick comparison',
+    'insights.chart.spendingDistribution': 'Spending distribution',
+    'insights.chart.categoryCompare': 'Category comparison',
+    'insights.chart.topExpenses': 'Top expenses',
+    'insights.chart.dailyPattern': 'Daily spending pattern',
+    'insights.chart.dailyPatternSubtitle': 'Heat map of the last 126 days',
+    'insights.chart.total': 'Total',
 
     // Insight Types
     'insights.type.spending': 'Spending',
@@ -692,5 +804,49 @@ export const translations: Record<string, Record<string, string>> = {
     'insights.investment.change.desc': 'Price changed from {buyPrice} to {currentPrice}.',
     'insights.debt.due.title': 'Debt with "{creditor}" due soon',
     'insights.debt.due.desc': 'Due in {days} day(s). Remaining: {amount}.',
+
+    // Days of week
+    'common.sunday': 'Sunday',
+    'common.monday': 'Monday',
+    'common.tuesday': 'Tuesday',
+    'common.wednesday': 'Wednesday',
+    'common.thursday': 'Thursday',
+    'common.friday': 'Friday',
+    'common.saturday': 'Saturday',
+
+    // CategoryPicker
+    'categoryPicker.placeholder': 'Select category...',
+    'categoryPicker.clear': 'Clear category',
+    'categoryPicker.create': 'Create "{name}"',
+    'categoryPicker.newCategory': 'New category',
+
+    // Recurring — additional keys
+    'recurring.activate': 'Activate rule',
+    'recurring.deactivate': 'Deactivate rule',
+    'recurring.error.invalidAmount': 'Amount must be a positive number.',
+    'recurring.error.noAccount': 'Please select an account.',
+    'recurring.toast.created': 'Rule created',
+    'recurring.toast.createdDesc': 'The recurring rule has been saved.',
+    'recurring.toast.createError': 'Failed to create rule',
+    'recurring.toast.createErrorDesc': 'Could not save the recurring rule. Please try again.',
+    'recurring.toast.toggleError': 'Failed to update rule',
+    'recurring.toast.toggleErrorDesc': 'Could not update the rule status.',
+
+    // UiModal close button
+    'common.close': 'Close',
+
+    // UiSelect search
+    'common.searchOptions': 'Search options',
+    'common.options': 'Options',
+    'common.noResults': 'No results',
+
+    // ErrorBoundary
+    'error.occurred': 'An error occurred',
+    'error.details': 'Error details',
+    'error.retry': 'Retry',
+
+    // ErrorBanner
+    'error.viewDetails': 'View details',
+    'error.technicalInfo': 'Technical information',
   },
 };

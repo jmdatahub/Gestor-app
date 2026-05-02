@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/apiClient'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -137,14 +138,33 @@ export default function MovementsList() {
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
 
-  // Export & Filter State
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterAccountId, setFilterAccountId] = useState('')
-  const [filterCategoryId, setFilterCategoryId] = useState('')
-  const [filterType, setFilterType] = useState<string>('')
+  // URL search params — persists filters across back-navigation
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Export & Filter State (synced to URL)
+  const [startDate, setStartDate] = useState<Date | undefined>(() => {
+    const v = searchParams.get('desde'); return v ? new Date(v) : undefined
+  })
+  const [endDate, setEndDate] = useState<Date | undefined>(() => {
+    const v = searchParams.get('hasta'); return v ? new Date(v) : undefined
+  })
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') || '')
+  const [filterAccountId, setFilterAccountId] = useState(() => searchParams.get('cuenta') || '')
+  const [filterCategoryId, setFilterCategoryId] = useState(() => searchParams.get('categoria') || '')
+  const [filterType, setFilterType] = useState<string>(() => searchParams.get('tipo') || '')
   const [allCategories, setAllCategories] = useState<{id: string, name: string, color: string}[]>([])
+
+  // Sync filter state → URL whenever any filter changes
+  useEffect(() => {
+    const params: Record<string, string> = {}
+    if (searchTerm) params.q = searchTerm
+    if (filterType) params.tipo = filterType
+    if (filterAccountId) params.cuenta = filterAccountId
+    if (filterCategoryId) params.categoria = filterCategoryId
+    if (startDate) params.desde = startDate.toISOString().split('T')[0]
+    if (endDate) params.hasta = endDate.toISOString().split('T')[0]
+    setSearchParams(params, { replace: true })
+  }, [searchTerm, filterType, filterAccountId, filterCategoryId, startDate, endDate])
 
 
   // Form state
@@ -198,20 +218,20 @@ export default function MovementsList() {
       // Ensure default accounts exist first
       await ensureDefaultAccountsForUser(user.id)
 
-      const [movementsData, monthlyData, accountsData] = await Promise.all([
+      const [movementsPage, monthlyData, accountsData] = await Promise.all([
         fetchMovements(user.id, 50, 0, orgId),
         fetchMonthlyMovements(user.id, orgId),
         fetchAccounts(user.id, orgId)
       ])
 
-      setMovements(movementsData)
+      setMovements(movementsPage.data)
       setPage(0)
-      setHasMore(movementsData.length === 50)
+      setHasMore(movementsPage.offset + movementsPage.limit < movementsPage.total)
       setAccounts(accountsData)
       
       // Extract unique categories from movements for filter dropdown
       const uniqueCategories = new Map<string, {id: string, name: string, color: string}>()
-      movementsData.forEach(m => {
+      movementsPage.data.forEach(m => {
         if (m.category) {
           uniqueCategories.set(m.category.id || m.category.name, {
             id: m.category.id || m.category.name,
@@ -263,12 +283,11 @@ export default function MovementsList() {
       const nextPage = page + 1
       const offset = nextPage * 50
       
-      const newMovements = await fetchMovements(user.id, 50, offset, orgId)
-      
-      if (newMovements.length < 50) {
-        setHasMore(false)
-      }
-      
+      const newPage = await fetchMovements(user.id, 50, offset, orgId)
+      const newMovements = newPage.data
+
+      setHasMore(newPage.offset + newPage.limit < newPage.total)
+
       if (newMovements.length > 0) {
         setMovements(prev => {
           // Merge avoiding duplicates just in case
@@ -425,10 +444,11 @@ export default function MovementsList() {
     setShowTaxSection(false)
     setPaidByUserId('')
     setPaidByExternal('')
+    setCreateDebt(true)
     setIsSubscription(false)
     setSubscriptionEndDate(undefined)
     setAutoRenew(true)
-    
+
     const generalAccount = accounts.find(a => a.type === 'general')
     if (generalAccount) setAccountId(generalAccount.id)
   }
@@ -915,7 +935,7 @@ export default function MovementsList() {
               <>
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full responsive-table">
               <thead>
                 <tr className="bg-gray-50 dark:bg-slate-800/50">
                   <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderTopLeftRadius: '0.75rem' }}>📅 {t('common.date')}</th>
@@ -933,11 +953,11 @@ export default function MovementsList() {
               <tbody>
                 {filteredMovements.map((mov) => (
                   <tr key={mov.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-slate-800/30 transition-colors">
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="Fecha" style={{ padding: '0.75rem 1.5rem' }}>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatDate(mov.date)}</div>
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
-                      <span 
+                    <td data-label="Tipo" style={{ padding: '0.75rem 1.5rem' }}>
+                      <span
                         className="inline-flex items-center gap-1.5 text-sm font-semibold"
                         style={{ 
                           color: mov.kind === 'income' ? 'var(--success)' : mov.kind === 'expense' ? 'var(--danger)' : 'var(--primary)'
@@ -953,10 +973,10 @@ export default function MovementsList() {
                         {getTypeLabel(mov.kind)}
                       </span>
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem', color: 'var(--text-secondary)' }}>
+                    <td data-label="Cuenta" style={{ padding: '0.75rem 1.5rem', color: 'var(--text-secondary)' }}>
                       {mov.account?.name || '-'}
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="Categoría" style={{ padding: '0.75rem 1.5rem' }}>
                       {mov.category ? (
                         <span
                           className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
@@ -971,13 +991,13 @@ export default function MovementsList() {
                         <span style={{ color: 'var(--text-muted)' }}>-</span>
                       )}
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem', color: 'var(--text-secondary)', maxWidth: '200px' }}>
+                    <td data-label="Descripción" style={{ padding: '0.75rem 1.5rem', color: 'var(--text-secondary)', maxWidth: '200px' }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={mov.description || ''}>
                         {mov.description || '-'}
                       </div>
                     </td>
                     {currentWorkspace && (
-                      <td style={{ padding: '0.75rem 1.5rem' }}>
+                      <td data-label="Creado por" style={{ padding: '0.75rem 1.5rem' }}>
                         {mov.creator ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <div style={{
@@ -997,13 +1017,13 @@ export default function MovementsList() {
                         )}
                       </td>
                     )}
-                    <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>
+                    <td data-label="Importe" style={{ padding: '0.75rem 1.5rem', textAlign: 'right' }}>
                       <span style={{ fontWeight: 700, color: getTypeColor(mov.kind) }}>
                         {mov.kind === 'income' ? '+' : mov.kind === 'expense' ? '-' : ''}
                         {formatCurrency(mov.amount)}
                       </span>
                     </td>
-                    <td style={{ padding: '0.75rem 0.5rem' }}>
+                    <td data-label="" style={{ padding: '0.75rem 0.5rem' }}>
                       <div className="flex items-center justify-center gap-1">
                         <button
                           type="button"
@@ -1076,10 +1096,10 @@ export default function MovementsList() {
           <form onSubmit={handleSubmit}>
             <UiModalBody className="movement-modal-body">
               {appError && (
-                <div className="movement-error-banner">
+                <div className="movement-error-banner" role="alert" aria-live="assertive">
                   <AlertTriangle size={15} />
                   <span>{appError.message}</span>
-                  <button type="button" onClick={() => setAppError(null)}><X size={13}/></button>
+                  <button type="button" onClick={() => setAppError(null)} aria-label="Cerrar error"><X size={13}/></button>
                 </div>
               )}
 
@@ -1137,6 +1157,7 @@ export default function MovementsList() {
                   placeholder="0.00"
                   step="0.01"
                   min={0.01}
+                  required
                 />
                 <CategoryPicker
                   label={t('common.category')}

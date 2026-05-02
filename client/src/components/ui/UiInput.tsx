@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, useId } from 'react';
 
 export interface UiInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -10,30 +10,36 @@ export interface UiInputProps extends React.InputHTMLAttributes<HTMLInputElement
 }
 
 export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
-  ({ className = '', label, error, hint, icon, rightIcon, wrapperClassName = '', id, ...props }, ref) => {
-    
-    // Generate random ID if not provided, for A11y
-    const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
+  ({ className = '', label, error, hint, icon, rightIcon, wrapperClassName = '', id, required, ...props }, ref) => {
+
+    // Stable ID for A11y — useId is stable across renders
+    const generatedId = useId();
+    const inputId = id || generatedId;
 
     return (
       <div className={`ui-field ${wrapperClassName}`}>
         {label && (
           <label htmlFor={inputId} className="ui-label">
             {label}
+            {required && <span className="ui-required" aria-hidden="true"> *</span>}
           </label>
         )}
-        
+
         <div className="ui-input-container">
           {icon && (
             <div className="ui-input-container-icon">
               {icon}
             </div>
           )}
-          
+
           <input
             ref={ref}
             id={inputId}
-            className={`ui-input ${className}`}
+            required={required}
+            aria-required={required}
+            aria-invalid={!!error}
+            aria-describedby={error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
+            className={`ui-input ${error ? 'is-error' : ''} ${className}`}
             {...props}
           />
 
@@ -44,8 +50,16 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
           )}
         </div>
 
-        {error && <p className="ui-error text-xs text-danger mt-1">{error}</p>}
-        {hint && !error && <p className="ui-hint text-xs text-secondary mt-1">{hint}</p>}
+        {error && (
+          <p id={`${inputId}-error`} className="ui-error text-xs text-danger mt-1" role="alert" aria-live="polite">
+            {error}
+          </p>
+        )}
+        {hint && !error && (
+          <p id={`${inputId}-hint`} className="ui-hint text-xs text-secondary mt-1">
+            {hint}
+          </p>
+        )}
       </div>
     );
   }

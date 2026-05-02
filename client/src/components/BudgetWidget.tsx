@@ -3,6 +3,7 @@ import { AlertTriangle, Plus, Settings, X, Target, TrendingUp, Sparkles } from '
 import { getMonthlyCategoryBreakdown, type CategorySummary, formatCurrency } from '../services/summaryService'
 import { getBudgetsForMonth, setBudget, deleteBudget, getCurrentMonth, type Budget, type BudgetInput } from '../services/budgetService'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from './ui/UiModal'
+import { useToast } from './Toast'
 
 interface BudgetWidgetProps {
   userId: string
@@ -18,6 +19,7 @@ interface BudgetProgress {
 }
 
 export function BudgetWidget({ userId }: BudgetWidgetProps) {
+  const toast = useToast()
   const [categorySpending, setCategorySpending] = useState<CategorySummary[]>([])
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [loading, setLoading] = useState(true)
@@ -25,6 +27,7 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
   const [editingCategory, setEditingCategory] = useState<string>('')
   const [editingLimit, setEditingLimit] = useState<string>('')
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const currentMonth = getCurrentMonth()
   const monthName = new Date().toLocaleString('es-ES', { month: 'long' })
@@ -45,6 +48,7 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
       setBudgets(budgetData)
     } catch (error) {
       console.error('Error loading budget data:', error)
+      toast.error('Error', 'No se pudieron cargar los presupuestos')
     } finally {
       setLoading(false)
     }
@@ -74,34 +78,51 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
 
   const handleSaveBudget = async () => {
     if (!editingCategory || !editingLimit) return
-    
+    // Prevent double-submit
+    if (saving) return
+
+    const limitNum = parseFloat(editingLimit)
+    if (isNaN(limitNum) || limitNum <= 0) {
+      toast.error('Valor inválido', 'El límite debe ser un número mayor que 0')
+      return
+    }
+
     setSaving(true)
     try {
       const input: BudgetInput = {
         user_id: userId,
         category_name: editingCategory,
-        monthly_limit: parseFloat(editingLimit),
+        monthly_limit: limitNum,
         month: currentMonth
       }
-      
+
       await setBudget(input)
       await loadData()
       setEditingCategory('')
       setEditingLimit('')
-    } catch (error) {
+      toast.success('Presupuesto guardado', `Límite de ${editingCategory} actualizado`)
+    } catch (error: any) {
       console.error('Error saving budget:', error)
+      toast.error('Error al guardar', error?.message || 'No se pudo guardar el presupuesto')
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeleteBudget = async (categoryName: string) => {
+    // Prevent double-click
+    if (deleting) return
+    setDeleting(categoryName)
     try {
       const budget = budgets.find(b => (b.category_name ?? b.categoryName) === categoryName)
       if (budget) await deleteBudget(budget.id)
       await loadData()
-    } catch (error) {
+      toast.success('Presupuesto eliminado', `${categoryName} eliminado`)
+    } catch (error: any) {
       console.error('Error deleting budget:', error)
+      toast.error('Error al eliminar', error?.message || 'No se pudo eliminar el presupuesto')
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -451,19 +472,21 @@ export function BudgetWidget({ userId }: BudgetWidgetProps) {
                         </span>
                         <button
                           onClick={() => handleDeleteBudget(bCatName)}
+                          disabled={deleting === bCatName}
                           style={{
                             background: 'rgba(239, 68, 68, 0.1)',
                             border: 'none',
                             borderRadius: '8px',
                             padding: '0.4rem',
-                            cursor: 'pointer',
+                            cursor: deleting === bCatName ? 'not-allowed' : 'pointer',
                             color: 'var(--danger)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            transition: 'background 0.2s'
+                            transition: 'background 0.2s',
+                            opacity: deleting === bCatName ? 0.5 : 1,
                           }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+                          onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)' }}
                           onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
                         >
                           <X size={14} />

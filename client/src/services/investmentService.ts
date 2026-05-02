@@ -2,7 +2,7 @@ import { api } from '../lib/apiClient'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type InvestmentType = 'crypto' | 'stock' | 'etf' | 'bond' | 'real_estate' | 'commodity' | 'other'
+export type InvestmentType = 'crypto' | 'stock' | 'etf' | 'bond' | 'real_estate' | 'commodity' | 'collectible' | 'other'
 export type PositionType   = 'spot' | 'margin' | 'futures' | 'perpetual'
 export type PositionStatus = 'open' | 'closed' | 'liquidated'
 
@@ -12,8 +12,9 @@ export const investmentTypes: Array<{ value: InvestmentType; label: string }> = 
   { value: 'etf',         label: 'ETF' },
   { value: 'bond',        label: 'Bono' },
   { value: 'real_estate', label: 'Inmueble' },
-  { value: 'commodity',   label: 'Commodity' },
-  { value: 'other',       label: 'Otro' },
+  { value: 'commodity',    label: 'Commodity' },
+  { value: 'collectible',  label: 'Coleccionable' },
+  { value: 'other',        label: 'Otro' },
 ]
 
 export const positionTypeLabels: Record<PositionType, string> = {

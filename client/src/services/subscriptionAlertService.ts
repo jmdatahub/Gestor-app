@@ -20,14 +20,26 @@ export async function getExpiringSubscriptions(
 ): Promise<SubscriptionAlert[]> {
   const today = new Date()
   const futureDate = new Date()
-  futureDate.setDate(today.getDate() + daysAhead)
+  // For daysAhead === 0 (expiring today) we look at exactly today
+  futureDate.setDate(today.getDate() + Math.max(daysAhead, 0))
 
   try {
-    const { data: allMovements } = await api.get<{ data: any[] }>('/api/v1/movements', { limit: 5000 })
+    // Scope to workspace or personal movements (never cross-workspace)
+    const orgParams: Record<string, string> = organizationId
+      ? { orgId: organizationId }
+      : { personal: 'true' }
+
+    const { data: allMovements } = await api.get<{ data: any[] }>('/api/v1/movements', {
+      limit: 5000,
+      ...orgParams,
+    })
     const todayStr = today.toISOString().split('T')[0]
     const futureDateStr = futureDate.toISOString().split('T')[0]
 
-    const data = (allMovements || []).filter(m =>
+    const data = (allMovements || []).filter((m: any) =>
+      // Exclude soft-deleted movements (already-cancelled subscriptions)
+      m.deleted_at == null &&
+      m.deletedAt == null &&
       m.isSubscription === true &&
       m.subscriptionEndDate != null &&
       m.subscriptionEndDate >= todayStr &&

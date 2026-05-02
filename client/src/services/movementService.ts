@@ -17,15 +17,24 @@ export interface Movement {
 export interface Account { id: string; user_id: string; organization_id?: string | null; name: string; type: string }
 export interface Category { id: string; user_id: string; organization_id?: string | null; name: string; kind: string; color?: string; description?: string | null }
 
-export async function fetchMovements(_userId: string, limit = 50, offset = 0, organizationId?: string | null, signal?: AbortSignal): Promise<Movement[]> {
+export interface MovementsPage {
+  data: Movement[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export async function fetchMovements(_userId: string, limit = 50, offset = 0, organizationId?: string | null, signal?: AbortSignal): Promise<MovementsPage> {
   const params: Record<string, string | number> = { limit, offset }
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params, signal)
-  return data
+  const res = await api.get<MovementsPage>('/api/v1/movements', params, signal)
+  return { data: res.data, total: res.total ?? res.data.length, limit: res.limit ?? limit, offset: res.offset ?? offset }
 }
 
 export async function fetchMovementsForMonth(_userId: string, year: number, month: number, organizationId?: string | null, signal?: AbortSignal): Promise<Movement[]> {
-  const params: Record<string, string | number> = { limit: 500, year, month }
+  const start = `${year}-${String(month).padStart(2, '0')}-01`
+  const end = new Date(year, month, 0).toISOString().slice(0, 10) // last day of month
+  const params: Record<string, string | number> = { limit: 500, startDate: start, endDate: end }
   if (organizationId) params.org_id = organizationId
   const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params, signal)
   return data

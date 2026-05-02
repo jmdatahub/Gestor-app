@@ -9,6 +9,7 @@ import { eq, sql } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { sendPasswordResetEmail, sendPasswordChangedEmail, sendNewUserNotificationEmail } from '../services/email.service.js'
 import { sendTelegramMessage } from '../services/telegram.service.js'
+import { recordLoginFailure, clearLoginFailures } from '../middleware/rateLimiter.js'
 
 const router = Router()
 
@@ -35,6 +36,7 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
 
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response) => {
+  const ip = (req.ip ?? req.socket.remoteAddress ?? 'unknown').replace(/^::ffff:/, '')
   const { email, password } = req.body ?? {}
   if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
     res.status(400).json({ error: 'Email y contraseña requeridos' }); return
@@ -42,10 +44,20 @@ router.post('/login', async (req: Request, res: Response) => {
   const user = (await db
     .select({ id: users.id, email: users.email, name: users.name, role: users.role, avatarUrl: users.avatarUrl, isActive: users.isActive, passwordHash: users.passwordHash })
     .from(users).where(sql`LOWER(${users.email}) = LOWER(${email})`).limit(1))[0]
-  if (!user || !user.passwordHash) { res.status(401).json({ error: 'Credenciales inválidas' }); return }
+  if (!user || !user.passwordHash) {
+    recordLoginFailure(ip)
+    res.status(401).json({ error: 'Credenciales inválidas' }); return
+  }
   if (user.isActive === false) { res.status(403).json({ error: 'Cuenta desactivada' }); return }
   const ok = await bcrypt.compare(password, user.passwordHash)
-  if (!ok) { res.status(401).json({ error: 'Credenciales inválidas' }); return }
+  if (!ok) {
+    const blocked = recordLoginFailure(ip)
+    if (blocked) {
+      res.status(429).json({ error: 'Demasiados intentos fallidos. Inténtalo en 30 minutos.' }); return
+    }
+    res.status(401).json({ error: 'Credenciales inválidas' }); return
+  }
+  clearLoginFailures(ip)
   await db.update(users).set({ lastActiveAt: new Date().toISOString() }).where(eq(users.id, user.id))
   const token = signToken({ id: user.id, email: user.email, role: user.role || 'member' })
   res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, avatarUrl: user.avatarUrl } })
@@ -56,6 +68,12 @@ router.post('/register', async (req: Request, res: Response) => {
   const { email, password, name } = req.body ?? {}
   if (typeof email !== 'string' || typeof password !== 'string' || !email || password.length < 8) {
     res.status(400).json({ error: 'Email y contraseña (mínimo 8 caracteres) requeridos' }); return
+  }
+  if (email.length > 200) {
+    res.status(400).json({ error: 'Email demasiado largo (máximo 200 caracteres)' }); return
+  }
+  if (typeof name === 'string' && name.length > 100) {
+    res.status(400).json({ error: 'Nombre demasiado largo (máximo 100 caracteres)' }); return
   }
 
   const existing = (await db.select({ id: users.id }).from(users)
@@ -112,17 +130,30 @@ router.post('/logout', (_req: Request, res: Response) => {
 })
 
 // POST /api/auth/forgot-password
+// Always responds with the same latency regardless of whether the user exists to
+// prevent email enumeration via timing side-channel. A dummy bcrypt hash is
+// performed when no user is found so the response time is indistinguishable.
 router.post('/forgot-password', async (req: Request, res: Response) => {
   const { email } = req.body ?? {}
   if (typeof email !== 'string' || !email) { res.status(400).json({ error: 'Email requerido' }); return }
+
   const user = (await db
     .select({ id: users.id, email: users.email, name: users.name })
     .from(users).where(sql`LOWER(${users.email}) = LOWER(${email})`).limit(1))[0]
-  if (!user) { res.json({ ok: true }); return }
+
+  if (!user) {
+    // Equalise timing with the real path (bcrypt.hash ~60-80 ms at cost 10)
+    await bcrypt.hash('dummy-timing-equalization', 10)
+    res.json({ ok: true }); return
+  }
+
   const token = crypto.randomBytes(32).toString('hex')
   const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString()
   await db.update(users).set({ passwordResetToken: token, passwordResetExpires: expires }).where(eq(users.id, user.id))
-  await sendPasswordResetEmail(user.email, user.name || '', token)
+  // Fire-and-forget: failures are logged with retry inside sendPasswordResetEmail.
+  // Do NOT await here — that would leak timing info (existing vs non-existing users).
+  sendPasswordResetEmail(user.email, user.name || '', token)
+    .catch(err => console.warn('[auth/forgot-password] email failed:', err))
   res.json({ ok: true })
 })
 

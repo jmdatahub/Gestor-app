@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
+import { useAuth } from './AuthContext'
+import { storage } from '../lib/storage'
 
 // ==============================================
 // TYPES
@@ -15,7 +17,7 @@ export const DESIGN_OPTIONS: { value: Design; label: string; description: string
   { value: 'crafted',   label: 'Premium Crafted',   description: 'Cálido tipo papel, serif Fraunces para números, sidebar light con barra violeta.', previewColors: { bg: '#FAFAF7', surface: '#FFFFFF', accent: '#5B47E0', text: '#1F1E1B' } },
   { value: 'mono',      label: 'Mono Linear',       description: 'Monocromo denso power-user. Inter Tight + JetBrains Mono. Radii muy pequeños.',    previewColors: { bg: '#FFFFFF', surface: '#FAFAFA', accent: '#3D63DD', text: '#0A0A0A' } },
   { value: 'aurora',    label: 'Glass Aurora',      description: 'Dark forzado, glassmorphism, gradiente aurora rosa→violeta→azul→teal.',           previewColors: { bg: '#05050B', surface: 'rgba(255,255,255,0.06)', accent: '#B045FF', text: '#F8F9FF' } },
-  { value: 'bento',     label: 'Bento Claycard',    description: 'Cremoso pastel, claymorphism, KPI grid asimétrico. Friendly y acogedor.',           previewColors: { bg: '#F4F1EA', surface: '#FFFFFF', accent: '#FF8A65', text: '#1F1B14' } },
+  { value: 'bento',     label: 'Bento Claycard',    description: 'Cremoso pastel, claymorphism, KPI grid asimétrico. Friendly y acogedor.',           previewColors: { bg: '#F4F1EA', surface: '#FFFFFF', accent: '#FF8A65', text: '#1F1F14' } },
   { value: 'editorial', label: 'Editorial Magazine',description: 'Tipografía Fraunces gigante, oxblood + cream, hairlines negras, radii 0.',          previewColors: { bg: '#F2EEE6', surface: '#FFFFFF', accent: '#7C2128', text: '#0A0908' } },
 ]
 
@@ -51,7 +53,7 @@ const defaultNotifications: NotificationSettings = {
   investments: true,
 }
 
-const defaultSettings: AppSettings = {
+export const defaultSettings: AppSettings = {
   theme: 'light',
   design: 'original',
   language: 'es',
@@ -61,10 +63,42 @@ const defaultSettings: AppSettings = {
   decimalSeparator: 'comma',
   notifications: defaultNotifications,
   rollupAccountsByParent: false,
-  soundEnabled: true
+  soundEnabled: true,
 }
 
+// Namespaced storage keys (fix #6 — prevents dev/prod collision).
 const STORAGE_KEY = 'app_settings'
+const DESIGN_INIT_KEY = 'design_v2_react_init'
+/** Broadcast key: written when settings change so other tabs can sync. */
+const SETTINGS_BROADCAST_KEY = 'settings_updated'
+
+function loadSettingsFromStorage(): AppSettings {
+  try {
+    const stored = storage.get(STORAGE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      // Migration: reset 'crafted' (silent old default) back to 'original'.
+      let design = parsed.design as Design | undefined
+      if (!storage.get(DESIGN_INIT_KEY)) {
+        if (design === 'crafted') design = 'original'
+        storage.set(DESIGN_INIT_KEY, '1')
+      }
+      return {
+        ...defaultSettings,
+        ...parsed,
+        design: design ?? defaultSettings.design,
+        notifications: {
+          ...defaultNotifications,
+          ...(parsed.notifications || {}),
+        },
+        rollupAccountsByParent: parsed.rollupAccountsByParent ?? defaultSettings.rollupAccountsByParent,
+      }
+    }
+  } catch (error) {
+    console.warn('Error loading settings from localStorage:', error)
+  }
+  return defaultSettings
+}
 
 // ==============================================
 // CONTEXT
@@ -85,77 +119,81 @@ interface SettingsProviderProps {
 }
 
 export function SettingsProvider({ children }: SettingsProviderProps) {
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        // Migration: reset 'crafted' (silent old default) back to 'original'.
-        let design = parsed.design as Design | undefined
-        if (!localStorage.getItem('design_v2_react_init')) {
-          if (design === 'crafted') design = 'original'
-          localStorage.setItem('design_v2_react_init', '1')
-        }
-        return {
-          ...defaultSettings,
-          ...parsed,
-          design: design ?? defaultSettings.design,
-          notifications: {
-            ...defaultNotifications,
-            ...(parsed.notifications || {}),
-          },
-          rollupAccountsByParent: parsed.rollupAccountsByParent ?? defaultSettings.rollupAccountsByParent
-        }
-      }
-    } catch (error) {
-      console.warn('Error loading settings from localStorage:', error)
-    }
-    return defaultSettings
-  })
+  const { user } = useAuth()
+  const [settings, setSettings] = useState<AppSettings>(loadSettingsFromStorage)
 
-  // Save to localStorage whenever settings change
+  // ---------------------------------------------------------------------------
+  // Reset settings when the user logs out (fix #3).
+  // We reset in-memory state to defaults so the next user that logs in (in the
+  // same tab) starts with a clean slate. The localStorage entry is left intact
+  // so the PREVIOUS user's preferences are still there when they log back in.
+  // If you want a full wipe instead, call `storage.remove(STORAGE_KEY)` here.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
+    if (!user) {
+      setSettings(defaultSettings)
+    } else {
+      // Re-load persisted settings when a user logs in (fix #9 – at minimum
+      // we load from localStorage; server-sync can be layered on top of this).
+      setSettings(loadSettingsFromStorage())
+    }
+  }, [user])
+
+  // ---------------------------------------------------------------------------
+  // Persist to localStorage whenever settings change
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!user) return // Don't persist the reset-to-defaults state back to storage.
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+      storage.set(STORAGE_KEY, JSON.stringify(settings))
+      // Mirror lightweight keys for the pre-React bootstrap in index.html.
+      storage.set('app_theme', getResolvedTheme(settings))
+      storage.set('app_design', settings.design)
     } catch (error) {
       console.warn('Error saving settings to localStorage:', error)
     }
-  }, [settings])
+  }, [settings, user])
 
+  // ---------------------------------------------------------------------------
+  // Cross-tab settings sync
+  // When this tab updates settings, broadcast the change so other tabs apply it.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== storage.key(SETTINGS_BROADCAST_KEY) || !e.newValue) return
+      // Another tab changed settings — reload from storage.
+      setSettings(loadSettingsFromStorage())
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+
+  // ---------------------------------------------------------------------------
   // Apply theme to document
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     const root = document.documentElement
-    let resolvedTheme: 'light' | 'dark'
-    if (settings.theme === 'auto') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      resolvedTheme = prefersDark ? 'dark' : 'light'
-    } else {
-      resolvedTheme = settings.theme
-    }
+    const resolvedTheme = getResolvedTheme(settings)
     root.setAttribute('data-theme', resolvedTheme)
-    // Mirror to standalone key so the index.html bootstrap can read it pre-React.
-    try { localStorage.setItem('app_theme', resolvedTheme) } catch {}
+    try { storage.set('app_theme', resolvedTheme) } catch {}
   }, [settings.theme])
 
   // Apply design to document (sets `data-design` attribute on <html>)
   useEffect(() => {
     const root = document.documentElement
     root.setAttribute('data-design', settings.design)
-    try { localStorage.setItem('app_design', settings.design) } catch {}
+    try { storage.set('app_design', settings.design) } catch {}
     // Aurora forces dark mode visually — auto-pair to dark unless user explicitly picked light.
-    // We DON'T override the user's theme preference; we only ensure data-theme is dark when on aurora
-    // and theme is 'auto'. If user chose explicit light/dark, respect it.
     if (settings.design === 'aurora' && settings.theme === 'auto') {
       root.setAttribute('data-theme', 'dark')
-      try { localStorage.setItem('app_theme', 'dark') } catch {}
+      try { storage.set('app_theme', 'dark') } catch {}
     }
   }, [settings.design, settings.theme])
 
-  // Apply density to document — CSS rules in base.css handle the variable values per preset
+  // Apply density to document
   useEffect(() => {
     const root = document.documentElement
     root.setAttribute('data-density', settings.density)
-    // Clear any previously-set inline overrides so the [data-density] CSS rules take effect
     root.style.removeProperty('--spacing-page')
     root.style.removeProperty('--spacing-card')
     root.style.removeProperty('--control-height')
@@ -177,16 +215,21 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
       // Apply other settings
       Object.keys(partial).forEach(key => {
         if (key !== 'notifications') {
-          (updated as any)[key] = (partial as any)[key]
+          (updated as unknown as Record<string, unknown>)[key] = (partial as Record<string, unknown>)[key]
         }
       })
 
       return updated
     })
+    // Broadcast to other tabs.
+    storage.set(SETTINGS_BROADCAST_KEY, String(Date.now()))
+    storage.remove(SETTINGS_BROADCAST_KEY)
   }, [])
 
   const resetSettings = useCallback(() => {
     setSettings(defaultSettings)
+    storage.set(SETTINGS_BROADCAST_KEY, String(Date.now()))
+    storage.remove(SETTINGS_BROADCAST_KEY)
   }, [])
 
   const value = useMemo(
@@ -199,6 +242,16 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
       {children}
     </SettingsContext.Provider>
   )
+}
+
+// ==============================================
+// HELPERS
+// ==============================================
+function getResolvedTheme(settings: AppSettings): 'light' | 'dark' {
+  if (settings.theme === 'auto') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return settings.theme
 }
 
 // ==============================================
@@ -235,7 +288,7 @@ export function formatDate(date: Date | string, format: DateFormat): string {
   const day = d.getDate().toString().padStart(2, '0')
   const month = (d.getMonth() + 1).toString().padStart(2, '0')
   const year = d.getFullYear()
-  
+
   if (format === 'dd/MM/yyyy') {
     return `${day}/${month}/${year}`
   }
@@ -264,6 +317,6 @@ export function getLabel(key: string, language: Language): string {
     edit: { es: 'Editar', en: 'Edit' },
     delete: { es: 'Eliminar', en: 'Delete' },
   }
-  
+
   return labels[key]?.[language] || key
 }

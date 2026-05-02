@@ -21,6 +21,7 @@ import {
 import { type AccountWithBalance } from '../../services/accountService'
 import { useSettings } from '../../context/SettingsContext'
 import { useI18n } from '../../hooks/useI18n'
+import { useToast } from '../../components/Toast'
 import {
   RefreshCw,
   TrendingUp,
@@ -58,8 +59,10 @@ export default function SummaryPage() {
   const { settings, updateSettings } = useSettings()
   const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()
+  const toast = useToast()
   const locale = language === 'es' ? 'es-ES' : 'en-US'
-  const currency = 'EUR'
+  // Use the currency stored in settings if available, otherwise default to EUR
+  const currency = (settings as any).currency || 'EUR'
   const now = new Date()
 
   const [periodType, setPeriodType] = useState<PeriodType>('monthly')
@@ -133,13 +136,18 @@ export default function SummaryPage() {
       }
     } catch (err) {
       console.error('Error loading summary:', err)
-      setError('Error al cargar los datos. Intenta de nuevo.')
+      const msg = 'Error al cargar los datos. Intenta de nuevo.'
+      setError(msg)
+      toast.error('Error al cargar', msg)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleRefresh = () => loadData()
+  const handleRefresh = () => {
+    if (loading) return
+    loadData()
+  }
 
   const exportColumns: ExcelColumn[] = [
     { header: 'SECCIÓN', key: 'section', width: 30 },

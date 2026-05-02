@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { api } from '../../lib/apiClient'
 import { UiField } from '../ui/UiField'
 import { Plus, Check, ChevronDown, X, Search } from 'lucide-react'
+import { useI18n } from '../../hooks/useI18n'
 
 interface CategoryPickerProps {
   value: string | null
@@ -12,16 +13,20 @@ interface CategoryPickerProps {
   error?: string
 }
 
-export function CategoryPicker({ value, onChange, type = 'expense', label = 'Categoría', error }: CategoryPickerProps) {
+export function CategoryPicker({ value, onChange, type = 'expense', label, error }: CategoryPickerProps) {
+  const { t } = useI18n()
+  const resolvedLabel = label ?? t('common.category')
   const [categories, setCategories] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 })
-  
+  const [activeIndex, setActiveIndex] = useState(-1)
+
   const containerRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     loadCategories()
@@ -31,7 +36,7 @@ export function CategoryPicker({ value, onChange, type = 'expense', label = 'Cat
   useEffect(() => {
     if (!value || value.startsWith('__new__:')) return
     const selectedCat = categories.find(c => c.id === value)
-    if (selectedCat && selectedCat.type !== type) {
+    if (selectedCat && (selectedCat.kind ?? selectedCat.type) !== type) {
       onChange('')
     }
   }, [type])
@@ -96,7 +101,9 @@ export function CategoryPicker({ value, onChange, type = 'expense', label = 'Cat
   const normalize = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
   const filtered = categories.filter(c => {
-    if (c.type !== type) return false
+    // Server returns categories with field 'kind' (not 'type')
+    const catKind = c.kind ?? c.type
+    if (catKind !== type) return false
     if (!searchTerm.trim()) return true
     return normalize(c.name).startsWith(normalize(searchTerm))
   })
@@ -108,6 +115,8 @@ export function CategoryPicker({ value, onChange, type = 'expense', label = 'Cat
     onChange(cat.id)
     setSearchTerm('')
     setIsOpen(false)
+    setActiveIndex(-1)
+    requestAnimationFrame(() => triggerRef.current?.focus())
   }
 
   const handleCreate = () => {
@@ -115,141 +124,186 @@ export function CategoryPicker({ value, onChange, type = 'expense', label = 'Cat
     onChange(`__new__:${searchTerm.trim()}`)
     setIsOpen(false)
     setSearchTerm('')
+    setActiveIndex(-1)
+    requestAnimationFrame(() => triggerRef.current?.focus())
   }
 
   const handleClear = () => {
     onChange('')
     setSearchTerm('')
+    setActiveIndex(-1)
+  }
+
+  const handleTriggerKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      setIsOpen(!isOpen)
+    }
+    if (e.key === 'Escape') {
+      setIsOpen(false)
+    }
   }
 
   return (
-    <UiField label={label} error={error}>
+    <UiField label={resolvedLabel} error={error}>
       <div ref={containerRef} style={{ position: 'relative' }}>
         {/* Selected Chip or Trigger */}
         {selected || newCatName ? (
-          <div 
+          <button
+            ref={triggerRef}
+            type="button"
             onClick={() => setIsOpen(!isOpen)}
+            onKeyDown={handleTriggerKeyDown}
+            aria-haspopup="listbox"
+            aria-expanded={isOpen}
             style={{
+              width: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '10px 14px',
               borderRadius: '10px',
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.03) 100%)',
-              border: '2px solid rgba(99,102,241,0.3)',
+              background: 'var(--primary-soft)',
+              border: '2px solid var(--primary-border, var(--primary))',
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              textAlign: 'left'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span 
+              <span
                 style={{
                   width: '10px',
                   height: '10px',
                   borderRadius: '50%',
-                  background: selected?.color || '#6366f1',
-                  boxShadow: `0 0 8px ${selected?.color || '#6366f1'}40`
+                  background: selected?.color || 'var(--primary)',
+                  boxShadow: `0 0 8px ${selected?.color || 'var(--primary)'}40`,
+                  flexShrink: 0
                 }}
               />
-              <span style={{ fontWeight: 600, color: '#e2e8f0', fontSize: '14px' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '14px' }}>
                 {selected?.name || newCatName}
               </span>
               {newCatName && (
-                <span style={{ 
-                  fontSize: '10px', 
-                  background: '#6366f1', 
-                  color: 'white', 
-                  padding: '2px 6px', 
+                <span style={{
+                  fontSize: '10px',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  padding: '2px 6px',
                   borderRadius: '4px',
                   fontWeight: 700
-                }}>NUEVA</span>
+                }}>{t('categories.new').toUpperCase()}</span>
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span 
+              <span
+                role="button"
+                aria-label={t('categoryPicker.clear')}
+                tabIndex={0}
                 onClick={(e) => { e.stopPropagation(); handleClear() }}
-                style={{ 
-                  padding: '4px', 
-                  borderRadius: '50%', 
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleClear() } }}
+                style={{
+                  padding: '4px',
+                  borderRadius: '50%',
                   cursor: 'pointer',
                   display: 'flex',
                   transition: 'background 0.2s'
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-hover, var(--bg-surface))')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                <X size={14} color="#94a3b8" />
+                <X size={14} style={{ color: 'var(--text-muted)' }} />
               </span>
-              <ChevronDown size={16} color="#94a3b8" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              <ChevronDown size={16} style={{ color: 'var(--text-muted)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
             </div>
-          </div>
+          </button>
         ) : (
-          <div
+          <button
+            ref={triggerRef}
+            type="button"
             onClick={() => setIsOpen(!isOpen)}
+            onKeyDown={handleTriggerKeyDown}
+            aria-haspopup="listbox"
+            aria-expanded={isOpen}
             style={{
+              width: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '10px 14px',
               borderRadius: '10px',
               background: 'transparent',
-              border: '2px solid #334155',
+              border: '1.5px solid var(--border-color)',
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              textAlign: 'left'
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#475569')}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#334155')}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--border-strong)')}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-color)')}
           >
-            <span style={{ color: '#64748b', fontSize: '14px' }}>Seleccionar categoría...</span>
-            <ChevronDown size={16} color="#64748b" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-          </div>
+            <span style={{ color: 'var(--text-muted)', fontSize: '14px' }}>{t('categoryPicker.placeholder')}</span>
+            <ChevronDown size={16} style={{ color: 'var(--text-muted)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+          </button>
         )}
 
         {/* Dropdown (Portal) */}
         {isOpen && createPortal(
           <div ref={dropdownRef} style={{
-            position: 'fixed', // Fixed to viewport to escape modal clipping
+            position: 'fixed',
             top: coords.top,
             left: coords.left,
             width: coords.width,
-            // Calculate max height based on viewport space
             maxHeight: Math.min(300, window.innerHeight - coords.top - 20),
-            background: '#1e293b',
-            border: '1px solid #334155',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
             borderRadius: '12px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.5)', // Stronger shadow
-            zIndex: 9999, // Super high z-index
+            boxShadow: 'var(--shadow-popover)',
+            zIndex: 9999,
             overflow: 'hidden',
             animation: 'dropIn 0.15s ease-out',
             display: 'flex',
             flexDirection: 'column'
           }}>
             <style>{`@keyframes dropIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-            
+
             {/* Search */}
-            <div style={{ padding: '12px', borderBottom: '1px solid #334155', flexShrink: 0 }}>
+            <div style={{ padding: '12px', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
               <div style={{ position: 'relative' }}>
-                <Search size={16} color="#64748b" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                <Search size={16} style={{ color: 'var(--text-muted)', position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                 <input
                   ref={inputRef}
                   type="text"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => { setSearchTerm(e.target.value); setActiveIndex(-1) }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Escape') setIsOpen(false)
-                    if (e.key === 'Enter' && filtered.length === 0 && searchTerm.trim()) {
+                    if (e.key === 'Escape') {
+                      setIsOpen(false)
+                      requestAnimationFrame(() => triggerRef.current?.focus())
+                    } else if (e.key === 'ArrowDown') {
                       e.preventDefault()
-                      if (filtered.length === 0 && searchTerm.trim()) handleCreate()
+                      setActiveIndex(prev => (prev < filtered.length - 1 ? prev + 1 : 0))
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      setActiveIndex(prev => (prev > 0 ? prev - 1 : filtered.length - 1))
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (activeIndex >= 0 && filtered[activeIndex]) {
+                        handleSelect(filtered[activeIndex])
+                      } else if (filtered.length === 0 && searchTerm.trim()) {
+                        handleCreate()
+                      } else if (filtered.length > 0) {
+                        handleSelect(filtered[0])
+                      }
                     }
                   }}
-                  placeholder="Buscar..."
+                  placeholder={t('common.search') + '...'}
                   style={{
                     width: '100%',
                     padding: '10px 12px 10px 38px',
-                    background: '#0f172a',
-                    border: '1px solid #334155',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-color)',
                     borderRadius: '8px',
-                    color: '#e2e8f0',
+                    color: 'var(--text-primary)',
                     fontSize: '13px',
                     outline: 'none'
                   }}
@@ -260,26 +314,29 @@ export function CategoryPicker({ value, onChange, type = 'expense', label = 'Cat
             {/* Options */}
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {loading ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
-                  Cargando...
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  {t('common.loading')}
                 </div>
               ) : filtered.length > 0 ? (
                 filtered.map((cat, i) => (
                   <div
                     key={cat.id}
+                    role="option"
+                    aria-selected={cat.id === value}
                     onClick={() => handleSelect(cat)}
+                    onMouseEnter={() => setActiveIndex(i)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '12px 16px',
                       cursor: 'pointer',
-                      background: cat.id === value ? 'rgba(99,102,241,0.15)' : 'transparent',
-                      borderLeft: cat.id === value ? '3px solid #6366f1' : '3px solid transparent',
+                      background: cat.id === value ? 'var(--primary-soft)' : activeIndex === i ? 'var(--gray-100)' : 'transparent',
+                      borderLeft: cat.id === value ? '3px solid var(--primary)' : activeIndex === i ? '3px solid var(--primary)' : '3px solid transparent',
+                      outline: activeIndex === i ? '2px solid var(--primary)' : 'none',
+                      outlineOffset: '-2px',
                       transition: 'all 0.15s'
                     }}
-                    onMouseEnter={(e) => { if (cat.id !== value) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
-                    onMouseLeave={(e) => { if (cat.id !== value) e.currentTarget.style.background = 'transparent' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span style={{
@@ -297,11 +354,11 @@ export function CategoryPicker({ value, onChange, type = 'expense', label = 'Cat
                       }}>
                         {cat.name.charAt(0)}
                       </span>
-                      <span style={{ fontWeight: 500, color: cat.id === value ? '#818cf8' : '#e2e8f0', fontSize: '14px' }}>
+                      <span style={{ fontWeight: 500, color: cat.id === value ? 'var(--primary)' : 'var(--text-primary)', fontSize: '14px' }}>
                         {cat.name}
                       </span>
                     </div>
-                    {cat.id === value && <Check size={16} color="#818cf8" />}
+                    {cat.id === value && <Check size={16} style={{ color: 'var(--primary)' }} />}
                   </div>
                 ))
               ) : searchTerm.trim() ? (
@@ -313,17 +370,17 @@ export function CategoryPicker({ value, onChange, type = 'expense', label = 'Cat
                     gap: '12px',
                     padding: '14px 16px',
                     cursor: 'pointer',
-                    background: 'rgba(99,102,241,0.05)',
+                    background: 'var(--primary-soft)',
                     transition: 'background 0.15s'
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.1)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.05)')}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--primary-soft)')}
                 >
                   <span style={{
                     width: '28px',
                     height: '28px',
                     borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                    background: 'var(--primary)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center'
@@ -331,15 +388,15 @@ export function CategoryPicker({ value, onChange, type = 'expense', label = 'Cat
                     <Plus size={14} color="white" />
                   </span>
                   <div>
-                    <div style={{ fontWeight: 600, color: '#c7d2fe', fontSize: '14px' }}>
-                      Crear "{searchTerm}"
+                    <div style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '14px' }}>
+                      {t('categoryPicker.create', { name: searchTerm })}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#6366f1' }}>Nueva categoría</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{t('categoryPicker.newCategory')}</div>
                   </div>
                 </div>
               ) : (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
-                  No hay categorías
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  {t('categories.empty')}
                 </div>
               )}
             </div>

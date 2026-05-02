@@ -1,8 +1,10 @@
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
-import { Tag, Download, Building, Shield } from 'lucide-react'
+import { Tag, Download, Building, Shield, CreditCard, Store } from 'lucide-react'
 
 const tabs = [
   { to: 'categorias', label: 'Categorías', icon: Tag },
+  { to: 'metodos-pago', label: 'Métodos de pago', icon: CreditCard },
+  { to: 'proveedores', label: 'Proveedores', icon: Store },
   { to: 'exportar', label: 'Exportar', icon: Download },
   { to: 'organizaciones', label: 'Organizaciones', icon: Building },
   { to: 'admin', label: 'Admin', icon: Shield },

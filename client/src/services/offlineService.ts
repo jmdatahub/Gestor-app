@@ -1,4 +1,5 @@
 import { api } from '../lib/apiClient'
+import { storage } from '../lib/storage'
 
 export type OfflineOperation = {
   id: string
@@ -13,11 +14,11 @@ const QUEUE_KEY = 'offline_queue'
 const LAST_SYNC_KEY = 'offline_last_sync'
 
 export function getQueue(): OfflineOperation[] {
-  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]') } catch { return [] }
+  try { return JSON.parse(storage.get(QUEUE_KEY) || '[]') } catch { return [] }
 }
 
 function saveQueue(q: OfflineOperation[]) {
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(q))
+  storage.set(QUEUE_KEY, JSON.stringify(q))
 }
 
 export function enqueue(op: Omit<OfflineOperation, 'id' | 'timestamp'>) {
@@ -26,7 +27,7 @@ export function enqueue(op: Omit<OfflineOperation, 'id' | 'timestamp'>) {
   saveQueue(q)
 }
 
-export function clearQueue() { localStorage.removeItem(QUEUE_KEY) }
+export function clearQueue() { storage.remove(QUEUE_KEY) }
 
 // ---- Online status helpers ----
 
@@ -54,12 +55,12 @@ export function getPendingChanges(): OfflineOperation[] {
 }
 
 export function getLastSyncTime(): number | null {
-  const v = localStorage.getItem(LAST_SYNC_KEY)
+  const v = storage.get(LAST_SYNC_KEY)
   return v ? parseInt(v, 10) : null
 }
 
 function setLastSyncTime() {
-  localStorage.setItem(LAST_SYNC_KEY, String(Date.now()))
+  storage.set(LAST_SYNC_KEY, String(Date.now()))
 }
 
 export async function syncPendingChanges(): Promise<{ success: number; failed: number }> {

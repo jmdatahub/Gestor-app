@@ -31,40 +31,30 @@ export function useToast() {
   return context
 }
 
-// Toast configuration per type
-const toastConfig: Record<ToastType, { 
-  icon: typeof CheckCircle2; 
-  bgGradient: string; 
-  borderColor: string; 
-  iconColor: string;
+// Toast configuration per type — uses CSS variables so dark/light themes work automatically
+const toastConfig: Record<ToastType, {
+  icon: typeof CheckCircle2;
+  colorVar: string; // CSS variable name for the semantic color
   emoji: string;
 }> = {
   success: {
     icon: CheckCircle2,
-    bgGradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.1))',
-    borderColor: '#10b981',
-    iconColor: '#10b981',
+    colorVar: '--success',
     emoji: '✨'
   },
   error: {
     icon: XCircle,
-    bgGradient: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.1))',
-    borderColor: '#ef4444',
-    iconColor: '#ef4444',
+    colorVar: '--danger',
     emoji: '❌'
   },
   warning: {
     icon: AlertTriangle,
-    bgGradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.1))',
-    borderColor: '#f59e0b',
-    iconColor: '#f59e0b',
+    colorVar: '--warning',
     emoji: '⚠️'
   },
   info: {
     icon: Info,
-    bgGradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1))',
-    borderColor: '#3b82f6',
-    iconColor: '#3b82f6',
+    colorVar: '--info',
     emoji: 'ℹ️'
   }
 }
@@ -73,7 +63,10 @@ const toastConfig: Record<ToastType, {
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
   const config = toastConfig[toast.type]
   const Icon = config.icon
-  
+  // Resolve the CSS variable name into the data-attribute selector
+  const colorRef = `var(${config.colorVar})`
+  const softColorRef = `var(${config.colorVar.replace('--', '--') + '-soft'})`
+
   return (
     <div
       style={{
@@ -81,12 +74,12 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
         alignItems: 'flex-start',
         gap: 12,
         padding: '14px 16px',
-        background: config.bgGradient,
+        background: `var(--bg-card)`,
         backdropFilter: 'blur(12px)',
-        border: `1px solid ${config.borderColor}40`,
-        borderLeft: `4px solid ${config.borderColor}`,
+        border: `1px solid ${colorRef}`,
+        borderLeft: `4px solid ${colorRef}`,
         borderRadius: 12,
-        boxShadow: '0 10px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)',
+        boxShadow: 'var(--shadow-popover)',
         minWidth: 320,
         maxWidth: 420,
         animation: 'toast-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
@@ -102,18 +95,19 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           left: 0,
           right: 0,
           height: 2,
-          background: `linear-gradient(90deg, transparent, ${config.borderColor}80, transparent)`,
+          background: `linear-gradient(90deg, transparent, ${colorRef}, transparent)`,
+          opacity: 0.5,
           animation: 'toast-shimmer 2s infinite'
         }}
       />
-      
+
       {/* Icon */}
       <div
         style={{
           width: 36,
           height: 36,
           borderRadius: 10,
-          background: `${config.borderColor}20`,
+          background: softColorRef,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -122,9 +116,9 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           transform: 'scale(0)',
         }}
       >
-        <Icon size={20} style={{ color: config.iconColor }} />
+        <Icon size={20} style={{ color: colorRef }} />
       </div>
-      
+
       {/* Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
@@ -153,7 +147,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           </div>
         )}
       </div>
-      
+
       {/* Close button */}
       <button
         onClick={() => onRemove(toast.id)}
@@ -170,7 +164,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           justifyContent: 'center'
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'rgba(0,0,0,0.1)'
+          e.currentTarget.style.background = 'var(--bg-surface)'
           e.currentTarget.style.color = 'var(--text-primary)'
         }}
         onMouseLeave={(e) => {
@@ -180,7 +174,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
       >
         <X size={16} />
       </button>
-      
+
       {/* Progress bar */}
       <div
         style={{
@@ -188,7 +182,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
           bottom: 0,
           left: 0,
           height: 3,
-          background: config.borderColor,
+          background: colorRef,
           borderRadius: '0 0 0 12px',
           animation: `toast-progress ${toast.duration || 4000}ms linear forwards`
         }}

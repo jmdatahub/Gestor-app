@@ -133,6 +133,37 @@
   --dropdown-bg: var(--bg-card);
   --dropdown-border: var(--border-color);
   --dropdown-shadow: var(--shadow-xl);
+
+  /* Semantic border helpers — used in premium.css pills/badges */
+  --primary-border: rgba(79, 70, 229, 0.25);
+  --success-border: rgba(34, 197, 94, 0.25);
+  --warning-border: rgba(245, 158, 11, 0.25);
+  --danger-border:  rgba(239, 68, 68, 0.25);
+
+  /* Info colour — used by badge-info */
+  --info: #1D4ED8;
+  --info-soft: #EFF6FF;
+  --info-border: rgba(29, 78, 216, 0.25);
+
+  /* Typography tokens — fallbacks for designs that don't define their own */
+  --text-display: var(--text-primary);
+  --tracking-tight:  -0.02em;
+  --tracking-snug:   -0.01em;
+  --tracking-normal: 0;
+  --leading-snug: 1.35;
+
+  /* Ink scale — neutral greyscale fallback (crafted/premium use specific values) */
+  --ink-50:  #FAFAFA;
+  --ink-100: #F3F4F6;
+  --ink-150: #ECEFF3;
+  --ink-200: #E5E7EB;
+  --ink-300: #D1D5DB;
+  --ink-400: #9CA3AF;
+  --ink-500: #6B7280;
+  --ink-600: #4B5563;
+  --ink-700: #374151;
+  --ink-800: #1F2937;
+  --ink-900: #0F172A;
 }
 
 /* ==============================================
@@ -197,6 +228,33 @@
 
   --dropdown-bg: var(--bg-card);
   --dropdown-shadow: var(--shadow-xl);
+
+  /* Semantic border helpers — dark mode */
+  --primary-border: rgba(129, 140, 248, 0.30);
+  --success-border: rgba(74, 222, 128, 0.28);
+  --warning-border: rgba(251, 191, 36, 0.28);
+  --danger-border:  rgba(248, 113, 113, 0.30);
+
+  /* Info colour — dark mode */
+  --info: #93C5FD;
+  --info-soft: rgba(29, 78, 216, 0.18);
+  --info-border: rgba(147, 197, 253, 0.28);
+
+  /* Typography tokens — dark mode */
+  --text-display: var(--text-primary);
+
+  /* Ink scale — inverted for dark mode */
+  --ink-50:  #0F172A;
+  --ink-100: #1A2236;
+  --ink-150: #1E293B;
+  --ink-200: #2D3748;
+  --ink-300: #475569;
+  --ink-400: #64748B;
+  --ink-500: #94A3B8;
+  --ink-600: #CBD5E1;
+  --ink-700: #E2E8F0;
+  --ink-800: #F1F5F9;
+  --ink-900: #F8FAFC;
 }
 
 [data-theme='dark'] body {
@@ -204,12 +262,24 @@
   color: var(--text-primary);
 }
 
+[data-theme='dark'] * {
+  scrollbar-color: var(--gray-300) transparent;
+}
+[data-theme='dark'] *::-webkit-scrollbar-track {
+  background: transparent;
+}
 [data-theme='dark'] *::-webkit-scrollbar-thumb {
   background: var(--gray-300);
   border-color: var(--bg-body);
 }
 [data-theme='dark'] *::-webkit-scrollbar-thumb:hover {
   background: var(--gray-400);
+}
+
+/* Selection text — readable in both themes */
+[data-theme='dark'] ::selection {
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 /* Density modes (shared across designs) */
@@ -262,6 +332,9 @@ a { color: var(--primary); text-decoration: none; transition: color var(--motion
 a:hover { color: var(--primary-hover); }
 
 ::selection { background: var(--primary-soft); color: var(--primary); }
+
+/* Global placeholder — ensures all inputs have a themed placeholder colour */
+::placeholder { color: var(--text-muted); opacity: 1; }
 
 /* Scrollbars (overridden per design) */
 * {
@@ -711,31 +784,25 @@ a:hover { color: var(--primary-hover); }
   bottom: 76px;
   right: 20px;
   width: 280px;
-  background: #FFFFFF;
-  border: 1px solid #E7E5E0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.06);
+  box-shadow: var(--shadow-popover);
   padding: 8px;
   z-index: 9999;
   animation: dropdown-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: #1F1E1B;
-}
-[data-theme='dark'] .design-fab-popover {
-  background: #1C1C20;
-  border-color: rgba(255,255,255,0.08);
-  color: #F2EFE7;
+  color: var(--text-primary);
 }
 .design-fab-popover__header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 8px 10px;
   font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
-  color: #8A857C;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 4px;
 }
-[data-theme='dark'] .design-fab-popover__header { border-color: rgba(255,255,255,0.08); }
 .design-fab-popover__close {
   background: transparent; border: none; cursor: pointer;
   color: inherit; opacity: 0.6; padding: 2px;

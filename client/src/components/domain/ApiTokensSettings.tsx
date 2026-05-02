@@ -263,8 +263,9 @@ export function ApiTokensSettings() {
           {newlyCreatedToken ? (
             <div>
               {/* Telegram deep-link — primary CTA */}
+              {/* Only hex token chars allowed in the deep-link to prevent protocol injection */}
               <a
-                href={`https://t.me/${TELEGRAM_BOT}?start=${newlyCreatedToken}`}
+                href={/^[0-9a-f]+$/i.test(newlyCreatedToken ?? '') ? `https://t.me/${TELEGRAM_BOT}?start=${newlyCreatedToken}` : '#'}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

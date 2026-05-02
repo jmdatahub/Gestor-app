@@ -378,13 +378,13 @@
   color: white !important;
   box-shadow: var(--shadow-xs) !important;
 }
-.btn-danger:hover:not(:disabled) { background: #9a1717 !important; }
+.btn-danger:hover:not(:disabled) { filter: brightness(0.82) !important; }
 
 .btn-success {
   background: var(--success) !important;
   color: white !important;
 }
-.btn-success:hover:not(:disabled) { background: #116a32 !important; }
+.btn-success:hover:not(:disabled) { filter: brightness(0.88) !important; }
 
 .btn-sm {
   height: var(--control-height-sm) !important;

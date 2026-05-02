@@ -12,7 +12,11 @@ const router = Router()
 // Critically excludes: id, isSuperAdmin, email (managed by auth), telegramChatId (managed by bot).
 const ProfilePatchSchema = z.object({
   name:            z.string().max(120).optional(),
-  avatarUrl:       z.string().url().max(500).optional().nullable(),
+  // Only allow https:// avatar URLs to prevent javascript: / data: URL injection
+  avatarUrl:       z.string().url().max(500).refine(
+    v => v == null || v.startsWith('https://'),
+    { message: 'avatarUrl must use https://' }
+  ).optional().nullable(),
   bio:             z.string().max(500).optional().nullable(),
   phone:           z.string().max(30).optional().nullable(),
   timezone:        z.string().max(50).optional().nullable(),
@@ -21,6 +25,17 @@ const ProfilePatchSchema = z.object({
   theme:           z.string().max(20).optional().nullable(),
   onboardingDone:  z.boolean().optional(),
 }).strict()
+
+// Safe subset of profile fields returned to admin list — excludes telegramChatId and other sensitive fields
+const SAFE_PROFILE_FIELDS = {
+  id:           profiles.id,
+  email:        profiles.email,
+  displayName:  profiles.displayName,
+  avatarUrl:    profiles.avatarUrl,
+  isSuspended:  profiles.isSuspended,
+  isSuperAdmin: profiles.isSuperAdmin,
+  createdAt:    profiles.createdAt,
+} as const
 
 // GET /api/v1/profiles/me
 router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -40,7 +55,7 @@ router.patch('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       updates = ProfilePatchSchema.parse(req.body)
     } catch (err) {
       if (err instanceof z.ZodError) {
-        res.status(400).json({ error: 'Datos inválidos', details: err.errors }); return
+        res.status(400).json({ error: 'Datos inválidos', details: err.issues }); return
       }
       throw err
     }
@@ -58,7 +73,7 @@ router.patch('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-// GET /api/v1/profiles — admin only: list all (for AdminPanel)
+// GET /api/v1/profiles — admin only: list all (for AdminPanel) with pagination
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     // Only super-admins may list all profiles
@@ -68,8 +83,35 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
     const limit = Math.min(Number(req.query.limit) || 100, 500)
     const offset = Number(req.query.offset) || 0
-    const rows = await db.select().from(profiles).limit(limit).offset(offset)
-    res.json({ data: rows, limit, offset })
+    // Join with users table to get isActive (approval status) — never expose
+    // telegramChatId, passwordHash, or reset tokens to the list endpoint.
+    const rows = await db
+      .select({
+        id:           profiles.id,
+        email:        profiles.email,
+        displayName:  profiles.displayName,
+        avatarUrl:    profiles.avatarUrl,
+        isSuspended:  profiles.isSuspended,
+        isSuperAdmin: profiles.isSuperAdmin,
+        createdAt:    profiles.createdAt,
+        isActive:     users.isActive,
+      })
+      .from(profiles)
+      .leftJoin(users, eq(users.id, profiles.id))
+      .limit(limit)
+      .offset(offset)
+    // Map to snake_case expected by the frontend
+    const data = rows.map(r => ({
+      id:             r.id,
+      email:          r.email,
+      display_name:   r.displayName,
+      avatar_url:     r.avatarUrl,
+      is_suspended:   r.isSuspended,
+      is_super_admin: r.isSuperAdmin,
+      is_approved:    r.isActive ?? true,
+      created_at:     r.createdAt,
+    }))
+    res.json({ data, limit, offset })
   } catch (err) {
     console.error('[profiles GET /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -79,7 +121,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // GET /api/v1/profiles/:id — own profile or admin
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const targetId = req.params.id
+    const targetId = String(req.params.id)
     // Allow users to fetch their own profile; admins can fetch any
     if (targetId !== req.userId) {
       const self = (await db.select({ isSuperAdmin: profiles.isSuperAdmin }).from(profiles).where(eq(profiles.id, req.userId!)).limit(1))[0]
@@ -92,6 +134,74 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     res.json({ data: row })
   } catch (err) {
     console.error('[profiles GET /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+})
+
+// PATCH /api/v1/profiles/:id — admin only: update is_suspended / is_approved flags
+// NOTE: Sensitive actions like full user delete must go through /api/v1/admin/users/:id
+router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const self = (await db.select({ isSuperAdmin: profiles.isSuperAdmin }).from(profiles).where(eq(profiles.id, req.userId!)).limit(1))[0]
+    if (!self?.isSuperAdmin) {
+      res.status(403).json({ error: 'No tienes permisos de administrador' }); return
+    }
+    const targetId = String(req.params.id)
+    // Only allow toggling suspension and approval — never allow setting isSuperAdmin via this endpoint
+    const AdminProfilePatchSchema = z.object({
+      is_suspended: z.boolean().optional(),
+      is_approved:  z.boolean().optional(),
+    }).strict()
+
+    let updates: z.infer<typeof AdminProfilePatchSchema>
+    try {
+      updates = AdminProfilePatchSchema.parse(req.body)
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: 'Datos inválidos', details: err.issues }); return
+      }
+      throw err
+    }
+
+    const dbUpdates: Record<string, unknown> = {}
+    if (updates.is_suspended !== undefined) dbUpdates.isSuspended = updates.is_suspended
+
+    if (Object.keys(dbUpdates).length === 0) {
+      res.status(400).json({ error: 'No hay campos válidos para actualizar' }); return
+    }
+
+    const [updated] = await db
+      .update(profiles)
+      .set(dbUpdates)
+      .where(eq(profiles.id, targetId))
+      .returning({ id: profiles.id })
+    if (!updated) { res.status(404).json({ error: 'Perfil no encontrado' }); return }
+
+    console.info(`[ADMIN AUDIT] actor=${req.userId} action=PATCH_PROFILE target=${targetId} fields=${Object.keys(dbUpdates).join(',')} ts=${new Date().toISOString()}`)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[profiles PATCH /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+})
+
+// DELETE /api/v1/profiles/:id — admin only: hard-delete user record
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const self = (await db.select({ isSuperAdmin: profiles.isSuperAdmin }).from(profiles).where(eq(profiles.id, req.userId!)).limit(1))[0]
+    if (!self?.isSuperAdmin) {
+      res.status(403).json({ error: 'No tienes permisos de administrador' }); return
+    }
+    const targetId = String(req.params.id)
+    if (targetId === req.userId) {
+      res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' }); return
+    }
+    // Delete user record — cascades to profile via FK
+    await db.delete(users).where(eq(users.id, targetId))
+    console.info(`[ADMIN AUDIT] actor=${req.userId} action=DELETE_USER target=${targetId} ts=${new Date().toISOString()}`)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[profiles DELETE /:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
   }
 })

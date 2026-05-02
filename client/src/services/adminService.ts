@@ -19,25 +19,53 @@ export interface DatabaseHealth {
   profilesExists?: boolean
 }
 
+/**
+ * Fetches all users with server-side pagination to avoid loading thousands of
+ * records at once. Iterates pages until all users have been retrieved.
+ */
 export async function listUsers(): Promise<UserProfile[]> {
-  const { data } = await api.get<{ data: UserProfile[] }>('/api/v1/profiles')
-  return data
+  const PAGE_SIZE = 200
+  const allUsers: UserProfile[] = []
+  let offset = 0
+
+  while (true) {
+    const { data } = await api.get<{ data: UserProfile[]; limit: number; offset: number }>(
+      '/api/v1/profiles',
+      { limit: PAGE_SIZE, offset }
+    )
+    if (!data || data.length === 0) break
+    allUsers.push(...data)
+    if (data.length < PAGE_SIZE) break
+    offset += PAGE_SIZE
+  }
+
+  return allUsers
 }
 
+/**
+ * Suspend or unsuspend a user. Routes through the dedicated admin endpoint so
+ * the action is audit-logged server-side.
+ */
 export async function suspendUser(userId: string, suspended = true): Promise<void> {
-  await api.patch(`/api/v1/profiles/${userId}`, { is_suspended: suspended })
+  await api.patch(`/api/v1/admin/users/${userId}/suspend`, { suspended })
 }
 
 export async function unsuspendUser(userId: string): Promise<void> {
   return suspendUser(userId, false)
 }
 
+/**
+ * Approve a pending user by activating their account via the admin endpoint.
+ */
 export async function approveUser(userId: string): Promise<void> {
-  await api.patch(`/api/v1/profiles/${userId}`, { is_approved: true })
+  await api.patch(`/api/v1/admin/users/${userId}/approve`, {})
 }
 
+/**
+ * Reject a pending user by deactivating their account via the admin endpoint.
+ */
 export async function rejectUser(userId: string): Promise<void> {
-  await api.patch(`/api/v1/profiles/${userId}`, { is_approved: false })
+  await api.patch(`/api/v1/admin/users/${userId}/reject`, {})
 }
 
 // ---- Backward-compat aliases & helpers ----
@@ -97,8 +125,13 @@ export async function permanentDeleteOrganization(id: string): Promise<void> {
   await api.delete(`/api/v1/admin/organizations/${id}/permanent`)
 }
 
-export async function purgeExpiredOrganizations(): Promise<void> {
-  await api.post('/api/v1/admin/organizations/purge', {})
+/**
+ * Purge organizations soft-deleted more than 7 days ago.
+ * Returns the number of organizations permanently deleted.
+ */
+export async function purgeExpiredOrganizations(): Promise<number> {
+  const res = await api.post<{ ok: boolean; purged: number }>('/api/v1/admin/organizations/purge', {})
+  return res.purged ?? 0
 }
 
 export async function checkDatabaseHealth(): Promise<DatabaseHealth> {

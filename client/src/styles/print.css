@@ -1,0 +1,240 @@
+/* ==============================================
+   PRINT STYLES
+   Hide UI chrome, show clean content for printing
+   ============================================== */
+
+@media print {
+
+  /* ---- Reset & base ---- */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* ---- Hide: navigation & sidebar ---- */
+  .app-sidebar,
+  .sidebar-nav,
+  .sidebar-header,
+  .sidebar-footer,
+  nav,
+  [role="navigation"] {
+    display: none !important;
+  }
+
+  /* ---- Hide: app header / top bar ---- */
+  .app-header,
+  .app-header-title,
+  .mobile-menu-btn,
+  .mobile-sidebar,
+  #mobile-nav {
+    display: none !important;
+  }
+
+  /* ---- Hide: floating / FAB buttons ---- */
+  .design-fab,
+  .design-fab-popover,
+  [class*="design-fab"],
+  .fab,
+  [class*="floating"],
+  .DesignFloatingSwitcher {
+    display: none !important;
+  }
+
+  /* ---- Hide: modals & overlays ---- */
+  .ui-modal-overlay,
+  .ui-modal-container,
+  [role="dialog"],
+  [aria-modal="true"] {
+    display: none !important;
+  }
+
+  /* ---- Hide: toasts & notifications ---- */
+  /* Toasts use inline styles (position: fixed); the id attr helps target them */
+  [style*="position: fixed"],
+  [style*="position:fixed"] {
+    display: none !important;
+  }
+
+  /* ---- Hide: action / icon buttons ---- */
+  .btn-icon,
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger,
+  .btn-success,
+  .btn-ghost,
+  .page-header .btn,
+  [class*="action-btn"],
+  [class*="floating"] {
+    display: none !important;
+  }
+
+  /* ---- Hide: interactive controls that make no sense in print ---- */
+  input,
+  select,
+  textarea,
+  [role="combobox"],
+  [role="listbox"],
+  [role="searchbox"] {
+    display: none !important;
+  }
+
+  /* ---- Show: main content at full width ---- */
+  .app-main,
+  .app-content,
+  .page-container,
+  main {
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+  }
+
+  /* ---- Remove dark backgrounds, normalise card surfaces ---- */
+  :root,
+  html[data-design],
+  [data-theme="dark"],
+  html[data-theme="dark"] {
+    --bg-app:        #ffffff !important;
+    --bg-card:       #ffffff !important;
+    --bg-surface:    #f5f5f5 !important;
+    --bg-sidebar:    #ffffff !important;
+    --text-primary:  #000000 !important;
+    --text-secondary:#333333 !important;
+    --text-muted:    #555555 !important;
+    --border-color:  #cccccc !important;
+    --primary:       #4F46E5 !important;
+  }
+
+  body,
+  .app-container,
+  .app-main,
+  .app-content,
+  .card,
+  .panel,
+  [class*="card"],
+  [class*="panel"] {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* ---- Page breaks ---- */
+  .page-header {
+    break-after: avoid;
+  }
+
+  /* Break before each major page/section */
+  .page-container > section,
+  .page-container > article,
+  [class*="section-block"],
+  [class*="SectionBlock"],
+  .card + .card,
+  .panel + .panel {
+    break-before: page;
+  }
+
+  /* Avoid breaking inside cards / table rows */
+  .card,
+  .panel,
+  tr {
+    break-inside: avoid;
+  }
+
+  /* ---- Tables — show borders clearly ---- */
+  .table,
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  .table th,
+  .table td,
+  table th,
+  table td {
+    border: 1px solid #999999 !important;
+    padding: 6pt 8pt !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+  }
+
+  .table th,
+  table th {
+    background: #f0f0f0 !important;
+    font-weight: 700 !important;
+  }
+
+  /* ---- Show full URLs for links ---- */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    color: #555555;
+    word-break: break-all;
+  }
+
+  /* Skip mailto / # / javascript links */
+  a[href^="mailto:"]::after {
+    content: " (" attr(href) ")";
+  }
+
+  a[href^="#"]::after,
+  a[href^="javascript:"]::after {
+    content: "";
+  }
+
+  /* ---- Charts: hide canvas/svg charts, ensure data tables show ---- */
+  canvas {
+    display: none !important;
+  }
+
+  /* SVG charts: force black stroke/fill for legibility */
+  svg {
+    color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* If a component hides a fallback data table when chart is shown,
+     reveal it in print via a utility class you can add to the table */
+  .print-only {
+    display: block !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* ---- Force color-accurate backgrounds for badges/chips ---- */
+  .badge,
+  [class*="badge"] {
+    border: 1px solid #999999 !important;
+    background: #f0f0f0 !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ---- Keep readable font sizes ---- */
+  h1 { font-size: 18pt !important; }
+  h2 { font-size: 15pt !important; }
+  h3 { font-size: 13pt !important; }
+  h4, h5, h6 { font-size: 11pt !important; }
+  p, li, td, th { font-size: 11pt !important; }
+
+  /* ---- Margin for paper ---- */
+  @page {
+    margin: 1.5cm 2cm;
+  }
+}

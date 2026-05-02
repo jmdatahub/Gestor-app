@@ -60,8 +60,9 @@ export async function generatePendingMovementsForUser(_userId: string): Promise<
 }
 
 export async function getPendingMovementsCount(_userId: string, signal?: AbortSignal): Promise<number> {
-  const movements = await fetchPendingMovements(_userId, signal)
-  return movements.length
+  // Use limit=1 and read total from response to avoid over-fetching
+  const { total } = await api.get<{ data: unknown[]; total: number }>('/api/v1/movements', { status: 'pending', limit: 1 }, signal)
+  return total ?? 0
 }
 
 export { acceptPendingMovement, discardPendingMovement } from './movementService'

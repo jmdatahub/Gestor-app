@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { recurringRules, movements } from '../db/schema.js'
-import { and, eq, isNull, desc } from 'drizzle-orm'
+import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
 const router = Router()
@@ -31,8 +31,11 @@ function mapIn(body: Record<string, any>) {
   const dir = body.direction ?? body.kind; if (dir != null) out.direction = dir
   if (body.amount      != null) out.amount      = body.amount
   if (body.frequency   != null) out.frequency   = body.frequency
-  if (body.description != null) out.description = body.description
-  if (body.category    != null) out.category    = typeof body.category === 'object' && 'name' in body.category ? body.category.name : body.category
+  if (body.description != null) out.description = typeof body.description === 'string' ? body.description.slice(0, 500) : body.description
+  if (body.category    != null) {
+    const catVal = typeof body.category === 'object' && body.category !== null && 'name' in body.category ? body.category.name : body.category
+    out.category = typeof catVal === 'string' ? catVal.slice(0, 100) : catVal
+  }
   const acct = body.account_id ?? body.accountId; if (acct != null) out.accountId = acct
   const cat  = body.category_id ?? body.categoryId; if (cat !== undefined) out.categoryId = cat ?? null
   const org  = body.organization_id ?? body.organizationId; if (org !== undefined) out.organizationId = org ?? null
@@ -56,8 +59,16 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const filter = orgId
     ? eq(recurringRules.organizationId, orgId)
     : and(eq(recurringRules.userId, req.userId!), isNull(recurringRules.organizationId))
-  const rows = await db.select().from(recurringRules).where(and(filter, isNull(recurringRules.deletedAt)))
-  res.json({ data: rows.map(r => mapOut(r as any)) })
+  const limit = Math.min(Number(req.query.limit) || 100, 500)
+  const offset = Number(req.query.offset) || 0
+  const whereClause = and(filter, isNull(recurringRules.deletedAt))
+  const [rows, [{ total }]] = await Promise.all([
+    db.select().from(recurringRules)
+      .where(whereClause)
+      .limit(limit).offset(offset),
+    db.select({ total: count() }).from(recurringRules).where(whereClause),
+  ])
+  res.json({ data: rows.map(r => mapOut(r as any)), total: Number(total), limit, offset })
 })
 
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -99,12 +110,19 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
   }
 })
 
-// ─── Pending movements (status = 'pending') ───────────────────────────────────
+// TODO: unused, consider removing — client fetches pending movements via GET /api/v1/movements?status=pending
 router.get('/pending', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const rows = await db.select().from(movements)
-    .where(and(eq(movements.userId, req.userId!), eq(movements.status, 'pending'), isNull(movements.deletedAt)))
-    .orderBy(desc(movements.date))
-  res.json({ data: rows })
+  const limit = Math.min(Number(req.query.limit) || 100, 500)
+  const offset = Number(req.query.offset) || 0
+  const pendingWhere = and(eq(movements.userId, req.userId!), eq(movements.status, 'pending'), isNull(movements.deletedAt))
+  const [rows, [{ total }]] = await Promise.all([
+    db.select().from(movements)
+      .where(pendingWhere)
+      .orderBy(desc(movements.date))
+      .limit(limit).offset(offset),
+    db.select({ total: count() }).from(movements).where(pendingWhere),
+  ])
+  res.json({ data: rows, total: Number(total), limit, offset })
 })
 
 export default router

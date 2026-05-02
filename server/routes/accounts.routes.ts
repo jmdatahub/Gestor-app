@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { accounts } from '../db/schema.js'
-import { and, eq, isNull, asc } from 'drizzle-orm'
+import { and, eq, isNull, asc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { z } from 'zod'
 
@@ -28,9 +28,9 @@ function mapOut(row: Record<string, any>) {
 // For PATCH: map only the fields present in the body (partial update)
 function mapInPartial(body: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = {}
-  if (body.name        !== undefined) out.name            = body.name
+  if (body.name        !== undefined) out.name            = typeof body.name === 'string' ? body.name.slice(0, 150) : body.name
   if (body.type        !== undefined) out.type            = body.type
-  if (body.description !== undefined) out.description     = body.description
+  if (body.description !== undefined) out.description     = typeof body.description === 'string' ? body.description.slice(0, 500) : body.description
   if (body.color       !== undefined) out.color           = body.color
   if (body.icon        !== undefined) out.icon            = body.icon
   if (body.currency    !== undefined) out.currency        = body.currency
@@ -68,10 +68,37 @@ const AccountCreateSchema = z.object({
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const orgId = req.query.org_id as string | undefined
-    const rows = await db.select().from(accounts)
-      .where(and(userFilter(req, orgId), isNull(accounts.deletedAt)))
-      .orderBy(asc(accounts.createdAt))
-    res.json({ data: rows.map(mapOut) })
+    const limit = Math.min(Number(req.query.limit) || 200, 1000)
+    const offset = Number(req.query.offset) || 0
+    const whereClause = and(userFilter(req, orgId), isNull(accounts.deletedAt))
+    const selectFields = {
+      id:              accounts.id,
+      name:            accounts.name,
+      type:            accounts.type,
+      description:     accounts.description,
+      color:           accounts.color,
+      icon:            accounts.icon,
+      currency:        accounts.currency,
+      balance:         accounts.balance,
+      userId:          accounts.userId,
+      organizationId:  accounts.organizationId,
+      isActive:        accounts.isActive,
+      parentAccountId: accounts.parentAccountId,
+      createdAt:       accounts.createdAt,
+      updatedAt:       accounts.updatedAt,
+      deletedAt:       accounts.deletedAt,
+      createdByEmail:  accounts.createdByEmail,
+      updatedByEmail:  accounts.updatedByEmail,
+    }
+    const [rows, [{ total }]] = await Promise.all([
+      db.select(selectFields).from(accounts)
+        .where(whereClause)
+        .orderBy(asc(accounts.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: count() }).from(accounts).where(whereClause),
+    ])
+    res.json({ data: rows.map(mapOut), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[accounts GET /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -99,7 +126,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       parsed = AccountCreateSchema.parse(req.body)
     } catch (err) {
       if (err instanceof z.ZodError) {
-        res.status(400).json({ error: 'Datos inválidos', details: err.errors }); return
+        res.status(400).json({ error: 'Datos inválidos', details: err.issues }); return
       }
       throw err
     }

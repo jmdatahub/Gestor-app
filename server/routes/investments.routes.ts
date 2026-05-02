@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { investments, investmentPriceHistory } from '../db/schema.js'
-import { and, eq, isNull, desc } from 'drizzle-orm'
+import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { z } from 'zod'
 
@@ -110,10 +110,17 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const filter = orgId
     ? eq(investments.organizationId, orgId)
     : and(eq(investments.userId, req.userId!), isNull(investments.organizationId))
-  const rows = await db.select().from(investments)
-    .where(and(filter, isNull(investments.deletedAt)))
-    .orderBy(desc(investments.createdAt))
-  res.json({ data: rows.map(mapOut) })
+  const limit = Math.min(Number(req.query.limit) || 100, 500)
+  const offset = Number(req.query.offset) || 0
+  const whereClause = and(filter, isNull(investments.deletedAt))
+  const [rows, [{ total }]] = await Promise.all([
+    db.select().from(investments)
+      .where(whereClause)
+      .orderBy(desc(investments.createdAt))
+      .limit(limit).offset(offset),
+    db.select({ total: count() }).from(investments).where(whereClause),
+  ])
+  res.json({ data: rows.map(mapOut), total: Number(total), limit, offset })
 })
 
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -166,8 +173,10 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
   const existing = (await db.select({ id: investments.id }).from(investments)
     .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
   if (!existing) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
-  await db.delete(investmentPriceHistory).where(eq(investmentPriceHistory.investmentId, id))
-  await db.update(investments).set({ deletedAt: new Date().toISOString() }).where(eq(investments.id, id))
+  await Promise.all([
+    db.delete(investmentPriceHistory).where(eq(investmentPriceHistory.investmentId, id)),
+    db.update(investments).set({ deletedAt: new Date().toISOString() }).where(eq(investments.id, id)),
+  ])
   res.json({ ok: true })
 })
 
@@ -180,10 +189,23 @@ router.get('/:id/price-history', authMiddleware, async (req: AuthRequest, res: R
     .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
   if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
 
-  const rows = await db.select().from(investmentPriceHistory)
-    .where(eq(investmentPriceHistory.investmentId, id))
-    .orderBy(desc(investmentPriceHistory.date))
-  res.json({ data: rows })
+  const limit = Math.min(Number(req.query.limit) || 200, 1000)
+  const offset = Number(req.query.offset) || 0
+  const histWhere = eq(investmentPriceHistory.investmentId, id)
+  const [rows, [{ total }]] = await Promise.all([
+    db.select().from(investmentPriceHistory)
+      .where(histWhere)
+      .orderBy(desc(investmentPriceHistory.date))
+      .limit(limit).offset(offset),
+    db.select({ total: count() }).from(investmentPriceHistory).where(histWhere),
+  ])
+  res.json({ data: rows.map(r => ({
+    ...r,
+    investment_id: (r as any).investmentId ?? (r as any).investment_id,
+    user_id:       (r as any).userId       ?? (r as any).user_id,
+    created_at:    (r as any).createdAt    ?? (r as any).created_at,
+    price:         r.price != null ? parseFloat(String(r.price)) : null,
+  })), total: Number(total), limit, offset })
 })
 
 router.post('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -203,7 +225,7 @@ router.post('/:id/price-history', authMiddleware, async (req: AuthRequest, res: 
     body = PriceSchema.parse(req.body)
   } catch (err) {
     if (err instanceof z.ZodError) {
-      res.status(400).json({ error: 'Datos inválidos', details: err.errors }); return
+      res.status(400).json({ error: 'Datos inválidos', details: err.issues }); return
     }
     throw err
   }

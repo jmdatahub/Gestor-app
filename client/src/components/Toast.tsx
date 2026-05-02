@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import { CheckCircle2, AlertCircle, Info, X, AlertTriangle, Sparkles } from 'lucide-react'
+import { storage } from '../lib/storage'
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning'
 
@@ -113,10 +114,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     
     setToasts(prev => [...prev, toast])
     
-    // Check sound setting from localStorage (avoid circular dependency with SettingsContext)
+    // Check sound setting from namespaced storage (avoid circular dependency with SettingsContext)
     let soundEnabled = true
     try {
-      const settings = localStorage.getItem('app_settings')
+      const settings = storage.get('app_settings')
       if (settings) {
         const parsed = JSON.parse(settings)
         soundEnabled = parsed.soundEnabled !== false // default to true
