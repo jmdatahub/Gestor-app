@@ -42,8 +42,9 @@ export default function PendingMovements() {
     try {
       const data = await getPendingMovements(user.id)
       setMovements(data as unknown as PendingMovement[])
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading pending:', error)
+      toast.error('Error al cargar', error?.message || 'No se pudieron cargar los movimientos pendientes')
     } finally {
       setLoading(false)
     }

@@ -74,7 +74,12 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     res.json({ sent: false, reason: 'notifications_disabled' }); return
   }
 
-  await sendTelegramMessage(chatId, buildMessage(type, title, message))
+  try {
+    await sendTelegramMessage(chatId, buildMessage(type, title, message))
+  } catch (err) {
+    console.error('[notify] Failed to send Telegram message:', err)
+    res.status(502).json({ sent: false, reason: 'telegram_error' }); return
+  }
   res.json({ sent: true })
 })
 

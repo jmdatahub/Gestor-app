@@ -248,12 +248,13 @@ export default function InvestmentsList() {
       ])
       setInvestments(data)
       setAccounts(accs)
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error loading investments:', e)
+      toast.error('Error', e?.message || 'No se pudieron cargar las inversiones')
     } finally {
       setLoading(false)
     }
-  }, [user, currentWorkspace])
+  }, [user, currentWorkspace, toast])
 
   useEffect(() => { loadData() }, [loadData])
 

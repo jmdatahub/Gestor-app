@@ -57,19 +57,29 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 })
 
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const existing = (await db.select({ id: apiTokens.id }).from(apiTokens)
-    .where(and(eq(apiTokens.id, req.params.id as string), eq(apiTokens.userId, req.userId!))).limit(1))[0]
-  if (!existing) { res.status(404).json({ error: 'Token no encontrado' }); return }
-  const [updated] = await db.update(apiTokens).set({ scopes: req.body.scopes }).where(eq(apiTokens.id, req.params.id as string)).returning()
-  res.json({ data: updated })
+  try {
+    const existing = (await db.select({ id: apiTokens.id }).from(apiTokens)
+      .where(and(eq(apiTokens.id, req.params.id as string), eq(apiTokens.userId, req.userId!))).limit(1))[0]
+    if (!existing) { res.status(404).json({ error: 'Token no encontrado' }); return }
+    const [updated] = await db.update(apiTokens).set({ scopes: req.body.scopes }).where(eq(apiTokens.id, req.params.id as string)).returning()
+    res.json({ data: updated })
+  } catch (err) {
+    console.error('[api-tokens PATCH /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
 })
 
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const existing = (await db.select({ id: apiTokens.id }).from(apiTokens)
-    .where(and(eq(apiTokens.id, req.params.id as string), eq(apiTokens.userId, req.userId!))).limit(1))[0]
-  if (!existing) { res.status(404).json({ error: 'Token no encontrado' }); return }
-  await db.delete(apiTokens).where(eq(apiTokens.id, req.params.id as string))
-  res.json({ ok: true })
+  try {
+    const existing = (await db.select({ id: apiTokens.id }).from(apiTokens)
+      .where(and(eq(apiTokens.id, req.params.id as string), eq(apiTokens.userId, req.userId!))).limit(1))[0]
+    if (!existing) { res.status(404).json({ error: 'Token no encontrado' }); return }
+    await db.delete(apiTokens).where(eq(apiTokens.id, req.params.id as string))
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[api-tokens DELETE /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
 })
 
 export default router

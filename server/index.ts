@@ -34,6 +34,7 @@ import paymentMethodsRoutes from './routes/payment-methods.routes.js'
 import providersRoutes from './routes/providers.routes.js'
 import apiTokensRoutes from './routes/api-tokens.routes.js'
 import adminRoutes from './routes/admin.routes.js'
+import docsRoutes from './routes/docs.routes.js'
 import crmSyncRoutes from './routes/crm-sync.routes.js'
 import notifyRoutes from './routes/notify.routes.js'
 import telegramRoutes from './routes/telegram.routes.js'
@@ -132,23 +133,42 @@ app.get(['/api/health', '/api/v1/health'], async (_req, res) => {
 
   let dbStatus: 'ok' | 'error' = 'error'
   let dbLatencyMs: number | null = null
+  let activeRecurringRules: number | null = null
+  let pendingMovements: number | null = null
   try {
     const { db } = await import('./db/connection.js')
-    const { sql } = await import('drizzle-orm')
+    const { sql, eq, and, isNull, count } = await import('drizzle-orm')
+    const { recurringRules, movements } = await import('./db/schema.js')
     const t0 = Date.now()
     await db.execute(sql`SELECT 1`)
     dbLatencyMs = Date.now() - t0
     dbStatus = 'ok'
+
+    // Quick stats — run in parallel, non-fatal
+    const [recurringResult, pendingResult] = await Promise.all([
+      db.select({ total: count() })
+        .from(recurringRules)
+        .where(and(eq(recurringRules.isActive, true), isNull(recurringRules.deletedAt))),
+      db.select({ total: count() })
+        .from(movements)
+        .where(and(eq(movements.status, 'pending'), isNull(movements.deletedAt))),
+    ])
+    activeRecurringRules = Number(recurringResult[0]?.total ?? 0)
+    pendingMovements = Number(pendingResult[0]?.total ?? 0)
   } catch {
-    // dbStatus stays 'error'
+    // dbStatus stays 'error'; counts remain null
   }
+
+  // Read app version from package.json (process.env.npm_package_version is set by npm/node)
+  const appVersion = process.env.npm_package_version ?? '1.0.0'
 
   const healthy = dbStatus === 'ok'
   res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'degraded',
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV || 'development',
-    version: process.env.npm_package_version ?? '1.0.0',
+    version: appVersion,
+    nodeVersion: process.version,
     uptime: {
       seconds: Math.floor(uptimeSec),
       human: `${Math.floor(uptimeSec / 3600)}h ${Math.floor((uptimeSec % 3600) / 60)}m ${Math.floor(uptimeSec % 60)}s`,
@@ -160,10 +180,17 @@ app.get(['/api/health', '/api/v1/health'], async (_req, res) => {
       rssMb: Math.round(mem.rss / 1024 / 1024),
       externalMb: Math.round(mem.external / 1024 / 1024),
     },
+    stats: {
+      activeRecurringRules,
+      pendingMovements,
+    },
   })
 })
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+// API docs — public, no auth required
+app.use('/api/docs', docsRoutes)
+
 // Auth routes — password endpoints get the strict limiter first, plus IP-block
 // middleware on the login endpoint to stop brute-force attempts.
 app.use('/api/auth/forgot-password', passwordLimiter)

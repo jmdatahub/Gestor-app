@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/apiClient'
-import { User, Check, Save, Loader2, Mail, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { User, Check, Save, Loader2, Mail, AlertCircle } from 'lucide-react'
 import { useToast } from '../../components/Toast'
 import { useSettings } from '../../context/SettingsContext'
 import { formatDate as formatDateUtil } from '../../utils/format'
@@ -42,7 +42,6 @@ export default function ProfileSettings() {
   
   // Email change state
   const [newEmail, setNewEmail] = useState('')
-  const [emailSending, setEmailSending] = useState(false)
   const [emailMessage, setEmailMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   useEffect(() => {
@@ -111,22 +110,12 @@ export default function ProfileSettings() {
       setEmailMessage({ type: 'error', text: 'Introduce un email válido' })
       return
     }
-    
-    setEmailSending(true)
-    setEmailMessage(null)
-    
-    try {
-      await api.patch('/api/v1/profiles/me', { email: newEmail })
-      setEmailMessage({
-        type: 'success',
-        text: 'Se ha enviado un enlace de verificación a ambos emails. Confirma el cambio desde tu bandeja de entrada.'
-      })
-      setNewEmail('')
-    } catch (error: any) {
-      setEmailMessage({ type: 'error', text: error.message || 'Error al cambiar email' })
-    } finally {
-      setEmailSending(false)
-    }
+
+    // Email change requires password reset flow — direct user accordingly
+    setEmailMessage({
+      type: 'error',
+      text: 'El cambio de email no está disponible desde aquí. Contacta con el administrador para actualizar tu dirección de correo.'
+    })
   }
 
   const isEmoji = avatarType !== 'default' && avatarType.length <= 2
@@ -211,14 +200,14 @@ export default function ProfileSettings() {
               />
               <button
                 onClick={handleEmailChange}
-                disabled={emailSending || !newEmail}
+                disabled={!newEmail}
                 style={{
-                  padding: '14px 20px', background: emailSending ? '#334155' : '#6366f1',
+                  padding: '14px 20px', background: '#6366f1',
                   border: 'none', borderRadius: 12, color: 'white', fontSize: 14, fontWeight: 600,
-                  cursor: emailSending || !newEmail ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap'
+                  cursor: !newEmail ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap'
                 }}
               >
-                {emailSending ? 'Enviando...' : 'Enviar Verificación'}
+                Cambiar Email
               </button>
             </div>
             {emailMessage && (

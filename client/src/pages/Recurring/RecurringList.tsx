@@ -73,8 +73,9 @@ export default function RecurringList() {
 
       const generalAccount = accountsData.find(a => a.type === 'general')
       if (generalAccount) setAccountId(generalAccount.id)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading data:', error)
+      toast.error(t('common.error') || 'Error', error?.message || 'No se pudieron cargar los datos')
     } finally {
       setLoading(false)
     }
@@ -97,9 +98,9 @@ export default function RecurringList() {
     // Clamp dayOfMonth to 1–31
     const clampedDay = Math.max(1, Math.min(31, dayOfMonth))
 
-    setSubmitting(true)
-
     if (!user) return
+
+    setSubmitting(true)
 
     try {
       // Calculate initial next_occurrence

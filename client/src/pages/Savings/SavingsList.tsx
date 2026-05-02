@@ -66,8 +66,9 @@ export default function SavingsList() {
       const orgId = currentWorkspace?.id || null
       const data = await getGoalsByUser(user.id, orgId)
       setGoals(data)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading goals:', error)
+      toast.error(t('common.error') || 'Error', error?.message || 'No se pudieron cargar los objetivos de ahorro')
     } finally {
       setLoading(false)
     }

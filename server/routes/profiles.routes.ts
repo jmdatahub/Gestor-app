@@ -12,6 +12,9 @@ const router = Router()
 // Critically excludes: id, isSuperAdmin, email (managed by auth), telegramChatId (managed by bot).
 const ProfilePatchSchema = z.object({
   name:            z.string().max(120).optional(),
+  // displayName / avatarType are used by the ProfileSettings UI
+  displayName:     z.string().max(120).optional().nullable(),
+  avatarType:      z.string().max(200).optional().nullable(),
   // Only allow https:// avatar URLs to prevent javascript: / data: URL injection
   avatarUrl:       z.string().url().max(500).refine(
     v => v == null || v.startsWith('https://'),
