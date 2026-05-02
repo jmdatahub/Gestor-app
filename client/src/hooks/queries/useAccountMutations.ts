@@ -21,6 +21,9 @@ export function useCreateAccount() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: CreateAccountInput) => createAccount(input),
+    onError: (err) => {
+      console.error('[useCreateAccount] mutation failed:', err)
+    },
     onSettled: () => invalidateAccountDerived(queryClient),
   })
 }
@@ -30,6 +33,9 @@ export function useUpdateAccount() {
   return useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Account> }) =>
       updateAccount(id, updates),
+    onError: (err) => {
+      console.error('[useUpdateAccount] mutation failed:', err)
+    },
     onSettled: () => invalidateAccountDerived(queryClient),
   })
 }
@@ -38,6 +44,9 @@ export function useDeleteAccount() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => deleteAccount(id),
+    onError: (err) => {
+      console.error('[useDeleteAccount] mutation failed:', err)
+    },
     onSettled: () => invalidateAccountDerived(queryClient),
   })
 }

@@ -4,6 +4,7 @@ import { db } from '../db/connection.js'
 import { debts, debtMovements } from '../db/schema.js'
 import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
 
 const router = Router()
 
@@ -62,6 +63,10 @@ function mapIn(body: Record<string, any>) {
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const orgId = req.query.org_id as string | undefined
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, orgId)
+      if (!ok) return
+    }
     const filter = orgId
       ? eq(debts.organizationId, orgId)
       : and(eq(debts.userId, req.userId!), isNull(debts.organizationId))
@@ -99,6 +104,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!mapped.counterpartyName || !mapped.totalAmount) {
       res.status(400).json({ error: 'counterparty_name y total_amount son requeridos' }); return
     }
+    // Reject total_amount of 0 or negative
+    const totalNum = parseFloat(mapped.totalAmount)
+    if (isNaN(totalNum) || totalNum <= 0) {
+      res.status(400).json({ error: 'total_amount debe ser un número mayor que 0' }); return
+    }
     if (!mapped.direction) mapped.direction = 'i_owe'
     const [row] = await db.insert(debts).values({ ...mapped, userId: req.userId! } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
@@ -110,11 +120,20 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    // Include isNull(deletedAt) to prevent updating soft-deleted records
     const existing = (await db.select({ id: debts.id }).from(debts)
-      .where(and(eq(debts.id, req.params.id as string), eq(debts.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(debts.id, req.params.id as string), eq(debts.userId, req.userId!), isNull(debts.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Deuda no encontrada' }); return }
+    const patch = mapIn(req.body)
+    // Reject total_amount of 0 or negative if being updated
+    if (patch.totalAmount !== undefined) {
+      const n = parseFloat(patch.totalAmount)
+      if (isNaN(n) || n <= 0) {
+        res.status(400).json({ error: 'total_amount debe ser un número mayor que 0' }); return
+      }
+    }
     const [updated] = await db.update(debts)
-      .set(mapIn(req.body) as any)
+      .set(patch as any)
       .where(eq(debts.id, req.params.id as string))
       .returning()
     res.json({ data: mapOut(updated as any) })

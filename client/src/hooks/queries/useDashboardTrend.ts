@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/apiClient'
 
+// NOTE: 'trend' is a top-level root, intentionally separate from 'dashboard', to avoid
+// dashboardKeys.invalidateAll() inadvertently busting trend caches (they share different
+// fetch cadences and data shapes).
 export const trendKeys = {
-  all: ['dashboard', 'trend'] as const,
+  all: ['trend'] as const,
   monthly: (userId: string, workspaceId: string | null, months: number) =>
     [...trendKeys.all, 'monthly', userId, workspaceId, months] as const,
   daily: (userId: string, workspaceId: string | null, days: number) =>

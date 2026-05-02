@@ -13,6 +13,10 @@ export const dashboardKeys = {
   topAccounts: (userId: string, workspaceId: string | null, rollupParents: boolean) => [...dashboardKeys.all, 'topAccounts', userId, workspaceId, rollupParents] as const,
 }
 
+// 30-second staleTime: dashboard data doesn't need to be re-fetched on every
+// focus/mount cycle. Mutations call invalidateQueries explicitly when data changes.
+const DASHBOARD_STALE_MS = 1000 * 30
+
 // Hooks
 export const useAccountsSummary = (userId: string | null, workspaceId: string | null) => {
   return useQuery({
@@ -28,6 +32,7 @@ export const useAccountsSummary = (userId: string | null, workspaceId: string | 
       })
     },
     enabled: !!userId,
+    staleTime: DASHBOARD_STALE_MS,
   })
 }
 
@@ -39,6 +44,7 @@ export const useFinancialDistribution = (userId: string | null, workspaceId: str
       return financialDistributionSchema.parse(data)
     },
     enabled: !!userId,
+    staleTime: DASHBOARD_STALE_MS,
   })
 }
 
@@ -52,5 +58,6 @@ export const useTopAccounts = (userId: string | null, workspaceId: string | null
       return [...validatedList].sort((a, b) => b.balance - a.balance).slice(0, 5)
     },
     enabled: !!userId,
+    staleTime: DASHBOARD_STALE_MS,
   })
 }

@@ -6,6 +6,9 @@ import { eq, and, desc, gte, lte, isNull, sql, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { z } from 'zod'
 
+// Max date allowed: today + 10 years
+const MAX_DATE_YEARS_AHEAD = 10
+
 const router = Router()
 
 function mapOut(row: Record<string, any>) {
@@ -40,7 +43,14 @@ const TransferSchema = z.object({
   from_account_id: z.string().uuid(),
   to_account_id:   z.string().uuid(),
   amount:          z.number().positive(),
-  date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(
+    (d) => {
+      const max = new Date()
+      max.setFullYear(max.getFullYear() + MAX_DATE_YEARS_AHEAD)
+      return new Date(d) <= max
+    },
+    { message: `La fecha no puede ser más de ${MAX_DATE_YEARS_AHEAD} años en el futuro` }
+  ),
   description:     z.string().max(500).optional().nullable(),
   org_id:          z.string().uuid().optional().nullable(),
 }).strict()
@@ -167,6 +177,26 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const mapped = mapIn(req.body)
     if (!mapped.accountId) { res.status(400).json({ error: 'account_id es requerido' }); return }
     if (!mapped.date || !mapped.kind || !mapped.amount) { res.status(400).json({ error: 'date, kind y amount son requeridos' }); return }
+
+    // Validate amount is a valid positive number
+    const amountNum = parseFloat(mapped.amount)
+    if (isNaN(amountNum) || amountNum <= 0) {
+      res.status(400).json({ error: 'amount debe ser un número mayor que 0' }); return
+    }
+    // Income movements must have a positive amount (already ensured by > 0 above)
+    // but reject negative values explicitly for clarity
+    if (mapped.kind === 'income' && amountNum < 0) {
+      res.status(400).json({ error: 'Los movimientos de ingreso deben tener un importe positivo' }); return
+    }
+
+    // Validate date is not more than 10 years in the future
+    const movDate = new Date(mapped.date)
+    const maxDate = new Date()
+    maxDate.setFullYear(maxDate.getFullYear() + MAX_DATE_YEARS_AHEAD)
+    if (movDate > maxDate) {
+      res.status(400).json({ error: `La fecha no puede ser más de ${MAX_DATE_YEARS_AHEAD} años en el futuro` }); return
+    }
+
     const [row] = await db.insert(movements).values({ ...mapped, userId: req.userId! } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
   } catch (err) {
@@ -178,11 +208,32 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // PATCH /api/v1/movements/:id
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const existing = (await db.select({ id: movements.id }).from(movements)
-      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!)))
+    const existing = (await db.select({ id: movements.id, kind: movements.kind }).from(movements)
+      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!), isNull(movements.deletedAt)))
       .limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
-    const [updated] = await db.update(movements).set(mapIn(req.body) as any).where(eq(movements.id, req.params.id as string)).returning()
+
+    const patch = mapIn(req.body)
+
+    // Validate amount if being updated
+    if (patch.amount !== undefined) {
+      const amountNum = parseFloat(patch.amount)
+      if (isNaN(amountNum) || amountNum <= 0) {
+        res.status(400).json({ error: 'amount debe ser un número mayor que 0' }); return
+      }
+    }
+
+    // Validate date if being updated
+    if (patch.date !== undefined) {
+      const movDate = new Date(patch.date)
+      const maxDate = new Date()
+      maxDate.setFullYear(maxDate.getFullYear() + MAX_DATE_YEARS_AHEAD)
+      if (movDate > maxDate) {
+        res.status(400).json({ error: `La fecha no puede ser más de ${MAX_DATE_YEARS_AHEAD} años en el futuro` }); return
+      }
+    }
+
+    const [updated] = await db.update(movements).set(patch as any).where(eq(movements.id, req.params.id as string)).returning()
     res.json({ data: mapOut(updated as any) })
   } catch (err) {
     console.error('[movements PATCH /:id]', err)

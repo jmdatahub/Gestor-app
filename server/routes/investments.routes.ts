@@ -4,6 +4,7 @@ import { db } from '../db/connection.js'
 import { investments, investmentPriceHistory } from '../db/schema.js'
 import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -107,6 +108,10 @@ function mapIn(body: Record<string, any>): Record<string, any> {
 
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const orgId = req.query.org_id as string | undefined
+  if (orgId) {
+    const ok = await assertOrgMember(req, res, orgId)
+    if (!ok) return
+  }
   const filter = orgId
     ? eq(investments.organizationId, orgId)
     : and(eq(investments.userId, req.userId!), isNull(investments.organizationId))
@@ -133,6 +138,14 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const b = req.body
+  // Validate quantity: must be a positive number (not 0, not negative)
+  const rawQty = b.quantity
+  if (rawQty !== undefined && rawQty !== null) {
+    const qty = parseFloat(String(rawQty))
+    if (isNaN(qty) || qty <= 0) {
+      res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
+    }
+  }
   const [row] = await db.insert(investments).values({
     name:             b.name,
     type:             b.type ?? b.asset_type ?? 'other',
@@ -158,9 +171,18 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
+  // Include isNull(deletedAt) to prevent updating soft-deleted records
   const existing = (await db.select({ id: investments.id }).from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
   if (!existing) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
+  // Validate quantity if being updated
+  const rawQty = req.body.quantity
+  if (rawQty !== undefined && rawQty !== null) {
+    const qty = parseFloat(String(rawQty))
+    if (isNaN(qty) || qty <= 0) {
+      res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
+    }
+  }
   const [updated] = await db.update(investments)
     .set(mapIn(req.body) as any)
     .where(eq(investments.id, id))

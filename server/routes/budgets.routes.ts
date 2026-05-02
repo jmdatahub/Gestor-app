@@ -2,8 +2,9 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { budgets } from '../db/schema.js'
-import { and, eq, count } from 'drizzle-orm'
+import { and, eq, count, ilike } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -95,9 +96,21 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       }
       throw err
     }
+    // Org membership check when organization_id is provided
+    if (raw.organization_id) {
+      const ok = await assertOrgMember(req, res, raw.organization_id)
+      if (!ok) return
+    }
     const body = normalizeBudgetBody(raw)
     if (!body.categoryName) {
       res.status(400).json({ error: 'categoryName es obligatorio' }); return
+    }
+    // Duplicate budget check: same user + categoryName + month
+    const duplicate = (await db.select({ id: budgets.id }).from(budgets)
+      .where(and(eq(budgets.userId, req.userId!), ilike(budgets.categoryName, body.categoryName), eq(budgets.month, body.month)))
+      .limit(1))[0]
+    if (duplicate) {
+      res.status(409).json({ error: `Ya existe un presupuesto para "${body.categoryName}" en ${body.month}` }); return
     }
     const [row] = await db.insert(budgets).values({ ...body, userId: req.userId! }).returning()
     res.status(201).json({ data: mapOut(row) })

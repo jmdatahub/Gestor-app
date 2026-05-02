@@ -4,6 +4,7 @@ import { db } from '../db/connection.js'
 import { categories, movements } from '../db/schema.js'
 import { and, eq, isNull, asc, count, ne, ilike } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -38,6 +39,10 @@ const CategoryPatchSchema = CategoryCreateSchema.partial()
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const orgId = req.query.org_id as string | undefined
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, orgId)
+      if (!ok) return
+    }
     const filter = orgId
       ? eq(categories.organizationId, orgId)
       : and(eq(categories.userId, req.userId!), isNull(categories.organizationId))
@@ -95,6 +100,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       }
       throw err
     }
+    // Org membership check when organizationId is provided
+    if (body.organizationId) {
+      const ok = await assertOrgMember(req, res, body.organizationId)
+      if (!ok) return
+    }
     // Duplicate name check (case-insensitive, same kind, same user/org scope)
     const orgFilter = body.organizationId
       ? eq(categories.organizationId, body.organizationId)
@@ -115,7 +125,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: categories.id }).from(categories)
-      .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!), isNull(categories.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Categoría no encontrada' }); return }
 
     let body: z.infer<typeof CategoryPatchSchema>

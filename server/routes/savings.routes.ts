@@ -4,6 +4,7 @@ import { db } from '../db/connection.js'
 import { savingsGoals, savingsContributions } from '../db/schema.js'
 import { and, eq, isNull, desc, sql, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
 
 const router = Router()
 
@@ -52,6 +53,10 @@ function mapIn(body: Record<string, any>) {
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const orgId = req.query.org_id as string | undefined
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, orgId)
+      if (!ok) return
+    }
     const filter = orgId
       ? eq(savingsGoals.organizationId, orgId)
       : and(eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.organizationId))
@@ -88,6 +93,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!mapped.name || !mapped.targetAmount) {
       res.status(400).json({ error: 'name y target_amount son requeridos' }); return
     }
+    // Reject target_amount of 0 or negative (causes division by zero in progress %)
+    const targetNum = parseFloat(mapped.targetAmount)
+    if (isNaN(targetNum) || targetNum <= 0) {
+      res.status(400).json({ error: 'target_amount debe ser un número mayor que 0' }); return
+    }
     const [row] = await db.insert(savingsGoals).values({ ...mapped, userId: req.userId! } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
   } catch (err) {
@@ -99,10 +109,18 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
-      .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Meta no encontrada' }); return }
+    const patch = mapIn(req.body)
+    // Reject target_amount of 0 or negative if being updated
+    if (patch.targetAmount !== undefined) {
+      const n = parseFloat(patch.targetAmount)
+      if (isNaN(n) || n <= 0) {
+        res.status(400).json({ error: 'target_amount debe ser un número mayor que 0' }); return
+      }
+    }
     const [updated] = await db.update(savingsGoals)
-      .set(mapIn(req.body) as any)
+      .set(patch as any)
       .where(eq(savingsGoals.id, req.params.id as string))
       .returning()
     res.json({ data: mapOut(updated as any) })

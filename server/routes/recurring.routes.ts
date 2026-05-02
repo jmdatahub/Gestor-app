@@ -4,6 +4,36 @@ import { db } from '../db/connection.js'
 import { recurringRules, movements } from '../db/schema.js'
 import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
+import { z } from 'zod'
+
+const RecurringCreateSchema = z.object({
+  direction:       z.enum(['income', 'expense']).optional(),
+  kind:            z.enum(['income', 'expense']).optional(),
+  amount:          z.union([z.string(), z.number()]).refine(
+    (v) => { const n = parseFloat(String(v)); return !isNaN(n) && n > 0 },
+    { message: 'amount debe ser un número mayor que 0' }
+  ),
+  frequency:       z.string().min(1),
+  account_id:      z.string().uuid().optional(),
+  accountId:       z.string().uuid().optional(),
+  description:     z.string().max(500).optional().nullable(),
+  category:        z.union([z.string(), z.object({ name: z.string() })]).optional().nullable(),
+  category_id:     z.string().uuid().optional().nullable(),
+  categoryId:      z.string().uuid().optional().nullable(),
+  organization_id: z.string().uuid().optional().nullable(),
+  organizationId:  z.string().uuid().optional().nullable(),
+  is_active:       z.boolean().optional(),
+  isActive:        z.boolean().optional(),
+  day_of_week:     z.number().int().min(0).max(6).optional().nullable(),
+  dayOfWeek:       z.number().int().min(0).max(6).optional().nullable(),
+  day_of_month:    z.number().int().min(1).max(31).optional().nullable(),
+  dayOfMonth:      z.number().int().min(1).max(31).optional().nullable(),
+  next_occurrence: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  nextOccurrence:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  auto_apply:      z.boolean().optional(),
+  autoApply:       z.boolean().optional(),
+}).passthrough()
 
 const router = Router()
 
@@ -56,6 +86,12 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     return
   }
 
+  // Org membership check — prevent reading another org's recurring rules
+  if (orgId) {
+    const ok = await assertOrgMember(req, res, orgId)
+    if (!ok) return
+  }
+
   const filter = orgId
     ? eq(recurringRules.organizationId, orgId)
     : and(eq(recurringRules.userId, req.userId!), isNull(recurringRules.organizationId))
@@ -73,9 +109,32 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const mapped = mapIn(req.body)
+    // Validate with Zod first
+    let validated: z.infer<typeof RecurringCreateSchema>
+    try {
+      validated = RecurringCreateSchema.parse(req.body)
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: 'Datos inválidos', details: err.issues }); return
+      }
+      throw err
+    }
+    const mapped = mapIn(validated as any)
     if (!mapped.direction) { res.status(400).json({ error: "kind o direction es requerido ('income' o 'expense')" }); return }
     if (!mapped.accountId || !mapped.amount || !mapped.frequency) { res.status(400).json({ error: 'account_id, amount y frequency son requeridos' }); return }
+
+    // If next_occurrence is provided, warn but do NOT reject — it may be intentional
+    // (e.g. backfilling). However, if it's in the past, set it to today to avoid
+    // the processor firing it immediately on every boot.
+    if (mapped.nextOccurrence) {
+      const nextDate = new Date(mapped.nextOccurrence)
+      const today    = new Date(); today.setHours(0, 0, 0, 0)
+      if (nextDate < today) {
+        // Silently advance to today so the processor does not fire immediately
+        mapped.nextOccurrence = today.toISOString().slice(0, 10)
+      }
+    }
+
     const [row] = await db.insert(recurringRules).values({ ...mapped, userId: req.userId! } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
   } catch (err) {
@@ -87,9 +146,29 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: recurringRules.id }).from(recurringRules)
-      .where(and(eq(recurringRules.id, req.params.id as string), eq(recurringRules.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(recurringRules.id, req.params.id as string), eq(recurringRules.userId, req.userId!), isNull(recurringRules.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Regla no encontrada' }); return }
-    const [updated] = await db.update(recurringRules).set(mapIn(req.body) as any).where(eq(recurringRules.id, req.params.id as string)).returning()
+
+    const patch = mapIn(req.body)
+
+    // Validate amount if being updated
+    if (patch.amount !== undefined) {
+      const n = parseFloat(String(patch.amount))
+      if (isNaN(n) || n <= 0) {
+        res.status(400).json({ error: 'amount debe ser un número mayor que 0' }); return
+      }
+    }
+
+    // Advance past next_occurrence to today if it would be in the past
+    if (patch.nextOccurrence) {
+      const nextDate = new Date(patch.nextOccurrence)
+      const today    = new Date(); today.setHours(0, 0, 0, 0)
+      if (nextDate < today) {
+        patch.nextOccurrence = today.toISOString().slice(0, 10)
+      }
+    }
+
+    const [updated] = await db.update(recurringRules).set(patch as any).where(eq(recurringRules.id, req.params.id as string)).returning()
     res.json({ data: mapOut(updated as any) })
   } catch (err) {
     console.error('[recurring PATCH /:id]', err)

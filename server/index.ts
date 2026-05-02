@@ -2,6 +2,7 @@ import dotenv from 'dotenv'
 dotenv.config({ override: true })
 
 import path from 'path'
+import net from 'net'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -16,6 +17,7 @@ import {
 import { requestLogger } from './middleware/requestLogger.js'
 import { optionalAuth } from './middleware/auth.js'
 import { logger } from './lib/logger.js'
+import { checkDatabaseConnection } from './db/connection.js'
 import authRoutes from './routes/auth.routes.js'
 import movementsRoutes from './routes/movements.routes.js'
 import accountsRoutes from './routes/accounts.routes.js'
@@ -209,47 +211,126 @@ if (isProduction) {
 // ─── Error handler ────────────────────────────────────────────────────────────
 app.use(errorHandler)
 
-app.listen(PORT, () => {
-  logger.info(`Gestor API running at http://localhost:${PORT}`, {
-    port: PORT,
-    env: process.env.NODE_ENV || 'development',
-    cors: allowedOrigins.join(', '),
-    health: `http://localhost:${PORT}/api/health`,
-  })
+// ─── Startup sequence ─────────────────────────────────────────────────────────
+// All critical checks run before we bind the TCP port so that a failed startup
+// never results in a half-ready server accepting requests it cannot serve.
+async function startServer(): Promise<void> {
+  // 1. Validate & ping the database (retries 3×, 1-2 s apart).
+  logger.info('[startup] Checking database connection…')
+  try {
+    await checkDatabaseConnection(3)
+    logger.info('[startup] Database connection OK')
+  } catch (err) {
+    logger.error('[startup] FATAL: Database unreachable — aborting', {
+      error: (err as Error).message,
+    })
+    process.exit(1)
+  }
 
-  // ─── Register Telegram bot commands ─────────────────────────────────────
-  setMyCommands().catch(err =>
-    logger.error('[telegram] setMyCommands failed', { message: (err as Error).message })
-  )
+  // 2. Auto-run pending Drizzle migrations in development.
+  //    In production, migrations must be applied as part of the deploy pipeline.
+  if (!isProduction) {
+    try {
+      logger.info('[startup] Running pending migrations (dev)…')
+      const { migrate } = await import('drizzle-orm/postgres-js/migrator')
+      const { db } = await import('./db/connection.js')
+      await migrate(db, {
+        migrationsFolder: path.resolve(process.cwd(), 'server/db/migrations'),
+      })
+      logger.info('[startup] Migrations up-to-date')
+    } catch (err) {
+      // Non-fatal in dev — the schema may already be current via another path.
+      logger.warn('[startup] Migration step failed (continuing anyway)', {
+        error: (err as Error).message,
+      })
+    }
+  }
 
-  // ─── Recurring rules processor ────────────────────────────────────────────
-  // Run once on startup to catch up on any missed occurrences, then hourly.
-  processRecurringRules().catch(err =>
-    logger.error('[recurringProcessor] Startup run failed', { message: (err as Error).message })
-  )
-  setInterval(() => {
-    processRecurringRules().catch(err =>
-      logger.error('[recurringProcessor] Scheduled run failed', { message: (err as Error).message })
-    )
-  }, 3_600_000) // every hour
+  // 3. Bind the HTTP server, with graceful EADDRINUSE handling.
+  //    On hot-reload the old process may not have released the port yet;
+  //    we wait up to 3 s before giving up so tsx --watch restarts cleanly.
+  await bindServer()
+}
 
-  // ─── Monthly snapshot processor ────────────────────────────────────────────
-  // Snapshot previous month on startup (idempotent), then daily at midnight UTC.
-  snapshotPreviousMonth().catch(err =>
-    logger.error('[monthlySnapshot] Startup run failed', { message: (err as Error).message })
-  )
-  const _nowMs = Date.now()
-  const _nextMidnightMs = new Date(
-    Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1)
-  ).getTime()
-  setTimeout(() => {
-    snapshotPreviousMonth().catch(err =>
-      logger.error('[monthlySnapshot] Midnight run failed', { message: (err as Error).message })
-    )
-    setInterval(() => {
-      snapshotPreviousMonth().catch(err =>
-        logger.error('[monthlySnapshot] Daily run failed', { message: (err as Error).message })
+/** Attempt to bind express to PORT, retrying once on EADDRINUSE. */
+async function bindServer(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(PORT, () => {
+      logger.info(`Gestor API running at http://localhost:${PORT}`, {
+        port: PORT,
+        env: process.env.NODE_ENV || 'development',
+        cors: allowedOrigins.join(', '),
+        health: `http://localhost:${PORT}/api/health`,
+      })
+
+      // ─── Register Telegram bot commands ───────────────────────────────────
+      setMyCommands().catch(err =>
+        logger.error('[telegram] setMyCommands failed', { message: (err as Error).message })
       )
-    }, 86_400_000) // every 24 hours
-  }, _nextMidnightMs - _nowMs)
+
+      // ─── Recurring rules processor ────────────────────────────────────────
+      // Run once on startup to catch up on any missed occurrences, then hourly.
+      processRecurringRules().catch(err =>
+        logger.error('[recurringProcessor] Startup run failed', { message: (err as Error).message })
+      )
+      setInterval(() => {
+        processRecurringRules().catch(err =>
+          logger.error('[recurringProcessor] Scheduled run failed', { message: (err as Error).message })
+        )
+      }, 3_600_000) // every hour
+
+      // ─── Monthly snapshot processor ────────────────────────────────────────
+      // Snapshot previous month on startup (idempotent), then daily at midnight UTC.
+      snapshotPreviousMonth().catch(err =>
+        logger.error('[monthlySnapshot] Startup run failed', { message: (err as Error).message })
+      )
+      const _nowMs = Date.now()
+      const _nextMidnightMs = new Date(
+        Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1)
+      ).getTime()
+      setTimeout(() => {
+        snapshotPreviousMonth().catch(err =>
+          logger.error('[monthlySnapshot] Midnight run failed', { message: (err as Error).message })
+        )
+        setInterval(() => {
+          snapshotPreviousMonth().catch(err =>
+            logger.error('[monthlySnapshot] Daily run failed', { message: (err as Error).message })
+          )
+        }, 86_400_000) // every 24 hours
+      }, _nextMidnightMs - _nowMs)
+
+      resolve()
+    })
+
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.warn(`[startup] Port ${PORT} already in use — waiting 2 s for previous process to exit…`)
+        // Give the previous process up to 2 s to release the port, then retry.
+        setTimeout(() => {
+          server.close()
+          // Verify the port is actually free before we try again.
+          const probe = net.createServer()
+          probe.once('error', () => {
+            // Still occupied — give up.
+            logger.error(`[startup] FATAL: Port ${PORT} is still in use after 2 s — aborting`)
+            process.exit(1)
+          })
+          probe.once('listening', () => {
+            probe.close(() => bindServer().then(resolve).catch(reject))
+          })
+          probe.listen(PORT)
+        }, 2_000)
+      } else {
+        reject(err)
+      }
+    })
+  })
+}
+
+startServer().catch(err => {
+  logger.error('[startup] Unhandled error during server startup', {
+    error: (err as Error).message,
+    stack: (err as Error).stack,
+  })
+  process.exit(1)
 })

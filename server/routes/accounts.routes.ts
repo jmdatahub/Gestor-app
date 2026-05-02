@@ -2,8 +2,9 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { accounts } from '../db/schema.js'
-import { and, eq, isNull, asc, count } from 'drizzle-orm'
+import { and, eq, isNull, asc, count, ilike, ne } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -68,6 +69,10 @@ const AccountCreateSchema = z.object({
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const orgId = req.query.org_id as string | undefined
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, orgId)
+      if (!ok) return
+    }
     const limit = Math.min(Number(req.query.limit) || 200, 1000)
     const offset = Number(req.query.offset) || 0
     const whereClause = and(userFilter(req, orgId), isNull(accounts.deletedAt))
@@ -131,6 +136,20 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       throw err
     }
     const b = parsed
+    const orgId = b.organization_id ?? b.organizationId ?? null
+    // Org membership check when organization_id is provided
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, orgId)
+      if (!ok) return
+    }
+    // Duplicate name check (case-insensitive, same user/org scope)
+    const dupFilter = orgId
+      ? and(eq(accounts.organizationId, orgId), ilike(accounts.name, b.name), isNull(accounts.deletedAt))
+      : and(eq(accounts.userId, req.userId!), isNull(accounts.organizationId), ilike(accounts.name, b.name), isNull(accounts.deletedAt))
+    const duplicate = (await db.select({ id: accounts.id }).from(accounts).where(dupFilter).limit(1))[0]
+    if (duplicate) {
+      res.status(409).json({ error: 'Ya existe una cuenta con ese nombre' }); return
+    }
     const [row] = await db.insert(accounts).values({
       name:            b.name,
       type:            b.type            ?? 'general',
@@ -154,11 +173,26 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string
-    const existing = (await db.select({ id: accounts.id }).from(accounts)
-      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!))).limit(1))[0]
+    const existing = (await db.select({ id: accounts.id, name: accounts.name, organizationId: accounts.organizationId }).from(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!), isNull(accounts.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
+
+    const patch = mapInPartial(req.body)
+
+    // Duplicate name check on rename (case-insensitive, same user/org scope)
+    if (patch.name !== undefined) {
+      const orgId = existing.organizationId ?? null
+      const dupFilterExcludingSelf = orgId
+        ? and(eq(accounts.organizationId, orgId), ilike(accounts.name, patch.name as string), isNull(accounts.deletedAt), ne(accounts.id, id))
+        : and(eq(accounts.userId, req.userId!), isNull(accounts.organizationId), ilike(accounts.name, patch.name as string), isNull(accounts.deletedAt), ne(accounts.id, id))
+      const duplicate = (await db.select({ id: accounts.id }).from(accounts).where(dupFilterExcludingSelf).limit(1))[0]
+      if (duplicate) {
+        res.status(409).json({ error: 'Ya existe una cuenta con ese nombre' }); return
+      }
+    }
+
     const [updated] = await db.update(accounts)
-      .set(mapInPartial(req.body) as any)
+      .set(patch as any)
       .where(eq(accounts.id, id))
       .returning()
     res.json({ data: mapOut(updated) })
@@ -172,7 +206,7 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
   try {
     const id = req.params.id as string
     const existing = (await db.select({ id: accounts.id }).from(accounts)
-      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!), isNull(accounts.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
     await db.update(accounts).set({ deletedAt: new Date().toISOString() }).where(eq(accounts.id, id))
     res.json({ ok: true })
