@@ -5,6 +5,29 @@
    ============================================== */
 
 /* ==============================================
+   SKIP LINK — keyboard navigation accessibility
+   ============================================== */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 99999;
+  padding: 0.5rem 1rem;
+  background: var(--primary, #4F46E5);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 0 0 var(--radius-sm, 8px) var(--radius-sm, 8px);
+  text-decoration: none;
+  transition: top 0.1s ease;
+}
+.skip-link:focus {
+  top: 0;
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+/* ==============================================
    SCROLL ARCHITECTURE (DO NOT BREAK!)
    ============================================== */
 /*
@@ -417,6 +440,248 @@ a:hover { color: var(--primary-hover); }
   border-radius: 50%;
   border: 1.5px solid var(--border-color);
   flex-shrink: 0;
+}
+
+/* ==============================================
+   COLLAPSIBLE SETTINGS SECTION
+   Used for "Apariencia" — clean expand/collapse with
+   chevron rotation, matching the rest of the panel.
+   ============================================== */
+.settings-collapsible {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.settings-collapsible-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background var(--motion-fast);
+}
+.settings-collapsible-trigger:hover {
+  background: var(--bg-surface);
+}
+.settings-collapsible-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* The title inside the trigger uses .settings-section-title so it
+   visually matches every other section header in the drawer. */
+.settings-collapsible-trigger .settings-section-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-collapsible-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: transparent;
+  transition: transform var(--motion-med), color var(--motion-fast), background var(--motion-fast);
+  flex-shrink: 0;
+}
+.settings-collapsible-trigger:hover .settings-collapsible-chevron {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+.settings-collapsible.is-open .settings-collapsible-chevron {
+  transform: rotate(180deg);
+  color: var(--text-primary);
+}
+
+.settings-collapsible-content {
+  padding: 4px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: premium-fade-slide-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.settings-collapsible-content[hidden] {
+  display: none;
+}
+
+/* Subtle hairline under the trigger when the section is open. */
+.settings-collapsible.is-open .settings-collapsible-trigger {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ==============================================
+   TELEGRAM CONNECT (settings panel widget)
+   States: loading / connected / disconnected / flow (QR)
+   ============================================== */
+.tg-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+.tg-card--loading {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  justify-content: center;
+}
+.tg-card--connected {
+  border-color: rgba(34, 158, 217, 0.30);
+  background: rgba(34, 158, 217, 0.06);
+}
+.tg-card--flow {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.tg-icon {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tg-icon--brand {
+  background: rgba(34, 158, 217, 0.12);
+  color: #229ED9;
+}
+.tg-icon--connected {
+  background: rgba(41, 182, 246, 0.18);
+  color: #29B6F6;
+}
+
+.tg-body {
+  flex: 1;
+  min-width: 0;
+}
+.tg-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  letter-spacing: -0.005em;
+}
+.tg-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.tg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm, 8px);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  border: none;
+  transition: background var(--motion-fast), border-color var(--motion-fast), opacity var(--motion-fast);
+  flex-shrink: 0;
+}
+.tg-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.tg-btn--brand {
+  background: #229ED9;
+  color: #FFFFFF;
+}
+.tg-btn--brand:hover:not(:disabled) { background: #1B89BD; }
+.tg-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 7px 12px;
+}
+.tg-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+.tg-btn--sm {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+}
+
+.tg-spinner {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Flow (QR + button) ── */
+.tg-flow-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tg-flow-body {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 18px;
+  align-items: center;
+}
+@media (max-width: 480px) {
+  .tg-flow-body { grid-template-columns: 1fr; justify-items: center; }
+}
+.tg-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 12px);
+}
+.tg-qr img {
+  display: block;
+  width: 180px;
+  height: 180px;
+  border-radius: 6px;
+}
+.tg-qr-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.tg-flow-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.tg-flow-actions .tg-btn { align-self: stretch; justify-content: center; }
+.tg-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.tg-hint code {
+  background: var(--bg-surface);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  font-size: 0.95em;
 }
 
 /* ==============================================

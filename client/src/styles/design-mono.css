@@ -358,7 +358,7 @@
   border-right: 1px solid var(--ml-border) !important;
   box-shadow: none !important;
   padding: 8px !important;
-  width: 220px !important;
+  /* width controlled by AppLayout state (resizable/collapsible) — don't override */
   color: var(--ml-text) !important;
 }
 

@@ -343,10 +343,13 @@
   inset: 0 !important;
   pointer-events: none !important;
   z-index: 0 !important;
+  /* Aurora glows — must cover ALL corners to avoid dead/dark zones (esp. top-left) */
   background:
-    radial-gradient(60% 60% at 30% 0%, rgba(176, 69, 255, 0.30), transparent 70%),
+    radial-gradient(50% 50% at 0% 0%, rgba(176, 69, 255, 0.22), transparent 70%),
+    radial-gradient(60% 60% at 30% 10%, rgba(176, 69, 255, 0.22), transparent 70%),
     radial-gradient(50% 50% at 90% 100%, rgba(0, 229, 199, 0.20), transparent 70%),
-    radial-gradient(40% 40% at 90% 0%, rgba(77, 141, 255, 0.18), transparent 70%) !important;
+    radial-gradient(40% 40% at 90% 0%, rgba(77, 141, 255, 0.18), transparent 70%),
+    radial-gradient(40% 40% at 0% 100%, rgba(77, 141, 255, 0.14), transparent 70%) !important;
   animation: aurora-glow-pulse 8s ease-in-out infinite !important;
 }
 
