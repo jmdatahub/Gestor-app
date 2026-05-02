@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { categories, movements } from '../db/schema.js'
-import { and, eq, isNull, asc, count, ne, ilike, sql } from 'drizzle-orm'
+import { and, eq, isNull, asc, count, ne, ilike } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { z } from 'zod'
 

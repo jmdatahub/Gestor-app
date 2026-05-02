@@ -12,8 +12,8 @@ export interface Alert {
   metadata?: Record<string, unknown> | null
 }
 
-export async function fetchAlerts(_userId: string): Promise<{ alerts: Alert[]; total: number }> {
-  const { data, total } = await api.get<{ data: Alert[]; total: number }>('/api/v1/alerts')
+export async function fetchAlerts(_userId: string, limit = 50, offset = 0): Promise<{ alerts: Alert[]; total: number }> {
+  const { data, total } = await api.get<{ data: Alert[]; total: number }>('/api/v1/alerts', { limit, offset })
   return { alerts: data, total: total ?? data.length }
 }
 
@@ -52,7 +52,7 @@ export interface AlertStats {
 }
 
 export async function getAlertStats(_userId: string): Promise<AlertStats> {
-  const { alerts } = await fetchAlerts(_userId)
+  const { alerts } = await fetchAlerts(_userId, 200)
   const unread = alerts.filter(a => !a.is_read).length
   const bySeverity = { info: 0, warning: 0, danger: 0, critical: 0 }
   const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
@@ -121,7 +121,7 @@ export function getAlertTypeLabel(typeOrSeverity: string | undefined): string {
 }
 
 export async function hasRecentAlert(_userId: string, ruleIdOrType: string, windowHoursOrMs = 3600000): Promise<boolean> {
-  const { alerts } = await fetchAlerts(_userId)
+  const { alerts } = await fetchAlerts(_userId, 200)
   // Heuristic: if number <= 168 treat as hours, else as ms
   const windowMs = windowHoursOrMs <= 168 ? windowHoursOrMs * 3600000 : windowHoursOrMs
   const cutoff = new Date(Date.now() - windowMs).toISOString()
