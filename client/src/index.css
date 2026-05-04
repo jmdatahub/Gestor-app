@@ -12,6 +12,8 @@
 
 @import './styles/advanced.css';
 
+@import './styles/utilities.css';
+
 /* ==============================================
    DESIGN OVERLAYS — each file is scoped under
    [data-design='X']. Only the active one applies

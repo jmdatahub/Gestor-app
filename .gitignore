@@ -63,3 +63,4 @@ server/db/migrations/*.snap
 ---
 DEPLOY.md
 scripts/wipe-personal.cjs
+_scripts/

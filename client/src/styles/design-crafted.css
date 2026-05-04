@@ -335,8 +335,6 @@
    RESET & BASE
    ============================================== */
 [data-design='crafted'] *, [data-design='crafted'] *::before, [data-design='crafted'] *::after {
-  margin: 0;
-  padding: 0;
   box-sizing: border-box;
 }
 
