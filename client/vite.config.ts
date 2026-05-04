@@ -10,8 +10,8 @@ export default defineConfig({
     // Emit gzip and brotli side-car files (.gz / .br) alongside the build output.
     // The web server (nginx / Caddy) serves them automatically when the client
     // supports the encoding, reducing transfer sizes by ~70-80%.
-    compression({ algorithm: 'gzip', exclude: [/\.(br)$/, /\.(gz)$/] }),
-    compression({ algorithm: 'brotliCompress', exclude: [/\.(br)$/, /\.(gz)$/] }),
+    compression({ algorithms: ['gzip'], exclude: [/\.(br)$/, /\.(gz)$/] }),
+    compression({ algorithms: ['brotliCompress'], exclude: [/\.(br)$/, /\.(gz)$/] }),
     VitePWA({
       // 'prompt' keeps the new SW in waiting state so we can show a
       // "Nueva versión disponible" banner before reloading (issue #1).
