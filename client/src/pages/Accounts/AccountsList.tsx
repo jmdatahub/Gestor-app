@@ -67,10 +67,12 @@ export default function AccountsList() {
   const [transferDescription, setTransferDescription] = useState('')
   const [transferError, setTransferError] = useState<string | null>(null)
 
-  // Reload when workspace changes
+  // Reload when workspace or user changes
   useEffect(() => {
+    if (!user) return
     loadData()
-  }, [currentWorkspace])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, currentWorkspace?.id])
 
   const loadData = async () => {
     if (!user) return
@@ -78,9 +80,10 @@ export default function AccountsList() {
     try {
       const orgId = currentWorkspace?.id || null
       const data = await getAccountsWithBalances(user.id, orgId)
-      setAccounts(data)
-      
-      const tree = buildAccountTree(data)
+      const safe = Array.isArray(data) ? data : []
+      setAccounts(safe)
+
+      const tree = buildAccountTree(safe)
       const flat = flattenAccountTree(tree)
       setFlatAccounts(flat)
     } catch (error) {

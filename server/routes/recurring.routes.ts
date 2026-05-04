@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
-import { recurringRules, movements } from '../db/schema.js'
-import { and, eq, isNull, desc, count } from 'drizzle-orm'
+import { recurringRules } from '../db/schema.js'
+import { and, eq, isNull, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
 import { z } from 'zod'
@@ -190,21 +190,6 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
     console.error('[recurring DELETE /:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
   }
-})
-
-// TODO: unused, consider removing — client fetches pending movements via GET /api/v1/movements?status=pending
-router.get('/pending', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const limit = Math.min(Number(req.query.limit) || 100, 500)
-  const offset = Number(req.query.offset) || 0
-  const pendingWhere = and(eq(movements.userId, req.userId!), eq(movements.status, 'pending'), isNull(movements.deletedAt))
-  const [rows, [{ total }]] = await Promise.all([
-    db.select().from(movements)
-      .where(pendingWhere)
-      .orderBy(desc(movements.date))
-      .limit(limit).offset(offset),
-    db.select({ total: count() }).from(movements).where(pendingWhere),
-  ])
-  res.json({ data: rows, total: Number(total), limit, offset })
 })
 
 export default router

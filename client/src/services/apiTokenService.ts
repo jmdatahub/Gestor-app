@@ -36,8 +36,8 @@ export interface CreateApiTokenInput {
 }
 
 export async function fetchApiTokens(_userId: string): Promise<ApiToken[]> {
-  const { data } = await api.get<{ data: ApiToken[] }>('/api/v1/api-tokens')
-  return data
+  const res = await api.get<{ data: ApiToken[] }>('/api/v1/api-tokens')
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 // Backward compat alias

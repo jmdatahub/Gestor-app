@@ -31,16 +31,18 @@ export function PaymentMethodsSettings() {
   const toast = useToast()
 
   useEffect(() => {
+    if (!user) return
     loadMethods()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   async function loadMethods() {
     try {
       setLoading(true)
       if (!user) return
-      
+
       const data = await getPaymentMethods(user.id)
-      setMethods(data)
+      setMethods(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error loading payment methods:', error)
       toast.error('Error', 'No se pudieron cargar los métodos de pago')

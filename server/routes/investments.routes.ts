@@ -264,7 +264,13 @@ router.post('/:id/price-history', authMiddleware, async (req: AuthRequest, res: 
   await db.update(investments)
     .set({ currentPrice: body.price, updatedAt: new Date().toISOString() })
     .where(eq(investments.id, id))
-  res.status(201).json({ data: row })
+  res.status(201).json({ data: {
+    ...row,
+    investment_id: (row as any).investmentId ?? (row as any).investment_id,
+    user_id:       (row as any).userId       ?? (row as any).user_id,
+    created_at:    (row as any).createdAt    ?? (row as any).created_at,
+    price:         row.price != null ? parseFloat(String(row.price)) : null,
+  } })
 })
 
 // ── Server-side CoinGecko proxy with 60s cache ─────────────────────────────

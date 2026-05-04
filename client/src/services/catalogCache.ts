@@ -26,9 +26,10 @@ export async function getCachedAccounts(orgId?: string | null): Promise<CachedAc
   if (cached) return cached
   const params: Record<string, string> = {}
   if (orgId) params.org_id = orgId
-  const { data } = await api.get<{ data: CachedAccount[] }>('/api/v1/accounts', params)
-  set(key, data)
-  return data
+  const res = await api.get<{ data: CachedAccount[] }>('/api/v1/accounts', params)
+  const safe = Array.isArray(res?.data) ? res.data : []
+  set(key, safe)
+  return safe
 }
 
 // Backward-compat alias
@@ -47,7 +48,8 @@ export async function getCachedCategories(orgId?: string | null) {
   if (cached) return cached
   const params: Record<string, string> = {}
   if (orgId) params.org_id = orgId
-  const { data } = await api.get<{ data: unknown[] }>('/api/v1/categories', params)
-  set(key, data)
-  return data
+  const res = await api.get<{ data: unknown[] }>('/api/v1/categories', params)
+  const safe = Array.isArray(res?.data) ? res.data : []
+  set(key, safe)
+  return safe
 }

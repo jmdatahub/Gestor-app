@@ -89,13 +89,13 @@ export interface InvestmentPriceHistory {
 export async function fetchInvestments(_userId: string, organizationId?: string | null): Promise<Investment[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Investment[] }>('/api/v1/investments', params)
-  return data
+  const res = await api.get<{ data: Investment[] }>('/api/v1/investments', params)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function getInvestmentById(id: string): Promise<Investment | null> {
-  const { data } = await api.get<{ data: Investment }>(`/api/v1/investments/${id}`)
-  return data
+  const res = await api.get<{ data: Investment }>(`/api/v1/investments/${id}`)
+  return res?.data ?? null
 }
 
 export async function createInvestment(inv: CreateInvestmentInput): Promise<Investment> {
@@ -113,8 +113,8 @@ export async function deleteInvestment(id: string): Promise<void> {
 }
 
 export async function fetchPriceHistory(investmentId: string): Promise<InvestmentPriceHistory[]> {
-  const { data } = await api.get<{ data: InvestmentPriceHistory[] }>(`/api/v1/investments/${investmentId}/price-history`)
-  return data
+  const res = await api.get<{ data: InvestmentPriceHistory[] }>(`/api/v1/investments/${investmentId}/price-history`)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function addPriceHistory(investmentId: string, entry: { price: number; date: string }): Promise<InvestmentPriceHistory> {

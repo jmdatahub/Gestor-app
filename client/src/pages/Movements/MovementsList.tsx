@@ -205,10 +205,12 @@ export default function MovementsList() {
     }
   }, [])
 
-  // Reload when workspace changes
+  // Reload when workspace or user changes
   useEffect(() => {
+    if (!user) return
     loadData()
-  }, [currentWorkspace])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, currentWorkspace?.id])
 
   const loadData = async () => {
     if (!user) return
@@ -224,14 +226,20 @@ export default function MovementsList() {
         fetchAccounts(user.id, orgId)
       ])
 
-      setMovements(movementsPage.data)
+      const safeMovements = Array.isArray(movementsPage?.data) ? movementsPage.data : []
+      const safeAccounts = Array.isArray(accountsData) ? accountsData : []
+      const offset = Number(movementsPage?.offset) || 0
+      const limit = Number(movementsPage?.limit) || 0
+      const total = Number(movementsPage?.total) || 0
+
+      setMovements(safeMovements)
       setPage(0)
-      setHasMore(movementsPage.offset + movementsPage.limit < movementsPage.total)
-      setAccounts(accountsData)
-      
+      setHasMore(offset + limit < total)
+      setAccounts(safeAccounts)
+
       // Extract unique categories from movements for filter dropdown
       const uniqueCategories = new Map<string, {id: string, name: string, color: string}>()
-      movementsPage.data.forEach(m => {
+      safeMovements.forEach(m => {
         if (m.category) {
           uniqueCategories.set(m.category.id || m.category.name, {
             id: m.category.id || m.category.name,
@@ -244,7 +252,7 @@ export default function MovementsList() {
       
       // Calculate hierarchy
       // buildAccountTree expects AccountWithBalance, so we add a dummy balance
-      const accountsWithBalance = accountsData.map(a => ({ ...a, balance: 0 } as AccountWithBalance))
+      const accountsWithBalance = safeAccounts.map(a => ({ ...a, balance: 0 } as AccountWithBalance))
       const tree = buildAccountTree(accountsWithBalance)
       const flat = flattenAccountTree(tree)
       setFlatAccounts(flat)
@@ -255,16 +263,16 @@ export default function MovementsList() {
       // Load payment methods
       await initializeDefaultPaymentMethods(user.id)
       const methods = await getPaymentMethods(user.id, currentWorkspace?.id)
-      setPaymentMethods(methods)
+      setPaymentMethods(Array.isArray(methods) ? methods : [])
 
       // Load providers for autocomplete
       const provs = await searchProviders(user.id, '', currentWorkspace?.id)
-      setProviders(provs)
+      setProviders(Array.isArray(provs) ? provs : [])
 
       // Set default account (general)
-      const generalAccount = accountsData.find(a => a.type === 'general')
+      const generalAccount = safeAccounts.find(a => a.type === 'general')
       if (generalAccount) setAccountId(generalAccount.id)
-      else if (accountsData.length > 0) setAccountId(accountsData[0].id)
+      else if (safeAccounts.length > 0) setAccountId(safeAccounts[0].id)
     } catch (err) {
       console.error('Error loading data:', err)
       setAppError({ message: 'Error al cargar los datos' })

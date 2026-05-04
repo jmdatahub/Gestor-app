@@ -22,8 +22,8 @@ export async function fetchBudgets(_userId: string, month?: string, organization
   const params: Record<string, string> = {}
   if (month) params.month = month
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Budget[] }>('/api/v1/budgets', params)
-  return data
+  const res = await api.get<{ data: Budget[] }>('/api/v1/budgets', params)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function createBudget(budget: Omit<Budget, 'id' | 'created_at'>): Promise<Budget> {

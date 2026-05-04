@@ -111,7 +111,13 @@ router.patch('/organizations/:id', authMiddleware, async (req: AuthRequest, res:
       .returning()
     if (!updated) { res.status(404).json({ error: 'Organización no encontrada' }); return }
     auditLog(req.userId!, req.userEmail, 'UPDATE_ORGANIZATION', orgId)
-    res.json({ data: updated })
+    res.json({ data: {
+      ...updated,
+      parent_id:   (updated as any).parentId   ?? (updated as any).parent_id   ?? null,
+      owner_id:    (updated as any).ownerId    ?? (updated as any).owner_id    ?? null,
+      created_at:  (updated as any).createdAt  ?? (updated as any).created_at,
+      deleted_at:  (updated as any).deletedAt  ?? (updated as any).deleted_at  ?? null,
+    } })
   } catch (err) {
     console.error('[admin PATCH /organizations/:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })

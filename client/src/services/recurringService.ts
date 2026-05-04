@@ -17,8 +17,8 @@ export type CreateRuleInput = Omit<RecurringRule, 'id' | 'created_at' | 'categor
 export async function fetchRecurringRules(_userId: string, organizationId?: string | null): Promise<RecurringRule[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: RecurringRule[] }>('/api/v1/recurring-rules', params)
-  return data
+  const res = await api.get<{ data: RecurringRule[] }>('/api/v1/recurring-rules', params)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function createRecurringRule(rule: Omit<RecurringRule, 'id' | 'created_at'> | CreateRuleInput): Promise<RecurringRule> {
@@ -36,8 +36,8 @@ export async function deleteRecurringRule(id: string): Promise<void> {
 }
 
 export async function fetchPendingMovements(_userId: string, signal?: AbortSignal): Promise<Movement[]> {
-  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', { status: 'pending', limit: 200 }, signal)
-  return data
+  const res = await api.get<{ data: Movement[] }>('/api/v1/movements', { status: 'pending', limit: 200 }, signal)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function generatePendingFromRules(_userId: string, _organizationId?: string | null): Promise<void> {
@@ -61,8 +61,8 @@ export async function generatePendingMovementsForUser(_userId: string): Promise<
 
 export async function getPendingMovementsCount(_userId: string, signal?: AbortSignal): Promise<number> {
   // Use limit=1 and read total from response to avoid over-fetching
-  const { total } = await api.get<{ data: unknown[]; total: number }>('/api/v1/movements', { status: 'pending', limit: 1 }, signal)
-  return total ?? 0
+  const res = await api.get<{ data: unknown[]; total: number }>('/api/v1/movements', { status: 'pending', limit: 1 }, signal)
+  return Number(res?.total) || 0
 }
 
 export { acceptPendingMovement, discardPendingMovement } from './movementService'

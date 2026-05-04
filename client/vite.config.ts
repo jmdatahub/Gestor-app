@@ -62,14 +62,13 @@ export default defineConfig({
         // cached; the offline queue in apiClient.ts handles those instead.
         runtimeCaching: [
           {
+            // API responses are tenant-scoped and shape-versioned; stale cache
+            // hits across deploys or user switches cause "no se pudo cargar X"
+            // errors. The offline mutation queue handles writes; reads should
+            // always hit the network and fail fast if offline.
             urlPattern: ({ url, request }) =>
               url.pathname.startsWith('/api/') && request.method === 'GET',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 100, maxAgeSeconds: 5 * 60 },
-            },
+            handler: 'NetworkOnly',
           },
           {
             // Supabase REST/Realtime — never cache these (data changes on the server).

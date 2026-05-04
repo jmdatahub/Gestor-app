@@ -45,7 +45,9 @@ export default function DebtDetail() {
   const [editCounterparty, setEditCounterparty] = useState('')
 
   useEffect(() => {
-    if (id) loadData()
+    if (!id) return
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadData = async () => {
@@ -55,8 +57,8 @@ export default function DebtDetail() {
         fetchDebtById(id),
         fetchDebtMovements(id)
       ])
-      setDebt(debtData)
-      setMovements(movementsData)
+      setDebt(debtData ?? null)
+      setMovements(Array.isArray(movementsData) ? movementsData : [])
       if (debtData) {
         setEditDescription(debtData.description || '')
         setEditDueDate(debtData.due_date || '')

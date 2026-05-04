@@ -34,7 +34,9 @@ export default function InvestmentDetail() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (id) loadData()
+    if (!id) return
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadData = async () => {
@@ -44,8 +46,8 @@ export default function InvestmentDetail() {
         getInvestmentById(id),
         getPriceHistory(id)
       ])
-      setInvestment(inv)
-      setHistory(hist)
+      setInvestment(inv ?? null)
+      setHistory(Array.isArray(hist) ? hist : [])
     } catch (error) {
       console.error('Error loading investment:', error)
     } finally {

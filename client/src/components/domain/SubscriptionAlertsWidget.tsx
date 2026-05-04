@@ -22,7 +22,7 @@ export function SubscriptionAlertsWidget({ userId, organizationId }: Props) {
       setLoading(true)
       // Get subscriptions expiring in next 30 days
       const data = await getExpiringSubscriptions(userId, 30, organizationId)
-      setAlerts(data)
+      setAlerts(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error loading subscription alerts:', error)
     } finally {

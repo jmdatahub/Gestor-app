@@ -3,13 +3,13 @@ import { api } from '../lib/apiClient'
 export interface Provider { id: string; user_id: string; name: string; category?: string | null; usage_count: number; last_used_at?: string | null; created_at: string }
 
 export async function searchProviders(_userId: string, query: string, _orgId?: string | null): Promise<Provider[]> {
-  const { data } = await api.get<{ data: Provider[] }>('/api/v1/providers', { q: query })
-  return data
+  const res = await api.get<{ data: Provider[] }>('/api/v1/providers', { q: query })
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function fetchAllProviders(_userId: string): Promise<Provider[]> {
-  const { data } = await api.get<{ data: Provider[] }>('/api/v1/providers')
-  return data
+  const res = await api.get<{ data: Provider[] }>('/api/v1/providers')
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function createProvider(name: string, category?: string): Promise<Provider> {

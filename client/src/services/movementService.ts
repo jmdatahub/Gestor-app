@@ -28,7 +28,13 @@ export async function fetchMovements(_userId: string, limit = 50, offset = 0, or
   const params: Record<string, string | number> = { limit, offset }
   if (organizationId) params.org_id = organizationId
   const res = await api.get<MovementsPage>('/api/v1/movements', params, signal)
-  return { data: res.data, total: res.total ?? res.data.length, limit: res.limit ?? limit, offset: res.offset ?? offset }
+  const data = Array.isArray(res?.data) ? res.data : []
+  return {
+    data,
+    total: Number.isFinite(Number(res?.total)) ? Number(res?.total) : data.length,
+    limit: Number.isFinite(Number(res?.limit)) ? Number(res?.limit) : limit,
+    offset: Number.isFinite(Number(res?.offset)) ? Number(res?.offset) : offset,
+  }
 }
 
 export async function fetchMovementsForMonth(_userId: string, year: number, month: number, organizationId?: string | null, signal?: AbortSignal): Promise<Movement[]> {
@@ -36,13 +42,13 @@ export async function fetchMovementsForMonth(_userId: string, year: number, mont
   const end = new Date(year, month, 0).toISOString().slice(0, 10) // last day of month
   const params: Record<string, string | number> = { limit: 500, startDate: start, endDate: end }
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params, signal)
-  return data
+  const res = await api.get<{ data: Movement[] }>('/api/v1/movements', params, signal)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function fetchMovementById(id: string): Promise<Movement | null> {
-  const { data } = await api.get<{ data: Movement }>(`/api/v1/movements/${id}`)
-  return data
+  const res = await api.get<{ data: Movement }>(`/api/v1/movements/${id}`)
+  return res?.data ?? null
 }
 
 export async function createMovement(movement: Omit<Movement, 'id' | 'created_at'>): Promise<Movement> {
@@ -63,8 +69,8 @@ export async function deleteMovement(id: string): Promise<void> {
 export async function fetchCategories(_userId: string, organizationId?: string | null): Promise<Category[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Category[] }>('/api/v1/categories', params)
-  return data
+  const res = await api.get<{ data: Category[] }>('/api/v1/categories', params)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function createCategory(cat: Omit<Category, 'id'>): Promise<Category> {
@@ -76,8 +82,8 @@ export async function createCategory(cat: Omit<Category, 'id'>): Promise<Categor
 export async function fetchAccounts(_userId: string, organizationId?: string | null): Promise<Account[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Account[] }>('/api/v1/accounts', params)
-  return data
+  const res = await api.get<{ data: Account[] }>('/api/v1/accounts', params)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function acceptPendingMovement(id: string): Promise<void> {
@@ -121,8 +127,8 @@ export async function getPendingClassificationCount(
 ): Promise<number> {
   const params: Record<string, string | number> = { status: 'pending', limit: 1 }
   if (organizationId) params.org_id = organizationId
-  const { total } = await api.get<{ data: Movement[]; total: number }>('/api/v1/movements', params, signal)
-  return total ?? 0
+  const res = await api.get<{ data: Movement[]; total: number }>('/api/v1/movements', params, signal)
+  return Number(res?.total) || 0
 }
 
 export async function fetchPendingClassificationMovements(
@@ -131,8 +137,8 @@ export async function fetchPendingClassificationMovements(
 ): Promise<Movement[]> {
   const params: Record<string, string | number> = { status: 'pending', limit: 200 }
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Movement[] }>('/api/v1/movements', params)
-  return data
+  const res = await api.get<{ data: Movement[] }>('/api/v1/movements', params)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function getOrCreateCategory(

@@ -64,8 +64,10 @@ export default function AccountDetail() {
   const toast = useToast()
 
   useEffect(() => {
-    if (id) loadData()
-  }, [id, currentWorkspace])
+    if (!id || !user) return
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, user?.id, currentWorkspace?.id])
 
   const loadData = async () => {
     if (!id) return

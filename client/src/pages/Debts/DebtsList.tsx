@@ -39,15 +39,17 @@ export default function DebtsList() {
   const [formError, setFormError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!user) return
     loadDebts()
-  }, [currentWorkspace])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, currentWorkspace?.id])
 
   const loadDebts = async () => {
     if (!user) return
     try {
       const orgId = currentWorkspace?.id || null
       const data = await fetchDebts(user.id, orgId)
-      setDebts(data)
+      setDebts(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error loading debts:', error)
     } finally {

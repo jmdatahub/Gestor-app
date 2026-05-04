@@ -3,8 +3,8 @@ import { api } from '../lib/apiClient'
 export interface PaymentMethod { id: string; user_id: string; name: string; type: string; is_default: boolean; created_at: string }
 
 export async function fetchPaymentMethods(_userId: string, _orgId?: string | null): Promise<PaymentMethod[]> {
-  const { data } = await api.get<{ data: PaymentMethod[] }>('/api/v1/payment-methods')
-  return data
+  const res = await api.get<{ data: PaymentMethod[] }>('/api/v1/payment-methods')
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 // Overloaded: supports (pm: Partial<PaymentMethod>) or (userId: string, name: string)

@@ -43,7 +43,9 @@ export default function OrganizationDetail() {
   const [inviteRole, setInviteRole] = useState<AppRole>('member')
 
   useEffect(() => {
-    if (id) loadData()
+    if (!id) return
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadData = async () => {
@@ -55,10 +57,10 @@ export default function OrganizationDetail() {
         getOrganizationMembers(id),
         getOrganizationInvitations(id)
       ])
-      
-      setOrg(orgData)
-      setMembers(membersData)
-      setInvitations(invitationsData)
+
+      setOrg(orgData ?? null)
+      setMembers(Array.isArray(membersData) ? membersData : [])
+      setInvitations(Array.isArray(invitationsData) ? invitationsData : [])
       
       if (orgData) {
         setName(orgData.name)

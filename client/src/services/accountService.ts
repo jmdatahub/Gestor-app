@@ -26,8 +26,8 @@ export const accountTypes = [
 export async function getUserAccounts(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<Account[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Account[] }>('/api/v1/accounts', params, signal)
-  return data
+  const res = await api.get<{ data: Account[] }>('/api/v1/accounts', params, signal)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function getAccountById(accountId: string): Promise<AccountWithBalance | null> {
@@ -82,8 +82,8 @@ export function buildAccountTree(accounts: AccountWithBalance[]): AccountNode[] 
 export async function getAccountsWithBalances(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<AccountWithBalance[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: AccountWithBalance[] }>('/api/v1/accounts', params, signal)
-  return data
+  const res = await api.get<{ data: AccountWithBalance[] }>('/api/v1/accounts', params, signal)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function fetchAccountsSummary(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<AccountWithBalance[]> {

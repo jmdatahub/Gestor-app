@@ -33,15 +33,17 @@ export default function PendingMovements() {
   const [processing, setProcessing] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!user) return
     loadData()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   const loadData = async () => {
     if (!user) return
 
     try {
       const data = await getPendingMovements(user.id)
-      setMovements(data as unknown as PendingMovement[])
+      setMovements(Array.isArray(data) ? (data as unknown as PendingMovement[]) : [])
     } catch (error: any) {
       console.error('Error loading pending:', error)
       toast.error('Error al cargar', error?.message || 'No se pudieron cargar los movimientos pendientes')

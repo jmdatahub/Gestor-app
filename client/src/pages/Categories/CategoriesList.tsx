@@ -33,10 +33,12 @@ export default function CategoriesList() {
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // Reload when workspace changes
+  // Reload when workspace or user changes
   useEffect(() => {
+    if (!user) return
     loadCategories()
-  }, [currentWorkspace])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, currentWorkspace?.id])
 
   const loadCategories = async () => {
     if (!user) return
@@ -44,7 +46,7 @@ export default function CategoriesList() {
     try {
       const orgId = currentWorkspace?.id || null
       const data = await fetchCategories(user.id, orgId)
-      setCategories(data)
+      setCategories(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error loading categories:', error)
       toast.error('Error al cargar', 'No se pudieron cargar las categorías')

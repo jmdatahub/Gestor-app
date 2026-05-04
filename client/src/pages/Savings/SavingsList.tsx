@@ -53,10 +53,12 @@ export default function SavingsList() {
   const [contribDate, setContribDate] = useState(new Date().toISOString().split('T')[0])
   const [contribNote, setContribNote] = useState('')
 
-  // Reload when workspace changes
+  // Reload when workspace or user changes
   useEffect(() => {
+    if (!user) return
     loadGoals()
-  }, [currentWorkspace])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, currentWorkspace?.id])
 
   const loadGoals = async () => {
     if (!user) return
@@ -65,7 +67,7 @@ export default function SavingsList() {
       // Pass organization_id from workspace context
       const orgId = currentWorkspace?.id || null
       const data = await getGoalsByUser(user.id, orgId)
-      setGoals(data)
+      setGoals(Array.isArray(data) ? data : [])
     } catch (error: any) {
       console.error('Error loading goals:', error)
       toast.error(t('common.error') || 'Error', error?.message || 'No se pudieron cargar los objetivos de ahorro')

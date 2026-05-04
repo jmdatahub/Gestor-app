@@ -1,11 +1,35 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
-import { accounts } from '../db/schema.js'
-import { and, eq, isNull, asc, count, ilike, ne } from 'drizzle-orm'
+import { accounts, movements } from '../db/schema.js'
+import { and, eq, isNull, asc, count, ilike, ne, inArray, sql } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
 import { z } from 'zod'
+
+// Sums all confirmed-or-otherwise movements for the given account ids and
+// returns a per-account delta (income - expense - transfer_out + transfer_in)
+// to add on top of the stored opening balance.
+async function computeMovementDeltas(accountIds: string[]): Promise<Map<string, number>> {
+  const deltas = new Map<string, number>()
+  if (accountIds.length === 0) return deltas
+  const rows = await db
+    .select({
+      accountId: movements.accountId,
+      kind: movements.kind,
+      total: sql<string>`COALESCE(SUM(${movements.amount}), 0)`,
+    })
+    .from(movements)
+    .where(and(inArray(movements.accountId, accountIds), isNull(movements.deletedAt)))
+    .groupBy(movements.accountId, movements.kind)
+  for (const r of rows) {
+    const amt = Number(r.total) || 0
+    const prev = deltas.get(r.accountId) ?? 0
+    if (r.kind === 'income' || r.kind === 'transfer_in') deltas.set(r.accountId, prev + amt)
+    else if (r.kind === 'expense' || r.kind === 'transfer_out') deltas.set(r.accountId, prev - amt)
+  }
+  return deltas
+}
 
 const router = Router()
 
@@ -103,7 +127,13 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         .offset(offset),
       db.select({ total: count() }).from(accounts).where(whereClause),
     ])
-    res.json({ data: rows.map(mapOut), total: Number(total), limit, offset })
+    const deltas = await computeMovementDeltas(rows.map(r => r.id))
+    const enriched = rows.map(r => {
+      const stored = Number(r.balance) || 0
+      const delta = deltas.get(r.id) ?? 0
+      return { ...r, balance: (stored + delta).toFixed(2) }
+    })
+    res.json({ data: enriched.map(mapOut), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[accounts GET /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -117,7 +147,10 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
       .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!)))
       .limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
-    res.json({ data: mapOut(row) })
+    const deltas = await computeMovementDeltas([id])
+    const stored = Number((row as any).balance) || 0
+    const delta = deltas.get(id) ?? 0
+    res.json({ data: mapOut({ ...row, balance: (stored + delta).toFixed(2) }) })
   } catch (err) {
     console.error('[accounts GET /:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })

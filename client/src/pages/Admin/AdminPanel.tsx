@@ -136,8 +136,10 @@ export default function AdminPanel() {
   const [permanentDeleting, setPermanentDeleting] = useState(false)
 
   useEffect(() => {
+    if (!user) return
     checkAdminAccess()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   const checkAdminAccess = async () => {
     try {

@@ -21,8 +21,9 @@ export type OrganizationMember = WorkspaceMember
 export type PendingInvitation = OrganizationInvitation
 
 export async function getUserOrganizations(_userId: string): Promise<WorkspaceMember[]> {
-  const { data } = await api.get<{ data: (Organization & { role: AppRole })[] }>('/api/v1/organizations')
-  return data.map(o => ({ org_id: o.id, user_id: '', role: o.role, organization: o }))
+  const res = await api.get<{ data: (Organization & { role: AppRole })[] }>('/api/v1/organizations')
+  const list = Array.isArray(res?.data) ? res.data : []
+  return list.map(o => ({ org_id: o.id, user_id: '', role: o.role, organization: o }))
 }
 
 export async function createOrganization(
@@ -71,8 +72,8 @@ export async function updateMemberRole(orgId: string, userId: string, role: AppR
 }
 
 export async function getMyPendingInvitations(email: string): Promise<OrganizationInvitation[]> {
-  const { data } = await api.get<{ data: OrganizationInvitation[] }>('/api/v1/organizations/invitations/pending', { email })
-  return data
+  const res = await api.get<{ data: OrganizationInvitation[] }>('/api/v1/organizations/invitations/pending', { email })
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function createInvitation(orgId: string, inviteeEmail: string, role: AppRole): Promise<OrganizationInvitation> {
@@ -97,8 +98,8 @@ export async function getOrganizationById(id: string): Promise<Organization | nu
 }
 
 export async function getOrganizationInvitations(orgId: string): Promise<OrganizationInvitation[]> {
-  const { data } = await api.get<{ data: OrganizationInvitation[] }>(`/api/v1/organizations/${orgId}/invitations`)
-  return data
+  const res = await api.get<{ data: OrganizationInvitation[] }>(`/api/v1/organizations/${orgId}/invitations`)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function inviteMember(orgId: string, email: string, role: AppRole): Promise<OrganizationInvitation> {

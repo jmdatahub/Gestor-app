@@ -27,8 +27,8 @@ export interface SavingsContribution {
 export async function fetchSavingsGoals(_userId: string, organizationId?: string | null): Promise<SavingsGoal[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: SavingsGoal[] }>('/api/v1/savings-goals', params)
-  return data
+  const res = await api.get<{ data: SavingsGoal[] }>('/api/v1/savings-goals', params)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function getSavingsGoalById(id: string): Promise<SavingsGoal | null> {
@@ -51,8 +51,8 @@ export async function deleteSavingsGoal(id: string): Promise<void> {
 }
 
 export async function fetchSavingsContributions(goalId: string): Promise<SavingsContribution[]> {
-  const { data } = await api.get<{ data: SavingsContribution[] }>(`/api/v1/savings-goals/${goalId}/contributions`)
-  return data
+  const res = await api.get<{ data: SavingsContribution[] }>(`/api/v1/savings-goals/${goalId}/contributions`)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function addSavingsContribution(goalId: string, contribution: Omit<SavingsContribution, 'id' | 'created_at' | 'goal_id'>): Promise<SavingsContribution> {

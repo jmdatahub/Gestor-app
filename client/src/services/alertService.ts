@@ -13,8 +13,10 @@ export interface Alert {
 }
 
 export async function fetchAlerts(_userId: string, limit = 50, offset = 0): Promise<{ alerts: Alert[]; total: number }> {
-  const { data, total } = await api.get<{ data: Alert[]; total: number }>('/api/v1/alerts', { limit, offset })
-  return { alerts: data, total: total ?? data.length }
+  const res = await api.get<{ data: Alert[]; total: number }>('/api/v1/alerts', { limit, offset })
+  const alerts = Array.isArray(res?.data) ? res.data : []
+  const total = Number(res?.total)
+  return { alerts, total: Number.isFinite(total) ? total : alerts.length }
 }
 
 export async function createAlert(alert: Omit<Alert, 'id' | 'created_at'>): Promise<Alert> {

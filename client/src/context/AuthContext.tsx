@@ -77,10 +77,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const { user: u } = await api.get<{ user: AuthUser }>('/api/auth/me')
       setUser(u)
-    } catch {
-      storage.remove(TOKEN_KEY)
-      setUser(null)
-      setToken(null)
+    } catch (err) {
+      // Only clear token on 401 (genuinely invalid). Transient backend errors
+      // (5xx, network down) must NOT log the user out — they should retry.
+      const status = (err as { status?: number })?.status
+      if (status === 401) {
+        storage.remove(TOKEN_KEY)
+        setUser(null)
+        setToken(null)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -106,6 +111,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (e.key === storage.key(LOGIN_BROADCAST_KEY) && e.newValue) {
         // Another tab logged in — re-validate our state so both tabs are in sync.
         refreshUser()
+      }
+
+      // Token cleared elsewhere (e.g. apiClient handle401 in another tab) →
+      // mirror that state here so the user isn't left in a half-logged-in UI.
+      if (e.key === storage.key(TOKEN_KEY) && e.newValue == null) {
+        setUser(null)
+        setToken(null)
+        queryClient.clear()
       }
     }
 
@@ -147,6 +160,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Clear the entire React Query cache so a subsequent login (possibly with a
     // different account) never sees stale data from the previous session (fix #1).
     queryClient.clear()
+
+    // Drop the Service Worker API cache too — otherwise the next user (or this
+    // user re-logging in) can see stale GET responses keyed only by URL.
+    if (typeof caches !== 'undefined') {
+      caches.delete('api-cache').catch(() => { /* SW unavailable */ })
+    }
 
     // Clear workspace/UI preferences so next user starts fresh (fix: stale workspace cache)
     storage.remove('last_workspace_id')

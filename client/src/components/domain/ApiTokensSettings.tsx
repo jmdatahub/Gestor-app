@@ -145,13 +145,17 @@ export function ApiTokensSettings() {
   const [newlyCreatedToken, setNewlyCreatedToken] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => { loadTokens() }, [])
+  useEffect(() => {
+    if (!user) return
+    loadTokens()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   const loadTokens = async () => {
     if (!user) return
     try {
       const data = await getApiTokens(user.id)
-      setTokens(data)
+      setTokens(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error(err)
     } finally {

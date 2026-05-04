@@ -71,8 +71,10 @@ export default function AlertsList() {
   const [stats, setStats] = useState({ total: 0, unread: 0, bySeverity: { info: 0, warning: 0, danger: 0 }, thisWeek: 0 })
 
   useEffect(() => {
+    if (!user) return
     loadData()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   // Close snooze menu on outside click
   useEffect(() => {
@@ -102,9 +104,9 @@ export default function AlertsList() {
         getAlertRules(user.id),
         getAlertStats(user.id),
       ])
-      setAlerts(alertsData)
-      setRules(rulesData)
-      setStats(statsData)
+      setAlerts(Array.isArray(alertsData) ? alertsData : [])
+      setRules(Array.isArray(rulesData) ? rulesData : [])
+      setStats(statsData ?? { total: 0, unread: 0, bySeverity: { info: 0, warning: 0, danger: 0 }, thisWeek: 0 })
     } catch (error) {
       console.error('Error loading alerts:', error)
     } finally {

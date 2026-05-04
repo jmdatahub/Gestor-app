@@ -52,10 +52,12 @@ export default function RecurringList() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
 
-  // Reload when workspace changes
+  // Reload when workspace or user changes
   useEffect(() => {
+    if (!user) return
     loadData()
-  }, [currentWorkspace])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, currentWorkspace?.id])
 
   const loadData = async () => {
     if (!user) return
@@ -67,11 +69,13 @@ export default function RecurringList() {
         fetchAccounts(user.id, orgId),
         api.get<{ data: { id: string; name: string; type: string }[] }>('/api/v1/categories')
       ])
-      setRules(rulesData)
-      setAccounts(accountsData)
-      setCategories(categoriesResponse.data || [])
+      const safeRules = Array.isArray(rulesData) ? rulesData : []
+      const safeAccounts = Array.isArray(accountsData) ? accountsData : []
+      setRules(safeRules)
+      setAccounts(safeAccounts)
+      setCategories(Array.isArray(categoriesResponse?.data) ? categoriesResponse.data : [])
 
-      const generalAccount = accountsData.find(a => a.type === 'general')
+      const generalAccount = safeAccounts.find(a => a.type === 'general')
       if (generalAccount) setAccountId(generalAccount.id)
     } catch (error: any) {
       console.error('Error loading data:', error)

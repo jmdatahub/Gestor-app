@@ -50,7 +50,9 @@ export default function SavingsDetail() {
   const [editDescription, setEditDescription] = useState('')
 
   useEffect(() => {
-    if (id) loadData()
+    if (!id) return
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadData = async () => {
@@ -61,13 +63,13 @@ export default function SavingsDetail() {
         getContributionsByGoal(id)
       ])
 
-      setGoal(goalData)
-      setContributions(contribsData)
-      
+      setGoal(goalData ?? null)
+      setContributions(Array.isArray(contribsData) ? contribsData : [])
+
       // Fetch accounts separately
       if (user) {
         const accs = await getAccountsWithBalances(user.id)
-        setAccounts(accs.filter(a => a.is_active))
+        setAccounts(Array.isArray(accs) ? accs.filter(a => a.is_active) : [])
       }
       if (goalData) {
         setEditName(goalData.name)

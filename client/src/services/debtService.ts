@@ -22,8 +22,8 @@ export type CreateDebtInput = Partial<Debt> & { user_id: string; counterparty_na
 export async function fetchDebts(_userId: string, organizationId?: string | null): Promise<Debt[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const { data } = await api.get<{ data: Debt[] }>('/api/v1/debts', params)
-  return data
+  const res = await api.get<{ data: Debt[] }>('/api/v1/debts', params)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function getDebtById(id: string): Promise<Debt | null> {
@@ -46,8 +46,8 @@ export async function deleteDebt(id: string): Promise<void> {
 }
 
 export async function fetchDebtMovements(debtId: string): Promise<DebtMovement[]> {
-  const { data } = await api.get<{ data: DebtMovement[] }>(`/api/v1/debts/${debtId}/movements`)
-  return data
+  const res = await api.get<{ data: DebtMovement[] }>(`/api/v1/debts/${debtId}/movements`)
+  return Array.isArray(res?.data) ? res.data : []
 }
 
 export async function addDebtMovement(
