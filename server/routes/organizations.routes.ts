@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
-import { organizations, organizationMembers, organizationInvitations } from '../db/schema.js'
+import { organizations, organizationMembers, organizationInvitations, profiles } from '../db/schema.js'
 import { and, eq, inArray, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { z } from 'zod'
@@ -17,12 +17,57 @@ const OrgCreateSchema = z.object({
 
 const OrgPatchSchema = OrgCreateSchema.partial()
 
+// Accept both `email` (current contract) and legacy `invitee_email` from older clients.
 const InvitationCreateSchema = z.object({
-  email: z.string().email().max(200),
-  role:  z.enum(['admin', 'member', 'viewer']).optional().default('member'),
-}).strict()
+  email:         z.string().email().max(200).optional(),
+  invitee_email: z.string().email().max(200).optional(),
+  role:          z.enum(['admin', 'member', 'viewer']).optional().default('member'),
+}).strict().transform((b) => ({
+  email: (b.email ?? b.invitee_email)!,
+  role:  b.role,
+})).refine((b) => !!b.email, { message: 'email es obligatorio' })
 
 const ADMIN_ROLES = ['owner', 'admin'] as const
+
+// Drizzle returns camelCase; the client contract expects snake_case.
+function mapOrgOut(row: Record<string, any>) {
+  return {
+    id:          row.id,
+    name:        row.name,
+    slug:        row.slug ?? null,
+    owner_id:    row.ownerId      ?? row.owner_id     ?? null,
+    parent_id:   row.parentId     ?? row.parent_id    ?? null,
+    description: row.description  ?? null,
+    created_at:  row.createdAt    ?? row.created_at   ?? null,
+    updated_at:  row.updatedAt    ?? row.updated_at   ?? null,
+    deleted_at:  row.deletedAt    ?? row.deleted_at   ?? null,
+    ...(row.role !== undefined ? { role: row.role } : {}),
+  }
+}
+
+function mapInvitationOut(row: Record<string, any>) {
+  return {
+    id:           row.id,
+    org_id:       row.orgId        ?? row.org_id,
+    email:        row.email,
+    role:         row.role,
+    invited_by:   row.invitedBy    ?? row.invited_by   ?? null,
+    accepted_at:  row.acceptedAt   ?? row.accepted_at  ?? null,
+    created_at:   row.createdAt    ?? row.created_at   ?? null,
+    expires_at:   row.expiresAt    ?? row.expires_at   ?? null,
+    organization: row.organization ?? null,
+  }
+}
+
+function mapMemberOut(row: Record<string, any>) {
+  return {
+    org_id:    row.orgId  ?? row.org_id,
+    user_id:   row.userId ?? row.user_id,
+    role:      row.role,
+    joined_at: row.joinedAt ?? row.joined_at ?? null,
+    profile:   row.profile ?? null,
+  }
+}
 
 /** Verify the caller is a member of the org and return their membership row. Returns 403 if not. */
 async function requireMembership(
@@ -64,7 +109,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         .limit(limit).offset(offset),
       db.select({ total: count() }).from(organizationMembers).where(memberWhere),
     ])
-    res.json({ data: rows, total: Number(total), limit, offset })
+    res.json({ data: rows.map(mapOrgOut), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[orgs GET /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -84,7 +129,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
     const [org] = await db.insert(organizations).values({ ...body, ownerId: req.userId! }).returning()
     await db.insert(organizationMembers).values({ orgId: org.id, userId: req.userId!, role: 'owner' })
-    res.status(201).json({ data: org })
+    res.status(201).json({ data: mapOrgOut({ ...org, role: 'owner' }) })
   } catch (err) {
     console.error('[orgs POST /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -106,7 +151,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       throw err
     }
     const [updated] = await db.update(organizations).set(body).where(eq(organizations.id, req.params.id as string)).returning()
-    res.json({ data: updated })
+    res.json({ data: mapOrgOut({ ...updated, role: member.role }) })
   } catch (err) {
     console.error('[orgs PATCH /:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -135,12 +180,32 @@ router.get('/:id/members', authMiddleware, async (req: AuthRequest, res: Respons
     const offset = Number(req.query.offset) || 0
     const membersWhere = eq(organizationMembers.orgId, req.params.id as string)
     const [rows, [{ total }]] = await Promise.all([
-      db.select().from(organizationMembers)
+      db.select({
+        orgId:           organizationMembers.orgId,
+        userId:          organizationMembers.userId,
+        role:            organizationMembers.role,
+        joinedAt:        organizationMembers.joinedAt,
+        profileEmail:    profiles.email,
+        profileDisplay:  profiles.displayName,
+        profileAvatar:   profiles.avatarType,
+      }).from(organizationMembers)
+        .leftJoin(profiles, eq(profiles.id, organizationMembers.userId))
         .where(membersWhere)
         .limit(limit).offset(offset),
       db.select({ total: count() }).from(organizationMembers).where(membersWhere),
     ])
-    res.json({ data: rows, total: Number(total), limit, offset })
+    const data = rows.map(r => mapMemberOut({
+      orgId: r.orgId,
+      userId: r.userId,
+      role: r.role,
+      joinedAt: r.joinedAt,
+      profile: (r.profileEmail || r.profileDisplay || r.profileAvatar) ? {
+        email:        r.profileEmail        ?? null,
+        display_name: r.profileDisplay      ?? null,
+        avatar_type:  r.profileAvatar       ?? null,
+      } : null,
+    }))
+    res.json({ data, total: Number(total), limit, offset })
   } catch (err) {
     console.error('[orgs GET /:id/members]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -205,7 +270,7 @@ router.get('/:id/invitations', authMiddleware, async (req: AuthRequest, res: Res
         .limit(limit).offset(offset),
       db.select({ total: count() }).from(organizationInvitations).where(invWhere),
     ])
-    res.json({ data: rows, total: Number(total), limit, offset })
+    res.json({ data: rows.map(mapInvitationOut), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[orgs GET /:id/invitations]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -227,8 +292,8 @@ router.post('/:id/invitations', authMiddleware, async (req: AuthRequest, res: Re
       throw err
     }
     const [row] = await db.insert(organizationInvitations)
-      .values({ ...body, orgId: req.params.id as string, invitedBy: req.userId! }).returning()
-    res.status(201).json({ data: row })
+      .values({ email: body.email, role: body.role, orgId: req.params.id as string, invitedBy: req.userId! }).returning()
+    res.status(201).json({ data: mapInvitationOut(row) })
   } catch (err) {
     console.error('[orgs POST /:id/invitations]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -258,10 +323,30 @@ router.get('/invitations/pending', authMiddleware, async (req: AuthRequest, res:
   try {
     const email = req.query.email as string
     if (!email) { res.json({ data: [] }); return }
-    const rows = await db.select().from(organizationInvitations)
+    const rows = await db.select({
+      id:         organizationInvitations.id,
+      orgId:      organizationInvitations.orgId,
+      email:      organizationInvitations.email,
+      role:       organizationInvitations.role,
+      invitedBy:  organizationInvitations.invitedBy,
+      expiresAt:  organizationInvitations.expiresAt,
+      createdAt:  organizationInvitations.createdAt,
+      orgName:    organizations.name,
+    }).from(organizationInvitations)
+      .leftJoin(organizations, eq(organizations.id, organizationInvitations.orgId))
       .where(eq(organizationInvitations.email, email))
       .limit(50)
-    res.json({ data: rows })
+    const data = rows.map(r => mapInvitationOut({
+      id: r.id,
+      orgId: r.orgId,
+      email: r.email,
+      role: r.role,
+      invitedBy: r.invitedBy,
+      expiresAt: r.expiresAt,
+      createdAt: r.createdAt,
+      organization: r.orgName ? { id: r.orgId, name: r.orgName } : null,
+    }))
+    res.json({ data })
   } catch (err) {
     console.error('[orgs GET /invitations/pending]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -337,7 +422,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     ])
     if (!self) return  // requireMembership already sent 403
     if (!row) { res.status(404).json({ error: 'Organización no encontrada' }); return }
-    res.json({ data: row })
+    res.json({ data: mapOrgOut({ ...row, role: self.role }) })
   } catch (err) {
     console.error('[orgs GET /:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })

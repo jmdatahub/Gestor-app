@@ -58,8 +58,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       if (!ok) return
     }
     const filter = orgId
-      ? eq(savingsGoals.organizationId, orgId)
-      : and(eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.organizationId))
+      ? and(eq(savingsGoals.organizationId, orgId), isNull(savingsGoals.deletedAt))
+      : and(eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.organizationId), isNull(savingsGoals.deletedAt))
     const limit = Math.min(Number(req.query.limit) || 100, 500)
     const offset = Number(req.query.offset) || 0
     const [rows, [{ total }]] = await Promise.all([
@@ -78,7 +78,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const row = (await db.select().from(savingsGoals)
-      .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Meta no encontrada' }); return }
     res.json({ data: mapOut(row as any) })
   } catch (err) {
@@ -135,9 +135,12 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
-      .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Meta no encontrada' }); return }
-    await db.delete(savingsGoals).where(eq(savingsGoals.id, req.params.id as string))
+    const actorEmail = req.userEmail ?? null
+    await db.update(savingsGoals)
+      .set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any)
+      .where(eq(savingsGoals.id, req.params.id as string))
     res.json({ ok: true })
   } catch (err) {
     console.error('[savings DELETE /:id]', err)
@@ -149,7 +152,7 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 router.get('/:goalId/contributions', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const goal = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
-      .where(and(eq(savingsGoals.id, req.params.goalId as string), eq(savingsGoals.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(savingsGoals.id, req.params.goalId as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
     if (!goal) { res.status(404).json({ error: 'Meta no encontrada' }); return }
     const limit = Math.min(Number(req.query.limit) || 100, 500)
     const offset = Number(req.query.offset) || 0
@@ -171,7 +174,7 @@ router.get('/:goalId/contributions', authMiddleware, async (req: AuthRequest, re
 router.post('/:goalId/contributions', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const goal = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
-      .where(and(eq(savingsGoals.id, req.params.goalId as string), eq(savingsGoals.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(savingsGoals.id, req.params.goalId as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
     if (!goal) { res.status(404).json({ error: 'Meta no encontrada' }); return }
     const amount = req.body.amount
     const date   = req.body.date

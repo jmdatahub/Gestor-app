@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { SettingsProvider } from '../context/SettingsContext'
+import { AuthProvider } from '../context/AuthContext'
 import { I18nProvider } from '../i18n/I18nContext'
 import { ToastProvider } from '../components/Toast'
 
@@ -19,13 +20,15 @@ import { ToastProvider } from '../components/Toast'
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return (
     <BrowserRouter>
-      <SettingsProvider>
-        <I18nProvider>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
-        </I18nProvider>
-      </SettingsProvider>
+      <AuthProvider>
+        <SettingsProvider>
+          <I18nProvider>
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </I18nProvider>
+        </SettingsProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }
@@ -152,11 +155,13 @@ describe('Context Providers - Smoke Tests', () => {
     }
     
     render(
-      <SettingsProvider>
-        <TestComponent />
-      </SettingsProvider>
+      <AuthProvider>
+        <SettingsProvider>
+          <TestComponent />
+        </SettingsProvider>
+      </AuthProvider>
     )
-    
+
     // Should have default theme
     expect(screen.getByTestId('theme')).toHaveTextContent('light')
   })
@@ -170,11 +175,13 @@ describe('Context Providers - Smoke Tests', () => {
     }
     
     render(
-      <SettingsProvider>
-        <I18nProvider>
-          <TestComponent />
-        </I18nProvider>
-      </SettingsProvider>
+      <AuthProvider>
+        <SettingsProvider>
+          <I18nProvider>
+            <TestComponent />
+          </I18nProvider>
+        </SettingsProvider>
+      </AuthProvider>
     )
     
     // Should have translated text

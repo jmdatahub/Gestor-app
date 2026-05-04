@@ -580,9 +580,14 @@ router.post('/movements/:id/restore', async (req: Request, res: Response) => {
 
 router.delete('/movements/:id', async (req: Request, res: Response) => {
   const ctx = await resolveOrg(res); if (!ctx) return
+  const actorEmail = getActorEmail(req)
   try {
-    if (isHard(req)) await db.execute(sql`DELETE FROM movements WHERE id = ${req.params.id} AND organization_id = ${ctx.orgId}`)
-    else { const actor = getActorEmail(req); await db.execute(sql`UPDATE movements SET deleted_at = NOW() ${actor ? sql`, updated_by_email = ${actor}` : sql``} WHERE id = ${req.params.id} AND organization_id = ${ctx.orgId}`) }
+    if (isHard(req)) {
+      if (actorEmail) console.log(`[crm-sync/movements] hard delete id=${req.params.id} by ${actorEmail}`)
+      await db.execute(sql`DELETE FROM movements WHERE id = ${req.params.id} AND organization_id = ${ctx.orgId}`)
+    } else {
+      await db.execute(sql`UPDATE movements SET deleted_at = NOW() ${actorEmail ? sql`, updated_by_email = ${actorEmail}` : sql``} WHERE id = ${req.params.id} AND organization_id = ${ctx.orgId}`)
+    }
     return res.status(200).json({ success: true })
   } catch (err) { return handleError(res, err, 'movements') }
 })

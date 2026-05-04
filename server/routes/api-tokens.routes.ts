@@ -9,11 +9,25 @@ import { z } from 'zod'
 
 const router = Router()
 
+// Drizzle returns camelCase; the client contract expects snake_case.
+function mapOut(row: Record<string, any>) {
+  return {
+    ...row,
+    user_id:         row.userId         ?? row.user_id,
+    organization_id: row.organizationId ?? row.organization_id ?? null,
+    token_hash:      row.tokenHash      ?? row.token_hash      ?? null,
+    last_used_at:    row.lastUsedAt     ?? row.last_used_at    ?? null,
+    expires_at:      row.expiresAt      ?? row.expires_at      ?? null,
+    created_at:      row.createdAt      ?? row.created_at,
+  }
+}
+
 const TokenCreateSchema = z.object({
-  name:           z.string().min(1).max(100),
-  scopes:         z.array(z.string().max(80)).optional().default([]),
-  organizationId: z.string().uuid().optional().nullable(),
-}).strict()
+  name:            z.string().min(1).max(100),
+  scopes:          z.array(z.string().max(80)).optional().default([]),
+  organization_id: z.string().uuid().optional().nullable(),
+  organizationId:  z.string().uuid().optional().nullable(),
+})
 
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -27,7 +41,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         .limit(limit).offset(offset),
       db.select({ total: count() }).from(apiTokens).where(whereClause),
     ])
-    res.json({ data: rows, total: Number(total), limit, offset })
+    res.json({ data: rows.map(mapOut), total: Number(total), limit, offset })
   } catch (err) {
     console.error('[api-tokens GET /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -47,9 +61,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
     const rawToken = crypto.randomBytes(32).toString('hex')
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')
+    const orgId = body.organization_id ?? body.organizationId ?? null
     const [row] = await db.insert(apiTokens)
-      .values({ name: body.name, scopes: body.scopes, organizationId: body.organizationId ?? null, userId: req.userId!, tokenHash }).returning()
-    res.status(201).json({ data: { ...row, token: rawToken } })
+      .values({ name: body.name, scopes: body.scopes, organizationId: orgId, userId: req.userId!, tokenHash }).returning()
+    res.status(201).json({ data: { ...mapOut(row), token: rawToken } })
   } catch (err) {
     console.error('[api-tokens POST /]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -62,7 +77,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       .where(and(eq(apiTokens.id, req.params.id as string), eq(apiTokens.userId, req.userId!))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Token no encontrado' }); return }
     const [updated] = await db.update(apiTokens).set({ scopes: req.body.scopes }).where(eq(apiTokens.id, req.params.id as string)).returning()
-    res.json({ data: updated })
+    res.json({ data: mapOut(updated) })
   } catch (err) {
     console.error('[api-tokens PATCH /:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })

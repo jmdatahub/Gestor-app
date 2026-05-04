@@ -69,16 +69,16 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     borderRadius: '12px',
     overflow: 'hidden',
     zIndex: 9999,
-    backgroundColor: '#1E293B',
-    border: '1px solid #334155',
-    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'var(--bg-card)',
+    border: '1px solid var(--border-color)',
+    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15)',
     animation: 'dropdown-in 0.2s ease-out'
   }
 
   const sectionHeaderStyle: React.CSSProperties = {
     padding: '12px',
-    backgroundColor: '#0F172A',
-    borderBottom: '1px solid #334155',
+    backgroundColor: 'var(--bg-surface)',
+    borderBottom: '1px solid var(--border-color)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between'
@@ -92,8 +92,8 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     padding: '10px 12px',
     borderRadius: '8px',
     border: 'none',
-    backgroundColor: isActive ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
-    color: isActive ? '#818CF8' : '#CBD5E1',
+    backgroundColor: isActive ? 'var(--primary-soft)' : 'transparent',
+    color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
     cursor: 'pointer',
     textAlign: 'left',
     transition: 'all 0.15s ease'
@@ -106,8 +106,8 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: isActive ? '#4F46E5' : '#334155',
-    color: isActive ? '#FFFFFF' : '#94A3B8',
+    backgroundColor: isActive ? 'var(--primary)' : 'var(--bg-surface-hover)',
+    color: isActive ? '#FFFFFF' : 'var(--text-muted)',
     flexShrink: 0
   })
 
@@ -119,8 +119,8 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     padding: '8px',
     borderRadius: '12px',
     border: '1px solid',
-    borderColor: isOpen ? '#334155' : 'transparent',
-    backgroundColor: isOpen ? '#1E293B' : 'transparent',
+    borderColor: isOpen ? 'var(--sidebar-border)' : 'transparent',
+    backgroundColor: isOpen ? 'var(--bg-sidebar-hover)' : 'transparent',
     cursor: 'pointer',
     transition: 'all 0.2s ease'
   }
@@ -132,7 +132,7 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: currentWorkspace ? 'linear-gradient(135deg, #6366F1 0%, #A855F7 100%)' : '#334155',
+    background: currentWorkspace ? 'linear-gradient(135deg, #6366F1 0%, #A855F7 100%)' : 'var(--bg-surface-hover)',
     color: '#FFFFFF',
     flexShrink: 0,
     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
@@ -147,7 +147,7 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     borderRadius: '8px',
     border: 'none',
     backgroundColor: 'transparent',
-    color: '#94A3B8',
+    color: 'var(--text-muted)',
     fontSize: '11px',
     fontWeight: 500,
     cursor: 'pointer',
@@ -160,10 +160,10 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
     <div ref={menuRef} style={menuContainerStyle}>
        {/* Header */}
        <div style={sectionHeaderStyle}>
-         <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8', letterSpacing: '0.05em' }}>
+         <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
            Cambiar Espacio
          </span>
-         <span style={{ fontSize: '10px', backgroundColor: 'rgba(99, 102, 241, 0.2)', color: '#818CF8', padding: '2px 8px', borderRadius: '999px', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+         <span style={{ fontSize: '10px', backgroundColor: 'var(--primary-soft)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '999px', border: '1px solid var(--primary-border, var(--primary-soft))' }}>
            {workspaces.length + 1}
          </span>
        </div>
@@ -175,21 +175,21 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
           <button
             onClick={() => handleSwitch(null)}
             style={itemStyle(!currentWorkspace)}
-            onMouseEnter={(e) => { if (currentWorkspace) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)' }}
+            onMouseEnter={(e) => { if (currentWorkspace) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)' }}
             onMouseLeave={(e) => { if (currentWorkspace) e.currentTarget.style.backgroundColor = 'transparent' }}
           >
             <div style={avatarStyle(!currentWorkspace)}>
               <User size={16} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: !currentWorkspace ? '#FFFFFF' : '#CBD5E1' }}>Personal</div>
-              <div style={{ fontSize: '10px', color: '#64748B' }}>Espacio privado</div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: !currentWorkspace ? 'var(--primary)' : 'var(--text-primary)' }}>Personal</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Espacio privado</div>
             </div>
-            {!currentWorkspace && <Check size={14} style={{ color: '#818CF8' }} strokeWidth={3} />}
+            {!currentWorkspace && <Check size={14} style={{ color: 'var(--primary)' }} strokeWidth={3} />}
           </button>
 
           {workspaces.length > 0 && (
-            <div style={{ padding: '12px 12px 6px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B' }}>
+            <div style={{ padding: '12px 12px 6px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>
               Organizaciones
             </div>
           )}
@@ -202,31 +202,31 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
                 key={ws.org_id}
                 onClick={() => handleSwitch(ws.org_id)}
                 style={itemStyle(isActive)}
-                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)' }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)' }}
                 onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent' }}
               >
                 <div style={avatarStyle(isActive)}>
                   <Building size={16} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: isActive ? '#FFFFFF' : '#CBD5E1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: isActive ? 'var(--primary)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {ws.organization.name}
                   </div>
-                  <div style={{ fontSize: '10px', color: '#64748B' }}>Organización</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Organización</div>
                 </div>
-                {isActive && <Check size={14} style={{ color: '#818CF8' }} strokeWidth={3} />}
+                {isActive && <Check size={14} style={{ color: 'var(--primary)' }} strokeWidth={3} />}
               </button>
             )
           })}
        </div>
 
        {/* Footer */}
-       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', padding: '6px', backgroundColor: '#0F172A', borderTop: '1px solid #334155' }}>
+       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', padding: '6px', backgroundColor: 'var(--bg-surface)', borderTop: '1px solid var(--border-color)' }}>
           <button
             onClick={() => { setIsOpen(false); navigate('/app/profile'); }}
             style={footerActionStyle}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)'; e.currentTarget.style.color = '#818CF8'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary-soft)'; e.currentTarget.style.color = 'var(--primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
           >
              <User size={14} />
              <span>Perfil</span>
@@ -234,18 +234,18 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
           <button
             onClick={() => { setIsOpen(false); navigate('/app/organizations'); }}
             style={footerActionStyle}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.color = '#FFFFFF'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
           >
              <Plus size={14} />
              <span>Crear</span>
           </button>
-          
-          <button 
+
+          <button
            onClick={handleSignOut}
            style={footerActionStyle}
            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#F87171'; }}
-           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94A3B8'; }}
+           onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
           >
            <LogOut size={14} />
            <span>Salir</span>
@@ -258,7 +258,7 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
   return (
     <>
       {/* Trigger Button */}
-      <button 
+      <button
         ref={triggerRef}
         onClick={() => setIsOpen(!isOpen)}
         style={triggerButtonStyle}
@@ -272,16 +272,16 @@ const SidebarUserMenu: React.FC<SidebarUserMenuProps> = ({ isCollapsed }) => {
         {!isCollapsed && (
           <>
             <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#F8FAF9', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
                 {currentWorkspace && <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#6366F1' }}></div>}
               </div>
-              <div style={{ fontSize: '10px', fontWeight: 500, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: '10px', fontWeight: 500, color: '#94A3B8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {displaySubtext}
               </div>
             </div>
 
-            <div style={{ color: '#475569', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+            <div style={{ color: '#94A3B8', transition: 'transform 0.2s ease', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
               <ChevronsUpDown size={14} />
             </div>
           </>

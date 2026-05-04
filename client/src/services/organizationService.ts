@@ -7,10 +7,10 @@ export interface WorkspaceMember {
   profile?: { display_name?: string | null; email?: string | null; avatar_type?: string | null } | null
 }
 export interface OrganizationInvitation {
-  id: string; org_id: string; invitee_email: string; role: AppRole
-  invited_by: string; accepted_at: string | null; created_at: string
-  // Compat aliases
-  email?: string
+  id: string; org_id: string; email: string; role: AppRole
+  invited_by: string | null; accepted_at: string | null; created_at: string
+  // Compat alias for older callers
+  invitee_email?: string
   organization?: { id: string; name: string } | null
 }
 
@@ -76,7 +76,7 @@ export async function getMyPendingInvitations(email: string): Promise<Organizati
 }
 
 export async function createInvitation(orgId: string, inviteeEmail: string, role: AppRole): Promise<OrganizationInvitation> {
-  const { data } = await api.post<{ data: OrganizationInvitation }>(`/api/v1/organizations/${orgId}/invitations`, { invitee_email: inviteeEmail, role })
+  const { data } = await api.post<{ data: OrganizationInvitation }>(`/api/v1/organizations/${orgId}/invitations`, { email: inviteeEmail, role })
   return data
 }
 
@@ -98,8 +98,7 @@ export async function getOrganizationById(id: string): Promise<Organization | nu
 
 export async function getOrganizationInvitations(orgId: string): Promise<OrganizationInvitation[]> {
   const { data } = await api.get<{ data: OrganizationInvitation[] }>(`/api/v1/organizations/${orgId}/invitations`)
-  // Normalize email field
-  return data.map(inv => ({ ...inv, email: inv.email ?? inv.invitee_email }))
+  return data
 }
 
 export async function inviteMember(orgId: string, email: string, role: AppRole): Promise<OrganizationInvitation> {

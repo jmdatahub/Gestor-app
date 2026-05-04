@@ -44,8 +44,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       if (!ok) return
     }
     const filter = orgId
-      ? eq(categories.organizationId, orgId)
-      : and(eq(categories.userId, req.userId!), isNull(categories.organizationId))
+      ? and(eq(categories.organizationId, orgId), isNull(categories.deletedAt))
+      : and(eq(categories.userId, req.userId!), isNull(categories.organizationId), isNull(categories.deletedAt))
     const limit = Math.min(Number(req.query.limit) || 200, 1000)
     const offset = Number(req.query.offset) || 0
     const [rows, [{ total }]] = await Promise.all([
@@ -65,7 +65,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 router.get('/:id/usage', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: categories.id }).from(categories)
-      .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!), isNull(categories.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Categoría no encontrada' }); return }
 
     const [result] = await db.select({ count: count() }).from(movements)
@@ -80,7 +80,7 @@ router.get('/:id/usage', authMiddleware, async (req: AuthRequest, res: Response)
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const row = (await db.select().from(categories)
-      .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!), isNull(categories.deletedAt))).limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Categoría no encontrada' }); return }
     res.json({ data: mapOut(row) })
   } catch (err) {
@@ -107,8 +107,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
     // Duplicate name check (case-insensitive, same kind, same user/org scope)
     const orgFilter = body.organizationId
-      ? eq(categories.organizationId, body.organizationId)
-      : and(eq(categories.userId, req.userId!), isNull(categories.organizationId))
+      ? and(eq(categories.organizationId, body.organizationId), isNull(categories.deletedAt))
+      : and(eq(categories.userId, req.userId!), isNull(categories.organizationId), isNull(categories.deletedAt))
     const duplicate = (await db.select({ id: categories.id }).from(categories)
       .where(and(orgFilter, ilike(categories.name, body.name), eq(categories.kind, body.kind))).limit(1))[0]
     if (duplicate) {
@@ -144,8 +144,8 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       const checkName = body.name ?? current.name
       const checkKind = body.kind ?? current.kind
       const orgFilter = current.organizationId
-        ? eq(categories.organizationId, current.organizationId)
-        : and(eq(categories.userId, req.userId!), isNull(categories.organizationId))
+        ? and(eq(categories.organizationId, current.organizationId), isNull(categories.deletedAt))
+        : and(eq(categories.userId, req.userId!), isNull(categories.organizationId), isNull(categories.deletedAt))
       const duplicate = (await db.select({ id: categories.id }).from(categories)
         .where(and(orgFilter, ilike(categories.name, checkName), eq(categories.kind, checkKind), ne(categories.id, req.params.id as string))).limit(1))[0]
       if (duplicate) {
@@ -164,9 +164,12 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: categories.id }).from(categories)
-      .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!), isNull(categories.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Categoría no encontrada' }); return }
-    await db.delete(categories).where(eq(categories.id, req.params.id as string))
+    const actorEmail = req.userEmail ?? null
+    await db.update(categories)
+      .set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any)
+      .where(eq(categories.id, req.params.id as string))
     res.json({ ok: true })
   } catch (err) {
     console.error('[categories DELETE /:id]', err)

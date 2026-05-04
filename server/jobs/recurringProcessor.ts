@@ -58,7 +58,12 @@ export async function processRecurringRules(): Promise<void> {
 
       const occurrenceDate = rule.nextOccurrence ?? todayStr
 
-      // Insert a pending movement generated from this rule
+      // Insert a pending movement generated from this rule.
+      // Propagate audit ownership from the rule's creator so the movement
+      // is traceable back to a human; fall back to a clearly synthetic
+      // marker so it never lands as NULL.
+      const ruleActorEmail = rule.createdByEmail ?? 'system@recurring'
+
       await db.insert(movements).values({
         userId: rule.userId,
         date: occurrenceDate,
@@ -70,6 +75,8 @@ export async function processRecurringRules(): Promise<void> {
         status: 'pending',
         recurringRuleId: rule.id,
         organizationId: rule.organizationId ?? undefined,
+        createdByEmail: ruleActorEmail,
+        updatedByEmail: ruleActorEmail,
       })
 
       // Advance next_occurrence by one frequency step
