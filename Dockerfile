@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
 # ─── Builder: install deps + build client ─────────────────────────────────────
-FROM node:24-slim AS builder
+# Full image (not slim) so native addons like bcrypt have Python + gcc available
+# in case prebuilt binaries are missing. The runtime stage stays slim.
+FROM node:24 AS builder
 WORKDIR /app
 
 ARG VITE_API_URL
@@ -10,12 +12,12 @@ ARG VITE_APP_URL
 # Cache server dep layer — only re-runs when package files change.
 # Full npm ci (with scripts) is needed for native addons like bcrypt.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund || (echo "npm ci failed — falling back to npm install" && npm install --no-audit --no-fund)
 
 # Cache client dep layer — only re-runs when client package files change.
 # No native addons in the client, so --ignore-scripts is safe and faster.
 COPY client/package.json client/package-lock.json ./client/
-RUN cd client && npm ci --ignore-scripts
+RUN cd client && (npm ci --ignore-scripts --no-audit --no-fund || (echo "client npm ci failed — falling back to npm install" && npm install --ignore-scripts --no-audit --no-fund))
 
 COPY . .
 RUN cd client && VITE_API_URL=$VITE_API_URL VITE_APP_URL=$VITE_APP_URL npm run build
