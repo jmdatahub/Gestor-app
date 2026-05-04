@@ -610,7 +610,7 @@ export default function OrganizationsList() {
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap'
                               }}>
-                                {member.profile?.display_name || member.profile?.email || `Usuario ${member.user_id.slice(0, 8)}...`}
+                                {member.profile?.display_name || member.profile?.email || `Usuario ${(member.user_id ?? '').slice(0, 8) || '????'}...`}
                               </p>
                             </div>
                             

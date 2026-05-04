@@ -51,8 +51,15 @@ export async function deleteOrganization(id: string): Promise<void> {
 }
 
 export async function getOrganizationMembers(orgId: string): Promise<WorkspaceMember[]> {
-  const { data } = await api.get<{ data: WorkspaceMember[] }>(`/api/v1/organizations/${orgId}/members`)
-  return data
+  // Server returns Drizzle camelCase (userId/orgId); normalize to snake_case for the client.
+  const { data } = await api.get<{ data: any[] }>(`/api/v1/organizations/${orgId}/members`)
+  return (data ?? []).map((m: any) => ({
+    org_id:  m.org_id  ?? m.orgId  ?? orgId,
+    user_id: m.user_id ?? m.userId ?? '',
+    role:    m.role,
+    organization: m.organization,
+    profile: m.profile,
+  }))
 }
 
 export async function removeMember(orgId: string, userId: string): Promise<void> {

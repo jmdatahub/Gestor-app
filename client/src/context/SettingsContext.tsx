@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react'
 import { useAuth } from './AuthContext'
 import { storage } from '../lib/storage'
 
@@ -121,20 +121,23 @@ interface SettingsProviderProps {
 export function SettingsProvider({ children }: SettingsProviderProps) {
   const { user } = useAuth()
   const [settings, setSettings] = useState<AppSettings>(loadSettingsFromStorage)
+  const prevUserRef = useRef<typeof user | null>(user)
 
   // ---------------------------------------------------------------------------
-  // Reset settings when the user logs out (fix #3).
-  // We reset in-memory state to defaults so the next user that logs in (in the
-  // same tab) starts with a clean slate. The localStorage entry is left intact
-  // so the PREVIOUS user's preferences are still there when they log back in.
-  // If you want a full wipe instead, call `storage.remove(STORAGE_KEY)` here.
+  // React to user transitions:
+  // - On initial mount we already have the persisted settings from
+  //   loadSettingsFromStorage; do NOT reset to defaults just because auth is
+  //   still loading (that produces a flash of light theme on every reload).
+  // - When the user truly signs out (transition from logged-in → null), reset
+  //   in-memory state so the next user starts clean. Storage stays intact.
+  // - When a different user logs in, reload from storage.
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!user) {
+    const prev = prevUserRef.current
+    prevUserRef.current = user
+    if (prev && !user) {
       setSettings(defaultSettings)
-    } else {
-      // Re-load persisted settings when a user logs in (fix #9 – at minimum
-      // we load from localStorage; server-sync can be layered on top of this).
+    } else if (user && (!prev || prev.id !== user.id)) {
       setSettings(loadSettingsFromStorage())
     }
   }, [user])
