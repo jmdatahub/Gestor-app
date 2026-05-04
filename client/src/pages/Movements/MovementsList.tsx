@@ -269,9 +269,12 @@ export default function MovementsList() {
       const provs = await searchProviders(user.id, '', currentWorkspace?.id)
       setProviders(Array.isArray(provs) ? provs : [])
 
-      // Set default account (general)
-      const generalAccount = safeAccounts.find(a => a.type === 'general')
+      // Set default account: prefer a leaf (non-parent) account so movements
+      // never land on a category-style parent that can't be reconciled to a real account.
+      const leafAccounts = safeAccounts.filter(a => !a.is_parent)
+      const generalAccount = leafAccounts.find(a => a.type === 'general')
       if (generalAccount) setAccountId(generalAccount.id)
+      else if (leafAccounts.length > 0) setAccountId(leafAccounts[0].id)
       else if (safeAccounts.length > 0) setAccountId(safeAccounts[0].id)
     } catch (err) {
       console.error('Error loading data:', err)
@@ -982,7 +985,18 @@ export default function MovementsList() {
                       </span>
                     </td>
                     <td data-label="Cuenta" style={{ padding: '0.75rem 1.5rem', color: 'var(--text-secondary)' }}>
-                      {mov.account?.name || '-'}
+                      <div className="d-flex items-center gap-2 flex-wrap">
+                        <span>{mov.account?.name || '-'}</span>
+                        {accounts.find(a => a.id === mov.account_id)?.is_parent && (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
+                            style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#b45309' }}
+                            title="Este movimiento está asignado a una cuenta padre. Edítalo para asignarlo a una subcuenta concreta."
+                          >
+                            Pendiente de asignar
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td data-label="Categoría" style={{ padding: '0.75rem 1.5rem' }}>
                       {mov.category ? (
@@ -1148,7 +1162,8 @@ export default function MovementsList() {
                     options={[
                       ...flatAccounts.map(acc => ({
                         value: acc.id,
-                        label: '  '.repeat(acc.level || 0) + ((acc.level || 0) > 0 ? '— ' : '') + acc.name
+                        label: '  '.repeat(acc.level || 0) + ((acc.level || 0) > 0 ? '— ' : '') + acc.name + (acc.is_parent ? ' (elige una subcuenta)' : ''),
+                        disabled: !!acc.is_parent,
                       })),
                       { value: '__create_new__', label: '+ ' + t('accounts.new') }
                     ]}

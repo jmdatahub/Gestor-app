@@ -14,7 +14,11 @@ export interface Movement {
   category?: { id: string; name: string; color?: string }
   creator?: { id: string; display_name: string | null; email: string | null } | null
 }
-export interface Account { id: string; user_id: string; organization_id?: string | null; name: string; type: string }
+export interface Account {
+  id: string; user_id: string; organization_id?: string | null; name: string; type: string
+  parent_account_id?: string | null
+  is_parent?: boolean; pending_movements_count?: number
+}
 export interface Category { id: string; user_id: string; organization_id?: string | null; name: string; kind: string; color?: string; description?: string | null }
 
 export interface MovementsPage {

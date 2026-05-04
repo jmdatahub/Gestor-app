@@ -16,6 +16,8 @@ export const accountSchema = z.object({
   color: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
   currency: z.string().nullable().optional(),
+  is_parent: z.boolean().optional(),
+  pending_movements_count: z.number().optional(),
 })
 
 export const accountWithBalanceSchema = accountSchema.extend({

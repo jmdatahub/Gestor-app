@@ -367,6 +367,15 @@ export default function AccountsList() {
                         <span className="hover:text-primary hover:underline">
                           {acc.name}
                         </span>
+                        {acc.is_parent && (acc.pending_movements_count ?? 0) > 0 && (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
+                            style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#b45309' }}
+                            title="Esta cuenta padre tiene movimientos asignados directamente. Reasígnalos a una subcuenta concreta desde la página de Movimientos."
+                          >
+                            {acc.pending_movements_count} pendiente{(acc.pending_movements_count ?? 0) === 1 ? '' : 's'}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td style={{ padding: '0.75rem 1.5rem' }}>

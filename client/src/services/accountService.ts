@@ -7,6 +7,7 @@ export interface Account {
   description?: string | null; is_active: boolean; parent_account_id?: string | null
   created_at: string; updated_at: string | null; color?: string | null; icon?: string | null
   currency?: string | null; balance?: number | null
+  is_parent?: boolean; pending_movements_count?: number
 }
 export interface AccountWithBalance extends Account { balance: number }
 export interface AccountNode extends AccountWithBalance { children: AccountNode[]; level: number }

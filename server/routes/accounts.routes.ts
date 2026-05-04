@@ -31,6 +31,20 @@ async function computeMovementDeltas(accountIds: string[]): Promise<Map<string, 
   return deltas
 }
 
+// For each account id, returns how many active movements are attached directly
+// to it. Combined with is_parent, this surfaces "pending reassignment" on the UI.
+async function computeMovementCounts(accountIds: string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  if (accountIds.length === 0) return counts
+  const rows = await db
+    .select({ accountId: movements.accountId, c: count() })
+    .from(movements)
+    .where(and(inArray(movements.accountId, accountIds), isNull(movements.deletedAt)))
+    .groupBy(movements.accountId)
+  for (const r of rows) counts.set(r.accountId, Number(r.c) || 0)
+  return counts
+}
+
 const router = Router()
 
 // Drizzle returns camelCase; the client contract expects snake_case.
@@ -127,11 +141,27 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         .offset(offset),
       db.select({ total: count() }).from(accounts).where(whereClause),
     ])
-    const deltas = await computeMovementDeltas(rows.map(r => r.id))
+    const ids = rows.map(r => r.id)
+    const [deltas, counts] = await Promise.all([
+      computeMovementDeltas(ids),
+      computeMovementCounts(ids),
+    ])
+    const childCount = new Map<string, number>()
+    for (const r of rows) {
+      const p = (r as any).parentAccountId as string | null
+      if (p) childCount.set(p, (childCount.get(p) ?? 0) + 1)
+    }
     const enriched = rows.map(r => {
       const stored = Number(r.balance) || 0
       const delta = deltas.get(r.id) ?? 0
-      return { ...r, balance: (stored + delta).toFixed(2) }
+      const isParent = (childCount.get(r.id) ?? 0) > 0
+      const movementCount = counts.get(r.id) ?? 0
+      return {
+        ...r,
+        balance: (stored + delta).toFixed(2),
+        is_parent: isParent,
+        pending_movements_count: isParent ? movementCount : 0,
+      }
     })
     res.json({ data: enriched.map(mapOut), total: Number(total), limit, offset })
   } catch (err) {
@@ -147,10 +177,21 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
       .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!)))
       .limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
-    const deltas = await computeMovementDeltas([id])
+    const [deltas, counts, [{ children }]] = await Promise.all([
+      computeMovementDeltas([id]),
+      computeMovementCounts([id]),
+      db.select({ children: count() }).from(accounts)
+        .where(and(eq(accounts.parentAccountId, id), isNull(accounts.deletedAt))),
+    ])
     const stored = Number((row as any).balance) || 0
     const delta = deltas.get(id) ?? 0
-    res.json({ data: mapOut({ ...row, balance: (stored + delta).toFixed(2) }) })
+    const isParent = Number(children) > 0
+    res.json({ data: mapOut({
+      ...row,
+      balance: (stored + delta).toFixed(2),
+      is_parent: isParent,
+      pending_movements_count: isParent ? (counts.get(id) ?? 0) : 0,
+    }) })
   } catch (err) {
     console.error('[accounts GET /:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })

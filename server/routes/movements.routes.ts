@@ -3,6 +3,15 @@ import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { movements, accounts, categories } from '../db/schema.js'
 import { eq, and, desc, gte, lte, isNull, sql, count, getTableColumns } from 'drizzle-orm'
+
+// Returns true if the account has at least one non-deleted child account.
+// Movements should be attached to leaf accounts so parent balances aren't
+// double-counted and so the user always sees which real account moved.
+async function isParentAccount(accountId: string): Promise<boolean> {
+  const [{ c }] = await db.select({ c: count() }).from(accounts)
+    .where(and(eq(accounts.parentAccountId, accountId), isNull(accounts.deletedAt)))
+  return Number(c) > 0
+}
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
 import { z } from 'zod'
@@ -248,6 +257,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       if (!ok) return
     }
 
+    if (await isParentAccount(String(mapped.accountId))) {
+      res.status(400).json({ error: 'Esta cuenta tiene subcuentas; selecciona una subcuenta concreta para asignar el movimiento.' }); return
+    }
+
     const actorEmail = req.userEmail ?? null
     const [row] = await db.insert(movements).values({ ...mapped, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
@@ -289,6 +302,10 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
     if (patch.organizationId) {
       const ok = await assertOrgMember(req, res, String(patch.organizationId))
       if (!ok) return
+    }
+
+    if (patch.accountId && await isParentAccount(String(patch.accountId))) {
+      res.status(400).json({ error: 'Esta cuenta tiene subcuentas; selecciona una subcuenta concreta para asignar el movimiento.' }); return
     }
 
     const actorEmail = req.userEmail ?? null
