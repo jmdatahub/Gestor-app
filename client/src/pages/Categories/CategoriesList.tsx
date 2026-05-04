@@ -133,7 +133,7 @@ export default function CategoriesList() {
     setDeleting(true)
     try {
       // Check if category is in use by movements
-      const { data: usageData } = await api.get<{ count: number }>(`/api/v1/categories/${categoryId}/usage`)
+      const usageData = await api.get<{ count: number }>(`/api/v1/categories/${categoryId}/usage`)
       if (usageData && usageData.count > 0) {
         const proceed = confirm(
           `Esta categoría está asignada a ${usageData.count} movimiento${usageData.count > 1 ? 's' : ''}. ` +

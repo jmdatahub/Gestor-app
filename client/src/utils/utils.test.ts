@@ -83,10 +83,21 @@ import type { AppSettings } from '../context/SettingsContext'
 
 const baseSettings: AppSettings = {
   theme: 'light',
+  design: 'original',
+  language: 'es',
+  density: 'normal',
+  densityPercent: 50,
   dateFormat: 'dd/MM/yyyy',
   decimalSeparator: 'dot',
-  currency: 'EUR',
-  language: 'es',
+  notifications: {
+    highSpending: true,
+    recurring: true,
+    savingsGoals: true,
+    upcomingDebts: true,
+    investments: true,
+  },
+  rollupAccountsByParent: false,
+  soundEnabled: true,
 }
 
 describe('toDate', () => {

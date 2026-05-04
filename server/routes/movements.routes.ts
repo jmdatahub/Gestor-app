@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
-import { movements, accounts } from '../db/schema.js'
-import { eq, and, desc, gte, lte, isNull, sql, count } from 'drizzle-orm'
+import { movements, accounts, categories } from '../db/schema.js'
+import { eq, and, desc, gte, lte, isNull, sql, count, getTableColumns } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
 import { z } from 'zod'
 
 // Max date allowed: today + 10 years
@@ -12,7 +13,7 @@ const MAX_DATE_YEARS_AHEAD = 10
 const router = Router()
 
 function mapOut(row: Record<string, any>) {
-  return {
+  const out: Record<string, any> = {
     ...row,
     user_id:         row.userId         ?? row.user_id,
     organization_id: row.organizationId ?? row.organization_id ?? null,
@@ -23,6 +24,16 @@ function mapOut(row: Record<string, any>) {
     created_at:      row.createdAt      ?? row.created_at,
     deleted_at:      row.deletedAt      ?? row.deleted_at       ?? null,
   }
+  if (row.account_name) {
+    out.account = { id: out.account_id, name: row.account_name }
+  }
+  if (row.category_name) {
+    out.category = { id: out.category_id, name: row.category_name, color: row.category_color ?? null }
+  }
+  delete out.account_name
+  delete out.category_name
+  delete out.category_color
+  return out
 }
 
 function mapIn(body: Record<string, any>) {
@@ -56,7 +67,7 @@ const TransferSchema = z.object({
 }).strict()
 
 // GET /api/v1/movements
-// Query params: limit, offset, startDate, endDate, kind, status, orgId, personal
+// Query params: limit, offset, startDate, endDate, kind, status, org_id, personal
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!
@@ -72,11 +83,28 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (req.query.endDate) conditions.push(lte(movements.date, String(req.query.endDate)))
     if (req.query.kind) conditions.push(eq(movements.kind, String(req.query.kind) as 'income' | 'expense' | 'transfer'))
     if (req.query.status) conditions.push(eq(movements.status, String(req.query.status) as 'confirmed' | 'pending'))
-    if (req.query.orgId) conditions.push(eq(movements.organizationId, String(req.query.orgId)))
-    if (req.query.personal === 'true') conditions.push(isNull(movements.organizationId))
+
+    // Accept both org_id (snake_case, used by all client services) and orgId
+    // (camelCase, used by the export flow). When neither is provided, scope to
+    // personal (organizationId IS NULL) to match accounts/categories behavior.
+    const orgId = (req.query.org_id ?? req.query.orgId) as string | undefined
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, String(orgId))
+      if (!ok) return
+      conditions.push(eq(movements.organizationId, String(orgId)))
+    } else {
+      conditions.push(isNull(movements.organizationId))
+    }
 
     const [rows, [{ total }]] = await Promise.all([
-      db.select().from(movements)
+      db.select({
+          ...getTableColumns(movements),
+          account_name: accounts.name,
+          category_name: categories.name,
+          category_color: categories.color,
+        }).from(movements)
+        .leftJoin(accounts, eq(movements.accountId, accounts.id))
+        .leftJoin(categories, eq(movements.categoryId, categories.id))
         .where(and(...conditions))
         .orderBy(desc(movements.date), desc(movements.createdAt))
         .limit(limit)
@@ -94,7 +122,14 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // GET /api/v1/movements/:id
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const row = (await db.select().from(movements)
+    const row = (await db.select({
+        ...getTableColumns(movements),
+        account_name: accounts.name,
+        category_name: categories.name,
+        category_color: categories.color,
+      }).from(movements)
+      .leftJoin(accounts, eq(movements.accountId, accounts.id))
+      .leftJoin(categories, eq(movements.categoryId, categories.id))
       .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!)))
       .limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
@@ -138,7 +173,12 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res: Response)
     if (!toAccount[0]) { res.status(404).json({ error: 'Cuenta de destino no encontrada' }); return }
 
     const orgId = org_id ?? null
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, orgId)
+      if (!ok) return
+    }
 
+    const actorEmail = req.userEmail ?? null
     const [outRow, inRow] = await db.transaction(async (tx) => {
       return Promise.all([
         tx.insert(movements).values({
@@ -150,6 +190,8 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res: Response)
           description:    description ?? null,
           status:         'confirmed',
           organizationId: orgId,
+          createdByEmail: actorEmail,
+          updatedByEmail: actorEmail,
         } as any).returning(),
         tx.insert(movements).values({
           userId:         req.userId!,
@@ -160,6 +202,8 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res: Response)
           description:    description ?? null,
           status:         'confirmed',
           organizationId: orgId,
+          createdByEmail: actorEmail,
+          updatedByEmail: actorEmail,
         } as any).returning(),
       ])
     })
@@ -197,7 +241,15 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: `La fecha no puede ser más de ${MAX_DATE_YEARS_AHEAD} años en el futuro` }); return
     }
 
-    const [row] = await db.insert(movements).values({ ...mapped, userId: req.userId! } as any).returning()
+    // Verify org membership when caller assigns the movement to an organization,
+    // otherwise an authenticated user could plant rows in any org by guessing UUIDs.
+    if (mapped.organizationId) {
+      const ok = await assertOrgMember(req, res, String(mapped.organizationId))
+      if (!ok) return
+    }
+
+    const actorEmail = req.userEmail ?? null
+    const [row] = await db.insert(movements).values({ ...mapped, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
   } catch (err) {
     console.error('[movements POST /]', err)
@@ -233,7 +285,14 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       }
     }
 
-    const [updated] = await db.update(movements).set(patch as any).where(eq(movements.id, req.params.id as string)).returning()
+    // Block reassigning a movement to an org the caller doesn't belong to.
+    if (patch.organizationId) {
+      const ok = await assertOrgMember(req, res, String(patch.organizationId))
+      if (!ok) return
+    }
+
+    const actorEmail = req.userEmail ?? null
+    const [updated] = await db.update(movements).set({ ...patch, updatedByEmail: actorEmail } as any).where(eq(movements.id, req.params.id as string)).returning()
     res.json({ data: mapOut(updated as any) })
   } catch (err) {
     console.error('[movements PATCH /:id]', err)
@@ -249,7 +308,8 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
       .limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
 
-    await db.update(movements).set({ deletedAt: new Date().toISOString() }).where(eq(movements.id, req.params.id as string))
+    const actorEmail = req.userEmail ?? null
+    await db.update(movements).set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any).where(eq(movements.id, req.params.id as string))
     res.json({ ok: true })
   } catch (err) {
     console.error('[movements DELETE /:id]', err)

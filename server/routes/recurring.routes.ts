@@ -135,7 +135,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const [row] = await db.insert(recurringRules).values({ ...mapped, userId: req.userId! } as any).returning()
+    const actorEmail = req.userEmail ?? null
+    const [row] = await db.insert(recurringRules).values({ ...mapped, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
   } catch (err) {
     console.error('[recurring POST /]', err)
@@ -168,7 +169,8 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       }
     }
 
-    const [updated] = await db.update(recurringRules).set(patch as any).where(eq(recurringRules.id, req.params.id as string)).returning()
+    const actorEmail = req.userEmail ?? null
+    const [updated] = await db.update(recurringRules).set({ ...patch, updatedByEmail: actorEmail } as any).where(eq(recurringRules.id, req.params.id as string)).returning()
     res.json({ data: mapOut(updated as any) })
   } catch (err) {
     console.error('[recurring PATCH /:id]', err)
@@ -181,7 +183,8 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
     const existing = (await db.select({ id: recurringRules.id }).from(recurringRules)
       .where(and(eq(recurringRules.id, req.params.id as string), eq(recurringRules.userId, req.userId!))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Regla no encontrada' }); return }
-    await db.update(recurringRules).set({ deletedAt: new Date().toISOString() }).where(eq(recurringRules.id, req.params.id as string))
+    const actorEmail = req.userEmail ?? null
+    await db.update(recurringRules).set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any).where(eq(recurringRules.id, req.params.id as string))
     res.json({ ok: true })
   } catch (err) {
     console.error('[recurring DELETE /:id]', err)

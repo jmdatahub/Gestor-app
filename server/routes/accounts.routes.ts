@@ -150,6 +150,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (duplicate) {
       res.status(409).json({ error: 'Ya existe una cuenta con ese nombre' }); return
     }
+    const actorEmail = req.userEmail ?? null
     const [row] = await db.insert(accounts).values({
       name:            b.name,
       type:            b.type            ?? 'general',
@@ -162,6 +163,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       isActive:        b.is_active       ?? b.isActive       ?? true,
       parentAccountId: b.parent_account_id ?? b.parentAccountId ?? null,
       organizationId:  b.organization_id ?? b.organizationId  ?? null,
+      createdByEmail:  actorEmail,
+      updatedByEmail:  actorEmail,
     }).returning()
     res.status(201).json({ data: mapOut(row) })
   } catch (err) {
@@ -191,8 +194,9 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       }
     }
 
+    const actorEmail = req.userEmail ?? null
     const [updated] = await db.update(accounts)
-      .set(patch as any)
+      .set({ ...patch, updatedByEmail: actorEmail } as any)
       .where(eq(accounts.id, id))
       .returning()
     res.json({ data: mapOut(updated) })
@@ -208,7 +212,8 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
     const existing = (await db.select({ id: accounts.id }).from(accounts)
       .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!), isNull(accounts.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
-    await db.update(accounts).set({ deletedAt: new Date().toISOString() }).where(eq(accounts.id, id))
+    const actorEmail = req.userEmail ?? null
+    await db.update(accounts).set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any).where(eq(accounts.id, id))
     res.json({ ok: true })
   } catch (err) {
     console.error('[accounts DELETE /:id]', err)

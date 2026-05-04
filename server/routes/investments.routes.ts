@@ -146,6 +146,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
     }
   }
+  const actorEmail = req.userEmail ?? null
   const [row] = await db.insert(investments).values({
     name:             b.name,
     type:             b.type ?? b.asset_type ?? 'other',
@@ -165,7 +166,9 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     liquidationPrice: b.liquidation_price ?? null,
     positionStatus:   b.position_status ?? 'open',
     userId:           req.userId!,
-  }).returning()
+    createdByEmail:   actorEmail,
+    updatedByEmail:   actorEmail,
+  } as any).returning()
   res.status(201).json({ data: mapOut(row) })
 })
 
@@ -183,8 +186,9 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
     }
   }
+  const actorEmail = req.userEmail ?? null
   const [updated] = await db.update(investments)
-    .set(mapIn(req.body) as any)
+    .set({ ...mapIn(req.body), updatedByEmail: actorEmail } as any)
     .where(eq(investments.id, id))
     .returning()
   res.json({ data: mapOut(updated) })
@@ -195,9 +199,10 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
   const existing = (await db.select({ id: investments.id }).from(investments)
     .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
   if (!existing) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
+  const actorEmail = req.userEmail ?? null
   await Promise.all([
     db.delete(investmentPriceHistory).where(eq(investmentPriceHistory.investmentId, id)),
-    db.update(investments).set({ deletedAt: new Date().toISOString() }).where(eq(investments.id, id)),
+    db.update(investments).set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any).where(eq(investments.id, id)),
   ])
   res.json({ ok: true })
 })

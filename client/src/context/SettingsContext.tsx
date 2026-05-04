@@ -175,18 +175,18 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     const root = document.documentElement
     const resolvedTheme = getResolvedTheme(settings)
     root.setAttribute('data-theme', resolvedTheme)
-    try { storage.set('app_theme', resolvedTheme) } catch {}
+    try { storage.set('app_theme', resolvedTheme) } catch { /* localStorage may be unavailable */ }
   }, [settings.theme])
 
   // Apply design to document (sets `data-design` attribute on <html>)
   useEffect(() => {
     const root = document.documentElement
     root.setAttribute('data-design', settings.design)
-    try { storage.set('app_design', settings.design) } catch {}
+    try { storage.set('app_design', settings.design) } catch { /* localStorage may be unavailable */ }
     // Aurora forces dark mode visually — auto-pair to dark unless user explicitly picked light.
     if (settings.design === 'aurora' && settings.theme === 'auto') {
       root.setAttribute('data-theme', 'dark')
-      try { storage.set('app_theme', 'dark') } catch {}
+      try { storage.set('app_theme', 'dark') } catch { /* localStorage may be unavailable */ }
     }
   }, [settings.design, settings.theme])
 

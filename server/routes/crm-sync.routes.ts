@@ -405,8 +405,8 @@ function mountCrud(path: string, cfg: CrudConfig) {
       if (entries.length === 0) return res.status(400).json({ error: 'No hay campos para insertar' })
       const cols = entries.map(([k]) => sql.raw(k))
       const vals = entries.map(([, v]) => v)
-      const colList = cols.reduce((acc: any, c, i) => i === 0 ? c : sql`${acc}, ${c}`)
-      const valList = vals.reduce((acc: any, v, i) => i === 0 ? sql`${v}` : sql`${acc}, ${v}`)
+      const colList = cols.reduce<any>((acc, c, i) => i === 0 ? c : sql`${acc}, ${c}`, sql``)
+      const valList = vals.reduce<any>((acc, v, i) => i === 0 ? sql`${v}` : sql`${acc}, ${v}`, sql``)
       const rows = await withRetry(() =>
         db.execute(sql`INSERT INTO ${sql.raw(table)} (${colList}) VALUES (${valList}) RETURNING *`)
       )

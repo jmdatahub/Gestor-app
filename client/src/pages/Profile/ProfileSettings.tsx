@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/apiClient'
-import { User, Check, Save, Loader2, Mail, AlertCircle } from 'lucide-react'
+import { User, Check, Save, Loader2, Mail, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useToast } from '../../components/Toast'
 import { useSettings } from '../../context/SettingsContext'
 import { formatDate as formatDateUtil } from '../../utils/format'

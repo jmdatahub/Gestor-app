@@ -110,7 +110,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: 'total_amount debe ser un número mayor que 0' }); return
     }
     if (!mapped.direction) mapped.direction = 'i_owe'
-    const [row] = await db.insert(debts).values({ ...mapped, userId: req.userId! } as any).returning()
+    const actorEmail = req.userEmail ?? null
+    const [row] = await db.insert(debts).values({ ...mapped, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
   } catch (err) {
     console.error('[debts POST /]', err)
@@ -132,8 +133,9 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
         res.status(400).json({ error: 'total_amount debe ser un número mayor que 0' }); return
       }
     }
+    const actorEmail = req.userEmail ?? null
     const [updated] = await db.update(debts)
-      .set(patch as any)
+      .set({ ...patch, updatedByEmail: actorEmail } as any)
       .where(eq(debts.id, req.params.id as string))
       .returning()
     res.json({ data: mapOut(updated as any) })
@@ -148,7 +150,8 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
     const existing = (await db.select({ id: debts.id }).from(debts)
       .where(and(eq(debts.id, req.params.id as string), eq(debts.userId, req.userId!))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Deuda no encontrada' }); return }
-    await db.update(debts).set({ deletedAt: new Date().toISOString() }).where(eq(debts.id, req.params.id as string))
+    const actorEmail = req.userEmail ?? null
+    await db.update(debts).set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any).where(eq(debts.id, req.params.id as string))
     res.json({ ok: true })
   } catch (err) {
     console.error('[debts DELETE /:id]', err)

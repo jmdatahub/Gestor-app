@@ -114,7 +114,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (duplicate) {
       res.status(409).json({ error: `Ya existe una categoría de ${body.kind === 'expense' ? 'gasto' : 'ingreso'} con ese nombre` }); return
     }
-    const [row] = await db.insert(categories).values({ ...body, userId: req.userId! }).returning()
+    const actorEmail = req.userEmail ?? null
+    const [row] = await db.insert(categories).values({ ...body, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row) })
   } catch (err) {
     console.error('[categories POST /]', err)
@@ -151,7 +152,8 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
         res.status(409).json({ error: `Ya existe una categoría de ${checkKind === 'expense' ? 'gasto' : 'ingreso'} con ese nombre` }); return
       }
     }
-    const [updated] = await db.update(categories).set(body).where(eq(categories.id, req.params.id as string)).returning()
+    const actorEmail = req.userEmail ?? null
+    const [updated] = await db.update(categories).set({ ...body, updatedByEmail: actorEmail } as any).where(eq(categories.id, req.params.id as string)).returning()
     res.json({ data: mapOut(updated) })
   } catch (err) {
     console.error('[categories PATCH /:id]', err)

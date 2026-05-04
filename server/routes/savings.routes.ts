@@ -98,7 +98,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (isNaN(targetNum) || targetNum <= 0) {
       res.status(400).json({ error: 'target_amount debe ser un número mayor que 0' }); return
     }
-    const [row] = await db.insert(savingsGoals).values({ ...mapped, userId: req.userId! } as any).returning()
+    const actorEmail = req.userEmail ?? null
+    const [row] = await db.insert(savingsGoals).values({ ...mapped, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
   } catch (err) {
     console.error('[savings POST /]', err)
@@ -119,8 +120,9 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
         res.status(400).json({ error: 'target_amount debe ser un número mayor que 0' }); return
       }
     }
+    const actorEmail = req.userEmail ?? null
     const [updated] = await db.update(savingsGoals)
-      .set(patch as any)
+      .set({ ...patch, updatedByEmail: actorEmail } as any)
       .where(eq(savingsGoals.id, req.params.id as string))
       .returning()
     res.json({ data: mapOut(updated as any) })
