@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
-import { movements, accounts, categories } from '../db/schema.js'
+import { movements, accounts, categories, organizationMembers } from '../db/schema.js'
 import { eq, and, desc, gte, lte, isNull, sql, count, getTableColumns } from 'drizzle-orm'
 
 // Returns true if the account has at least one non-deleted child account.
@@ -11,6 +11,63 @@ async function isParentAccount(accountId: string): Promise<boolean> {
   const [{ c }] = await db.select({ c: count() }).from(accounts)
     .where(and(eq(accounts.parentAccountId, accountId), isNull(accounts.deletedAt)))
   return Number(c) > 0
+}
+
+/**
+ * READ access for a single movement.
+ *
+ *   - Org movement → any member of that organization may read it. Mirrors
+ *     accounts: when a workspace is shared, every member sees its rows.
+ *   - Personal movement (organizationId IS NULL) → only the creator may read.
+ *
+ * Returns null when the caller has no access (callers respond 404 either
+ * way to avoid leaking existence).
+ */
+async function fetchReadableMovement(
+  req: AuthRequest,
+  movementId: string,
+): Promise<Record<string, any> | null> {
+  const row = (await db.select().from(movements)
+    .where(and(eq(movements.id, movementId), isNull(movements.deletedAt)))
+    .limit(1))[0]
+  if (!row) return null
+  if (row.organizationId) {
+    const member = (await db.select({ orgId: organizationMembers.orgId }).from(organizationMembers)
+      .where(and(
+        eq(organizationMembers.orgId, row.organizationId),
+        eq(organizationMembers.userId, req.userId!),
+      ))
+      .limit(1))[0]
+    return member ? row : null
+  }
+  return row.userId === req.userId ? row : null
+}
+
+/**
+ * WRITE access for a single movement.
+ *
+ * Only the original creator may PATCH/DELETE — even inside a shared
+ * workspace. This intentionally matches the convention enforced in
+ * accounts/categories/debts/investments/savings/recurring routes
+ * (`eq(<table>.userId, req.userId!)` on every PATCH and DELETE).
+ *
+ * Rationale: shared-read keeps the workspace useful for everyone, but
+ * write-protection prevents one member from silently rewriting or deleting
+ * another member's history. If the policy ever needs to relax, change
+ * every resource together — not just one.
+ */
+async function fetchOwnedMovement(
+  req: AuthRequest,
+  movementId: string,
+): Promise<Record<string, any> | null> {
+  const row = (await db.select().from(movements)
+    .where(and(
+      eq(movements.id, movementId),
+      eq(movements.userId, req.userId!),
+      isNull(movements.deletedAt),
+    ))
+    .limit(1))[0]
+  return row ?? null
 }
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
@@ -78,33 +135,42 @@ const TransferSchema = z.object({
 
 // GET /api/v1/movements
 // Query params: limit, offset, startDate, endDate, kind, status, org_id, personal
+//
+// Workspace isolation:
+//   - When org_id is provided, the movement list is scoped to that organization
+//     ONLY (no userId restriction) so every member of the workspace sees all
+//     movements in it. Membership is verified via assertOrgMember.
+//   - When no org_id is provided, the list is scoped to the caller's PERSONAL
+//     space (userId = me AND organizationId IS NULL). Personal data of one
+//     member is never mixed with shared workspaces or with other members.
+//   This mirrors accounts.routes.ts and is the convention across the codebase.
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!
     const limit = Math.min(Number(req.query.limit) || 50, 500)
     const offset = Number(req.query.offset) || 0
 
-    const conditions = [
-      eq(movements.userId, userId),
-      sql`${movements.deletedAt} IS NULL`,
-    ]
+    // Accept both org_id (snake_case, used by all client services) and orgId
+    // (camelCase, used by the export flow).
+    const orgId = (req.query.org_id ?? req.query.orgId) as string | undefined
+
+    const conditions = [sql`${movements.deletedAt} IS NULL`]
+
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, String(orgId))
+      if (!ok) return
+      // Shared workspace: any member sees all movements in this org.
+      conditions.push(eq(movements.organizationId, String(orgId)))
+    } else {
+      // Personal space: only the caller's own private movements.
+      conditions.push(eq(movements.userId, userId))
+      conditions.push(isNull(movements.organizationId))
+    }
 
     if (req.query.startDate) conditions.push(gte(movements.date, String(req.query.startDate)))
     if (req.query.endDate) conditions.push(lte(movements.date, String(req.query.endDate)))
     if (req.query.kind) conditions.push(eq(movements.kind, String(req.query.kind) as 'income' | 'expense' | 'transfer'))
     if (req.query.status) conditions.push(eq(movements.status, String(req.query.status) as 'confirmed' | 'pending'))
-
-    // Accept both org_id (snake_case, used by all client services) and orgId
-    // (camelCase, used by the export flow). When neither is provided, scope to
-    // personal (organizationId IS NULL) to match accounts/categories behavior.
-    const orgId = (req.query.org_id ?? req.query.orgId) as string | undefined
-    if (orgId) {
-      const ok = await assertOrgMember(req, res, String(orgId))
-      if (!ok) return
-      conditions.push(eq(movements.organizationId, String(orgId)))
-    } else {
-      conditions.push(isNull(movements.organizationId))
-    }
 
     const [rows, [{ total }]] = await Promise.all([
       db.select({
@@ -132,6 +198,11 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // GET /api/v1/movements/:id
 router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    // Workspace-aware access (see fetchReadableMovement for the rules).
+    const accessible = await fetchReadableMovement(req, req.params.id as string)
+    if (!accessible) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
+
+    // Re-fetch with joined account/category metadata for the response shape.
     const row = (await db.select({
         ...getTableColumns(movements),
         account_name: accounts.name,
@@ -140,7 +211,7 @@ router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, 
       }).from(movements)
       .leftJoin(accounts, eq(movements.accountId, accounts.id))
       .leftJoin(categories, eq(movements.categoryId, categories.id))
-      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!), isNull(movements.deletedAt)))
+      .where(eq(movements.id, req.params.id as string))
       .limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
     res.json({ data: mapOut(row as any) })
@@ -279,9 +350,9 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // PATCH /api/v1/movements/:id
 router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const existing = (await db.select({ id: movements.id, kind: movements.kind }).from(movements)
-      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!), isNull(movements.deletedAt)))
-      .limit(1))[0]
+    // Only the creator may edit, even inside a shared org. Same write-policy
+    // as accounts/categories/debts/etc. (see fetchOwnedMovement).
+    const existing = await fetchOwnedMovement(req, req.params.id as string)
     if (!existing) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
 
     const patch = mapIn(req.body)
@@ -326,9 +397,9 @@ router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest
 // DELETE /api/v1/movements/:id (soft delete)
 router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const existing = (await db.select({ id: movements.id }).from(movements)
-      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!), isNull(movements.deletedAt)))
-      .limit(1))[0]
+    // Only the creator may delete, even inside a shared org. Same write-policy
+    // as accounts/categories/debts/etc.
+    const existing = await fetchOwnedMovement(req, req.params.id as string)
     if (!existing) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
 
     const actorEmail = req.userEmail ?? null
