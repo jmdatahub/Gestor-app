@@ -39,13 +39,26 @@ function makeToken(userId = 'user-abc', role = 'member'): string {
 }
 
 // ─── Drizzle chain helpers ────────────────────────────────────────────────────
+// The GET handler uses .leftJoin twice (accounts + categories) for enriched
+// rows; mirror that here so the awaited terminal (.offset) returns the rows.
 function chainSelect(rows: object[]) {
   const chain: any = {}
   chain.from = vi.fn().mockReturnValue(chain)
+  chain.leftJoin = vi.fn().mockReturnValue(chain)
   chain.where = vi.fn().mockReturnValue(chain)
   chain.orderBy = vi.fn().mockReturnValue(chain)
   chain.limit = vi.fn().mockReturnValue(chain)
   chain.offset = vi.fn().mockResolvedValue(rows)
+  return chain
+}
+
+// The list endpoint runs two queries in Promise.all: the enriched rows and
+// the count(). Build a paired mock that returns rows for the first call and
+// the count for the second.
+function chainCount(total: number) {
+  const chain: any = {}
+  chain.from = vi.fn().mockReturnValue(chain)
+  chain.where = vi.fn().mockResolvedValue([{ total }])
   return chain
 }
 
@@ -92,6 +105,7 @@ describe('GET /api/v1/movements', () => {
       },
     ]
     mockDb.select.mockReturnValueOnce(chainSelect(rows))
+    mockDb.select.mockReturnValueOnce(chainCount(rows.length))
 
     const res = await request(app)
       .get('/api/v1/movements')
@@ -107,6 +121,7 @@ describe('GET /api/v1/movements', () => {
 
   it('returns empty array when no movements found', async () => {
     mockDb.select.mockReturnValueOnce(chainSelect([]))
+    mockDb.select.mockReturnValueOnce(chainCount(0))
 
     const res = await request(app)
       .get('/api/v1/movements')
@@ -118,6 +133,7 @@ describe('GET /api/v1/movements', () => {
 
   it('respects the limit query param (capped at 500)', async () => {
     mockDb.select.mockReturnValueOnce(chainSelect([]))
+    mockDb.select.mockReturnValueOnce(chainCount(0))
 
     const res = await request(app)
       .get('/api/v1/movements?limit=10&offset=5')
@@ -131,6 +147,7 @@ describe('GET /api/v1/movements', () => {
   it('returns 500 when the DB throws', async () => {
     const badChain: any = {
       from: vi.fn().mockReturnThis(),
+      leftJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       orderBy: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(),
@@ -177,6 +194,7 @@ describe('movements mapOut field aliases', () => {
       },
     ]
     mockDb.select.mockReturnValueOnce(chainSelect(rows))
+    mockDb.select.mockReturnValueOnce(chainCount(rows.length))
 
     const res = await request(app)
       .get('/api/v1/movements')
