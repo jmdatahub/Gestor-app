@@ -828,6 +828,24 @@ export const organizationMembers = pgTable("organization_members", {
 	pgPolicy("Users can insert themselves as members", { as: "permissive", for: "insert", to: ["public"] }),
 ]);
 
+export const memberCommissionRates = pgTable("member_commission_rates", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	email: text().notNull(),
+	rate: numeric({ precision: 5, scale: 2 }).default('0').notNull(),
+	organizationId: uuid("organization_id"),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedByEmail: text("updated_by_email"),
+}, (table) => [
+	index("idx_member_commission_rates_organization_id").using("btree", table.organizationId.asc().nullsLast().op("uuid_ops")),
+	uniqueIndex("member_commission_rates_email_org_uidx").using("btree", sql`lower(${table.email})`, table.organizationId.asc().nullsLast().op("uuid_ops")),
+	foreignKey({
+			columns: [table.organizationId],
+			foreignColumns: [organizations.id],
+			name: "member_commission_rates_organization_id_fkey"
+		}).onDelete("cascade"),
+	check("member_commission_rates_rate_check", sql`rate >= (0)::numeric AND rate <= (100)::numeric`),
+]);
+
 export const users = pgTable("users", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
 	email: text().notNull(),

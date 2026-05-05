@@ -72,7 +72,7 @@ export default function Dashboard() {
   const { data: monthlySummary = { income: 0, expense: 0, balance: 0 }, isLoading: isMonthlyLoading } = useMonthlyMovementsSummary(userId, workspaceId)
   const { data: financialOverview, isLoading: isFinancialLoading } = useFinancialDistribution(userId, workspaceId)
   const { data: topAccounts = [], isLoading: isTopAccountsLoading } = useTopAccounts(userId, workspaceId, settings.rollupAccountsByParent)
-  const { data: pendingCount = 0 } = usePendingRecurringCount(userId)
+  const { data: pendingCount = 0 } = usePendingRecurringCount(userId, workspaceId)
   const { data: uncategorizedCount = 0 } = usePendingClassificationCount(userId, workspaceId)
   const [showClassifyModal, setShowClassifyModal] = useState(false)
 

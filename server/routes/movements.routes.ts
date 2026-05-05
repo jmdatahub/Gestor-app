@@ -14,6 +14,7 @@ async function isParentAccount(accountId: string): Promise<boolean> {
 }
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 // Max date allowed: today + 10 years
@@ -129,7 +130,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 })
 
 // GET /api/v1/movements/:id
-router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const row = (await db.select({
         ...getTableColumns(movements),
@@ -139,7 +140,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
       }).from(movements)
       .leftJoin(accounts, eq(movements.accountId, accounts.id))
       .leftJoin(categories, eq(movements.categoryId, categories.id))
-      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!)))
+      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!), isNull(movements.deletedAt)))
       .limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
     res.json({ data: mapOut(row as any) })
@@ -168,13 +169,13 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res: Response)
       res.status(400).json({ error: 'La cuenta de origen y destino no pueden ser la misma' }); return
     }
 
-    // Verify both accounts belong to the requesting user
+    // Verify both accounts belong to the requesting user and aren't soft-deleted
     const [fromAccount, toAccount] = await Promise.all([
       db.select({ id: accounts.id }).from(accounts)
-        .where(and(eq(accounts.id, from_account_id), eq(accounts.userId, req.userId!)))
+        .where(and(eq(accounts.id, from_account_id), eq(accounts.userId, req.userId!), isNull(accounts.deletedAt)))
         .limit(1),
       db.select({ id: accounts.id }).from(accounts)
-        .where(and(eq(accounts.id, to_account_id), eq(accounts.userId, req.userId!)))
+        .where(and(eq(accounts.id, to_account_id), eq(accounts.userId, req.userId!), isNull(accounts.deletedAt)))
         .limit(1),
     ])
 
@@ -188,6 +189,11 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res: Response)
     }
 
     const actorEmail = req.userEmail ?? null
+    // NOTE: account.balance is the *opening* balance — final balances are
+    // computed at read time in accounts.routes via computeMovementDeltas
+    // (sum of confirmed movements + transfer_in − transfer_out). Therefore
+    // we don't need to UPDATE accounts.balance here; inserting the two
+    // movements atomically inside a single tx is sufficient for consistency.
     const [outRow, inRow] = await db.transaction(async (tx) => {
       return Promise.all([
         tx.insert(movements).values({
@@ -271,7 +277,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 })
 
 // PATCH /api/v1/movements/:id
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: movements.id, kind: movements.kind }).from(movements)
       .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!), isNull(movements.deletedAt)))
@@ -318,10 +324,10 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
 })
 
 // DELETE /api/v1/movements/:id (soft delete)
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: movements.id }).from(movements)
-      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!)))
+      .where(and(eq(movements.id, req.params.id as string), eq(movements.userId, req.userId!), isNull(movements.deletedAt)))
       .limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
 

@@ -1,4 +1,5 @@
 import { api } from '../lib/apiClient'
+import { getCategoryName, type MovementLike } from '../utils/movement'
 
 // Types
 export interface Insight {
@@ -76,14 +77,14 @@ export async function getMonthlyInsights(
       }),
     ])
 
-    type MovementRow = { kind: string; amount: number; categoryName?: string; category_name?: string }
+    type MovementRow = MovementLike & { kind: string; amount: number }
     const currentRows: MovementRow[] = ((currentRes.data || []) as MovementRow[]).filter(
       r => r.kind !== 'transfer_in' && r.kind !== 'transfer_out'
     )
     const prevRows: MovementRow[] = ((prevRes.data || []) as MovementRow[]).filter(
       r => r.kind !== 'transfer_in' && r.kind !== 'transfer_out'
     )
-    const catName = (row: MovementRow) => row.categoryName || row.category_name || ''
+    const catName = (row: MovementRow) => getCategoryName(row, '')
 
     // Calculate totals
     const currentExpenses = currentRows

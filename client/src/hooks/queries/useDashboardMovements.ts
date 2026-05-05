@@ -8,7 +8,7 @@ export const movementKeys = {
   all: ['movements'] as const,
   monthly: (userId: string, workspaceId: string | null) => [...movementKeys.all, 'monthly', userId, workspaceId] as const,
   pendingClassificationCount: (userId: string, workspaceId: string | null) => [...movementKeys.all, 'pendingClassificationCount', userId, workspaceId] as const,
-  pendingRecurringCount: (userId: string) => [...movementKeys.all, 'pendingRecurringCount', userId] as const,
+  pendingRecurringCount: (userId: string, workspaceId: string | null) => [...movementKeys.all, 'pendingRecurringCount', userId, workspaceId] as const,
 }
 
 // 30-second staleTime: movement summaries are expensive to compute. Mutations
@@ -40,9 +40,9 @@ export const usePendingClassificationCount = (userId: string | null, workspaceId
   })
 }
 
-export const usePendingRecurringCount = (userId: string | null) => {
+export const usePendingRecurringCount = (userId: string | null, workspaceId: string | null) => {
   return useQuery({
-    queryKey: movementKeys.pendingRecurringCount(userId!),
+    queryKey: movementKeys.pendingRecurringCount(userId!, workspaceId),
     queryFn: async ({ signal }) => {
       // Trigger generation in background first; failure is non-fatal — count still proceeds.
       try {
@@ -58,7 +58,7 @@ export const usePendingRecurringCount = (userId: string | null) => {
 
       // This is the authoritative fetch — let any error propagate so React Query
       // marks the query as failed rather than silently returning undefined.
-      const count = await getPendingMovementsCount(userId!, signal)
+      const count = await getPendingMovementsCount(userId!, workspaceId, signal)
       return z.number().parse(count)
     },
     enabled: !!userId,

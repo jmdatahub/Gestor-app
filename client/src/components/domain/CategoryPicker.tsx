@@ -352,7 +352,7 @@ export function CategoryPicker({ value, onChange, type = 'expense', label, error
                         color: 'white',
                         textTransform: 'uppercase'
                       }}>
-                        {cat.name.charAt(0)}
+                        {(cat.name ?? '').charAt(0)}
                       </span>
                       <span style={{ fontWeight: 500, color: cat.id === value ? 'var(--primary)' : 'var(--text-primary)', fontSize: '14px' }}>
                         {cat.name}

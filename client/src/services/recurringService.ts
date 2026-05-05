@@ -35,8 +35,10 @@ export async function deleteRecurringRule(id: string): Promise<void> {
   await api.delete(`/api/v1/recurring-rules/${id}`)
 }
 
-export async function fetchPendingMovements(_userId: string, signal?: AbortSignal): Promise<Movement[]> {
-  const res = await api.get<{ data: Movement[] }>('/api/v1/movements', { status: 'pending', limit: 200 }, signal)
+export async function fetchPendingMovements(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<Movement[]> {
+  const params: Record<string, string | number> = { status: 'pending', limit: 200 }
+  if (organizationId) params.org_id = organizationId
+  const res = await api.get<{ data: Movement[] }>('/api/v1/movements', params, signal)
   return Array.isArray(res?.data) ? res.data : []
 }
 
@@ -59,9 +61,11 @@ export async function generatePendingMovementsForUser(_userId: string): Promise<
   return 0
 }
 
-export async function getPendingMovementsCount(_userId: string, signal?: AbortSignal): Promise<number> {
+export async function getPendingMovementsCount(_userId: string, organizationId?: string | null, signal?: AbortSignal): Promise<number> {
   // Use limit=1 and read total from response to avoid over-fetching
-  const res = await api.get<{ data: unknown[]; total: number }>('/api/v1/movements', { status: 'pending', limit: 1 }, signal)
+  const params: Record<string, string | number> = { status: 'pending', limit: 1 }
+  if (organizationId) params.org_id = organizationId
+  const res = await api.get<{ data: unknown[]; total: number }>('/api/v1/movements', params, signal)
   return Number(res?.total) || 0
 }
 

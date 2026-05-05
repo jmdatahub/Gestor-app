@@ -2,8 +2,9 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
 import { organizations, organizationMembers, organizationInvitations, profiles } from '../db/schema.js'
-import { and, eq, inArray, count } from 'drizzle-orm'
+import { and, eq, isNull, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -136,7 +137,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const member = await requireMembership(req, res, req.params.id as string, [...ADMIN_ROLES])
     if (!member) return
@@ -158,7 +159,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const member = await requireMembership(req, res, req.params.id as string, ['owner'])
     if (!member) return
@@ -171,7 +172,7 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 })
 
 // ─── Members ──────────────────────────────────────────────────────────────────
-router.get('/:id/members', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/members', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     // Only members of the org may list its members
     const self = await requireMembership(req, res, req.params.id as string)
@@ -212,7 +213,7 @@ router.get('/:id/members', authMiddleware, async (req: AuthRequest, res: Respons
   }
 })
 
-router.delete('/:id/members/:userId', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id/members/:userId', validateUuid('id', 'userId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     // Only owner/admin can remove members (or a member can remove themselves)
     const self = await requireMembership(req, res, req.params.id as string)
@@ -230,7 +231,7 @@ router.delete('/:id/members/:userId', authMiddleware, async (req: AuthRequest, r
   }
 })
 
-router.patch('/:id/members/:userId', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id/members/:userId', validateUuid('id', 'userId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     // Only owner/admin can change roles
     const self = await requireMembership(req, res, req.params.id as string, [...ADMIN_ROLES])
@@ -256,7 +257,7 @@ router.patch('/:id/members/:userId', authMiddleware, async (req: AuthRequest, re
 })
 
 // ─── Invitations ──────────────────────────────────────────────────────────────
-router.get('/:id/invitations', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/invitations', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     // Only members may view invitations
     const self = await requireMembership(req, res, req.params.id as string, [...ADMIN_ROLES])
@@ -277,7 +278,7 @@ router.get('/:id/invitations', authMiddleware, async (req: AuthRequest, res: Res
   }
 })
 
-router.post('/:id/invitations', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:id/invitations', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const self = await requireMembership(req, res, req.params.id as string, [...ADMIN_ROLES])
     if (!self) return
@@ -300,7 +301,7 @@ router.post('/:id/invitations', authMiddleware, async (req: AuthRequest, res: Re
   }
 })
 
-router.delete('/:id/invitations/:invId', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id/invitations/:invId', validateUuid('id', 'invId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     // Only admin/owner of the org can revoke invitations
     const self = await requireMembership(req, res, req.params.id as string, [...ADMIN_ROLES])
@@ -354,7 +355,7 @@ router.get('/invitations/pending', authMiddleware, async (req: AuthRequest, res:
 })
 
 // POST /api/v1/organizations/invitations/:id/accept — accept an invitation by its ID
-router.post('/invitations/:id/accept', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/invitations/:id/accept', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const invId = req.params.id as string
     const invitation = (await db.select().from(organizationInvitations)
@@ -377,7 +378,7 @@ router.post('/invitations/:id/accept', authMiddleware, async (req: AuthRequest, 
 })
 
 // POST /api/v1/organizations/invitations/:id/decline — decline an invitation by its ID
-router.post('/invitations/:id/decline', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/invitations/:id/decline', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const invId = req.params.id as string
     const invitation = (await db.select({ id: organizationInvitations.id }).from(organizationInvitations)
@@ -393,7 +394,7 @@ router.post('/invitations/:id/decline', authMiddleware, async (req: AuthRequest,
 })
 
 // DELETE /api/v1/organizations/invitations/:invId — cancel an invitation by ID (single-arg form)
-router.delete('/invitations/:invId', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/invitations/:invId', validateUuid('invId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const invId = req.params.invId as string
     // Only the inviting org's admin/owner may cancel — verify caller is a member of the org
@@ -413,12 +414,12 @@ router.delete('/invitations/:invId', authMiddleware, async (req: AuthRequest, re
 })
 
 // GET /api/v1/organizations/:id — fetch a single organization by ID (member access required)
-router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     // Run membership check and org fetch in parallel
     const [self, row] = await Promise.all([
       requireMembership(req, res, req.params.id as string),
-      db.select().from(organizations).where(eq(organizations.id, req.params.id as string)).limit(1).then(r => r[0]),
+      db.select().from(organizations).where(and(eq(organizations.id, req.params.id as string), isNull(organizations.deletedAt))).limit(1).then(r => r[0]),
     ])
     if (!self) return  // requireMembership already sent 403
     if (!row) { res.status(404).json({ error: 'Organización no encontrada' }); return }

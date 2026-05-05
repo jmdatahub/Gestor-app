@@ -200,7 +200,7 @@ router.get('/overview', async (req: Request, res: Response) => {
             out.push({ table: t.name, id: r.id, action: 'update', at: r.updated_at, label })
           }
         }
-      } catch { /* skip table on error */ }
+      } catch (e) { console.warn(`[crm-sync overview] table=${t.name}`, e instanceof Error ? e.message : e) }
     }
 
     out.sort((a, b) => b.at.localeCompare(a.at))

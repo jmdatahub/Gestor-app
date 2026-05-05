@@ -4,6 +4,8 @@ import { db } from '../db/connection.js'
 import { providers } from '../db/schema.js'
 import { and, eq, ilike, asc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -70,9 +72,14 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       }
       throw err
     }
+    const orgId = body.organization_id ?? body.organizationId ?? null
+    if (orgId) {
+      const ok = await assertOrgMember(req, res, orgId)
+      if (!ok) return
+    }
     const [row] = await db.insert(providers).values({
       name:           body.name,
-      organizationId: body.organization_id ?? body.organizationId ?? null,
+      organizationId: orgId,
       userId:         req.userId!,
     }).returning()
     res.status(201).json({ data: mapOut(row) })
@@ -82,7 +89,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: providers.id }).from(providers)
       .where(and(eq(providers.id, req.params.id as string), eq(providers.userId, req.userId!))).limit(1))[0]
@@ -104,7 +111,13 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
     const usageCount = body.usage_count ?? body.usageCount
     if (usageCount !== undefined) patch.usageCount = usageCount
     const orgId = body.organization_id ?? body.organizationId
-    if (orgId !== undefined) patch.organizationId = orgId ?? null
+    if (orgId !== undefined) {
+      if (orgId) {
+        const ok = await assertOrgMember(req, res, orgId)
+        if (!ok) return
+      }
+      patch.organizationId = orgId ?? null
+    }
 
     const [updated] = await db.update(providers).set(patch).where(eq(providers.id, req.params.id as string)).returning()
     res.json({ data: mapOut(updated) })
@@ -114,7 +127,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: providers.id }).from(providers)
       .where(and(eq(providers.id, req.params.id as string), eq(providers.userId, req.userId!))).limit(1))[0]

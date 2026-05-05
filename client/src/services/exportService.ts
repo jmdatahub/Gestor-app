@@ -1,6 +1,7 @@
 import { api } from '../lib/apiClient'
 import { buildAccountTree, flattenAccountTree, getUserAccounts, type Account } from './accountService'
 import { getAccountBalancesSummary } from './summaryService'
+import { getCategoryName, getAccountName } from '../utils/movement'
 
 // ========================================
 // Utility functions
@@ -92,8 +93,8 @@ export async function exportMovementsToCSV(userId: string, filters: MovementFilt
     date: m.date,
     type: m.kind || m.type,
     amount: m.amount,
-    account_name: m.accountName || m.account_name || '',
-    category: m.categoryName || m.category_name || m.category || '',
+    account_name: getAccountName(m, ''),
+    category: getCategoryName(m, ''),
     description: m.description || '',
     status: m.status || 'confirmed',
     created_at: m.createdAt || m.created_at,
@@ -134,8 +135,8 @@ export async function exportMovementsToExcel(userId: string, filters: MovementFi
       date: m.date,
       type: m.kind || m.type,
       amount: m.amount,
-      account_name: m.accountName || m.account_name || '',
-      category: m.categoryName || m.category_name || m.category || '',
+      account_name: getAccountName(m, ''),
+      category: getCategoryName(m, ''),
       description: m.description || '',
       status: m.status || 'confirmed',
       created_at: m.createdAt || m.created_at,
@@ -463,7 +464,7 @@ export async function exportAllToExcel(userId: string, options: ExportAllOptions
     movSheet.addRow({
       ...m,
       account_path: accPath,
-      account_name: m.accountName || m.account_name || '',
+      account_name: getAccountName(m, ''),
     })
   })
 
@@ -722,7 +723,7 @@ export async function exportSummaryToExcel(
       date: m.date,
       type: kind === 'income' ? 'Ingreso' : kind === 'expense' ? 'Gasto' : 'Inversión',
       amount: m.amount,
-      category: m.categoryName || m.category_name || m.category || '-',
+      category: getCategoryName(m, '-'),
       description: m.description || '-',
       status: m.status === 'confirmed' ? 'Confirmado' : 'Pendiente',
     })

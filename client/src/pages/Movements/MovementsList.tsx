@@ -28,6 +28,7 @@ import {
 import { createDebt as createDebtService } from '../../services/debtService'
 import { ensureDefaultAccountsForUser } from '../../services/authService'
 import { getTextColorClass, getCategoryPillStyle } from '../../utils/categoryColors'
+import { getCategoryName, getAccountName } from '../../utils/movement'
 import { useSettings } from '../../context/SettingsContext'
 import {
   formatDate as formatDateUtil,
@@ -646,8 +647,8 @@ export default function MovementsList() {
         kind: m.kind === 'income' ? 'Ingreso' : m.kind === 'expense' ? 'Gasto' : 'Inversión',
         description: m.description || '',
         amount: m.amount,
-        category: m.categoryName || m.category_name || 'Sin categoría',
-        account: m.accountName || m.account_name || 'Sin cuenta',
+        category: getCategoryName(m),
+        account: getAccountName(m),
         creator: '-',
         created_at: m.createdAt ? new Date(m.createdAt).toLocaleString('es-ES') : '-',
       }))

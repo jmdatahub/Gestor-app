@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/apiClient'
+import { getCategoryName, getCategoryColor } from '../../utils/movement'
 
 // NOTE: 'trend' is a top-level root, intentionally separate from 'dashboard', to avoid
 // dashboardKeys.invalidateAll() inadvertently busting trend caches (they share different
@@ -150,8 +151,8 @@ export function useMonthTopCategories(
 
       const map = new Map<string, { value: number; color?: string }>()
       for (const row of (data ?? [])) {
-        const name = row.categoryName || row.category_name || 'Sin categoría'
-        const existing = map.get(name) ?? { value: 0, color: row.categoryColor }
+        const name = getCategoryName(row)
+        const existing = map.get(name) ?? { value: 0, color: getCategoryColor(row) }
         existing.value += Number(row.amount) || 0
         map.set(name, existing)
       }

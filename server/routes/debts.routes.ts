@@ -5,6 +5,7 @@ import { debts, debtMovements } from '../db/schema.js'
 import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 
 const router = Router()
 
@@ -86,10 +87,10 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const row = (await db.select().from(debts)
-      .where(and(eq(debts.id, req.params.id as string), eq(debts.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(debts.id, req.params.id as string), eq(debts.userId, req.userId!), isNull(debts.deletedAt))).limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Deuda no encontrada' }); return }
     res.json({ data: mapOut(row as any) })
   } catch (err) {
@@ -110,6 +111,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: 'total_amount debe ser un número mayor que 0' }); return
     }
     if (!mapped.direction) mapped.direction = 'i_owe'
+    if (mapped.organizationId) {
+      const ok = await assertOrgMember(req, res, String(mapped.organizationId))
+      if (!ok) return
+    }
     const actorEmail = req.userEmail ?? null
     const [row] = await db.insert(debts).values({ ...mapped, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
@@ -119,7 +124,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     // Include isNull(deletedAt) to prevent updating soft-deleted records
     const existing = (await db.select({ id: debts.id }).from(debts)
@@ -133,6 +138,10 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
         res.status(400).json({ error: 'total_amount debe ser un número mayor que 0' }); return
       }
     }
+    if (patch.organizationId) {
+      const ok = await assertOrgMember(req, res, String(patch.organizationId))
+      if (!ok) return
+    }
     const actorEmail = req.userEmail ?? null
     const [updated] = await db.update(debts)
       .set({ ...patch, updatedByEmail: actorEmail } as any)
@@ -145,10 +154,10 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: debts.id }).from(debts)
-      .where(and(eq(debts.id, req.params.id as string), eq(debts.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(debts.id, req.params.id as string), eq(debts.userId, req.userId!), isNull(debts.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Deuda no encontrada' }); return }
     const actorEmail = req.userEmail ?? null
     await db.update(debts).set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any).where(eq(debts.id, req.params.id as string))
@@ -160,10 +169,10 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 })
 
 // ─── Debt movements ───────────────────────────────────────────────────────────
-router.get('/:debtId/movements', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:debtId/movements', validateUuid('debtId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const debt = (await db.select({ id: debts.id }).from(debts)
-      .where(and(eq(debts.id, req.params.debtId as string), eq(debts.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(debts.id, req.params.debtId as string), eq(debts.userId, req.userId!), isNull(debts.deletedAt))).limit(1))[0]
     if (!debt) { res.status(404).json({ error: 'Deuda no encontrada' }); return }
     const limit = Math.min(Number(req.query.limit) || 100, 500)
     const offset = Number(req.query.offset) || 0
@@ -182,10 +191,10 @@ router.get('/:debtId/movements', authMiddleware, async (req: AuthRequest, res: R
   }
 })
 
-router.post('/:debtId/movements', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:debtId/movements', validateUuid('debtId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const debt = (await db.select({ id: debts.id }).from(debts)
-      .where(and(eq(debts.id, req.params.debtId as string), eq(debts.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(debts.id, req.params.debtId as string), eq(debts.userId, req.userId!), isNull(debts.deletedAt))).limit(1))[0]
     if (!debt) { res.status(404).json({ error: 'Deuda no encontrada' }); return }
     const amount = req.body.amount
     const date   = req.body.date

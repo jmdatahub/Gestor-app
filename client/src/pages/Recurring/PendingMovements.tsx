@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { getPendingMovements } from '../../services/recurringService'
 import {
   useAcceptPendingMovement,
@@ -24,6 +25,7 @@ interface PendingMovement {
 export default function PendingMovements() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { currentWorkspace } = useWorkspace()
   const toast = useToast()
   const { settings } = useSettings()
   const acceptMutation = useAcceptPendingMovement()
@@ -32,17 +34,19 @@ export default function PendingMovements() {
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
 
+  const workspaceId = currentWorkspace?.id ?? null
+
   useEffect(() => {
     if (!user) return
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id])
+  }, [user?.id, workspaceId])
 
   const loadData = async () => {
     if (!user) return
 
     try {
-      const data = await getPendingMovements(user.id)
+      const data = await getPendingMovements(user.id, workspaceId)
       setMovements(Array.isArray(data) ? (data as unknown as PendingMovement[]) : [])
     } catch (error: any) {
       console.error('Error loading pending:', error)

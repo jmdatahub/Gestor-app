@@ -4,6 +4,7 @@ import {
   type AccountWithBalance
 } from './accountService'
 import { getUserInvestments, calculateTotals } from './investmentService'
+import { getCategoryName, getCategoryColor as getMovementCategoryColor, type MovementLike } from '../utils/movement'
 
 function getRootAccountId(accounts: AccountWithBalance[], accountId: string): string {
   const account = accounts.find(a => a.id === accountId)
@@ -126,7 +127,7 @@ export async function getMonthlyCategoryBreakdown(
   // Aggregate by category
   const categoryTotals: Record<string, number> = {}
   for (const m of (movements || [])) {
-    const cat = m.categoryName || m.category_name || 'Sin categoría'
+    const cat = getCategoryName(m)
     categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(m.amount)
   }
 
@@ -276,7 +277,7 @@ export async function getYearlyBreakdown(
     limit: 5000,
     ...orgParamsYB,
   })
-  type Row = { date: string; kind: string; amount: number; categoryName?: string; category_name?: string }
+  type Row = MovementLike & { date: string; kind: string; amount: number }
   const rows = ((data || []) as unknown as Row[]).filter(
     r => r.kind !== 'transfer_in' && r.kind !== 'transfer_out'
   )
@@ -301,8 +302,8 @@ export async function getYearlyBreakdown(
     if (row.kind === 'income') months[m].income += amount
     else if (row.kind === 'expense') {
       months[m].expenses += amount
-      const name = row.categoryName || row.category_name || 'Sin categoría'
-      const existing = catTotals.get(name) ?? { total: 0, color: undefined }
+      const name = getCategoryName(row)
+      const existing = catTotals.get(name) ?? { total: 0, color: getMovementCategoryColor(row) ?? getCategoryColor(catTotals.size) }
       existing.total += amount
       catTotals.set(name, existing)
     }

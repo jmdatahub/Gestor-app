@@ -5,6 +5,7 @@ import { savingsGoals, savingsContributions } from '../db/schema.js'
 import { and, eq, isNull, desc, sql, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 
 const router = Router()
 
@@ -75,7 +76,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const row = (await db.select().from(savingsGoals)
       .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
@@ -98,6 +99,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (isNaN(targetNum) || targetNum <= 0) {
       res.status(400).json({ error: 'target_amount debe ser un número mayor que 0' }); return
     }
+    if (mapped.organizationId) {
+      const ok = await assertOrgMember(req, res, String(mapped.organizationId))
+      if (!ok) return
+    }
     const actorEmail = req.userEmail ?? null
     const [row] = await db.insert(savingsGoals).values({ ...mapped, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
@@ -107,7 +112,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
       .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
@@ -119,6 +124,10 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       if (isNaN(n) || n <= 0) {
         res.status(400).json({ error: 'target_amount debe ser un número mayor que 0' }); return
       }
+    }
+    if (patch.organizationId) {
+      const ok = await assertOrgMember(req, res, String(patch.organizationId))
+      if (!ok) return
     }
     const actorEmail = req.userEmail ?? null
     const [updated] = await db.update(savingsGoals)
@@ -132,7 +141,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
       .where(and(eq(savingsGoals.id, req.params.id as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
@@ -149,7 +158,7 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 })
 
 // ─── Savings Contributions ────────────────────────────────────────────────────
-router.get('/:goalId/contributions', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:goalId/contributions', validateUuid('goalId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const goal = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
       .where(and(eq(savingsGoals.id, req.params.goalId as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]
@@ -171,7 +180,7 @@ router.get('/:goalId/contributions', authMiddleware, async (req: AuthRequest, re
   }
 })
 
-router.post('/:goalId/contributions', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:goalId/contributions', validateUuid('goalId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const goal = (await db.select({ id: savingsGoals.id }).from(savingsGoals)
       .where(and(eq(savingsGoals.id, req.params.goalId as string), eq(savingsGoals.userId, req.userId!), isNull(savingsGoals.deletedAt))).limit(1))[0]

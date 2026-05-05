@@ -165,7 +165,7 @@ export default function CategoriesList() {
         className={`px-2 py-1 rounded text-xs font-bold ${getTextColorClass(cat.color)}`}
         style={{ ...getCategoryPillStyle(cat.color), minWidth: 40, textAlign: 'center' }}
       >
-        {cat.name.slice(0, 2).toUpperCase()}
+        {(cat.name ?? '').slice(0, 2).toUpperCase()}
       </span>
       <span className="cat-row__name">{cat.name}</span>
       <button

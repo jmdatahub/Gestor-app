@@ -5,6 +5,7 @@ import { categories, movements } from '../db/schema.js'
 import { and, eq, isNull, asc, count, ne, ilike } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -62,7 +63,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 })
 
 // Check how many movements reference a category (for safe-delete warning)
-router.get('/:id/usage', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/usage', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: categories.id }).from(categories)
       .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!), isNull(categories.deletedAt))).limit(1))[0]
@@ -77,7 +78,7 @@ router.get('/:id/usage', authMiddleware, async (req: AuthRequest, res: Response)
   }
 })
 
-router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const row = (await db.select().from(categories)
       .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!), isNull(categories.deletedAt))).limit(1))[0]
@@ -123,7 +124,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: categories.id }).from(categories)
       .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!), isNull(categories.deletedAt))).limit(1))[0]
@@ -161,7 +162,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: categories.id }).from(categories)
       .where(and(eq(categories.id, req.params.id as string), eq(categories.userId, req.userId!), isNull(categories.deletedAt))).limit(1))[0]

@@ -5,6 +5,7 @@ import { recurringRules } from '../db/schema.js'
 import { and, eq, isNull, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 const RecurringCreateSchema = z.object({
@@ -135,6 +136,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       }
     }
 
+    if (mapped.organizationId) {
+      const ok = await assertOrgMember(req, res, String(mapped.organizationId))
+      if (!ok) return
+    }
+
     const actorEmail = req.userEmail ?? null
     const [row] = await db.insert(recurringRules).values({ ...mapped, userId: req.userId!, createdByEmail: actorEmail, updatedByEmail: actorEmail } as any).returning()
     res.status(201).json({ data: mapOut(row as any) })
@@ -144,7 +150,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: recurringRules.id }).from(recurringRules)
       .where(and(eq(recurringRules.id, req.params.id as string), eq(recurringRules.userId, req.userId!), isNull(recurringRules.deletedAt))).limit(1))[0]
@@ -169,6 +175,11 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       }
     }
 
+    if (patch.organizationId) {
+      const ok = await assertOrgMember(req, res, String(patch.organizationId))
+      if (!ok) return
+    }
+
     const actorEmail = req.userEmail ?? null
     const [updated] = await db.update(recurringRules).set({ ...patch, updatedByEmail: actorEmail } as any).where(eq(recurringRules.id, req.params.id as string)).returning()
     res.json({ data: mapOut(updated as any) })
@@ -178,10 +189,10 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: recurringRules.id }).from(recurringRules)
-      .where(and(eq(recurringRules.id, req.params.id as string), eq(recurringRules.userId, req.userId!))).limit(1))[0]
+      .where(and(eq(recurringRules.id, req.params.id as string), eq(recurringRules.userId, req.userId!), isNull(recurringRules.deletedAt))).limit(1))[0]
     if (!existing) { res.status(404).json({ error: 'Regla no encontrada' }); return }
     const actorEmail = req.userEmail ?? null
     await db.update(recurringRules).set({ deletedAt: new Date().toISOString(), updatedByEmail: actorEmail } as any).where(eq(recurringRules.id, req.params.id as string))

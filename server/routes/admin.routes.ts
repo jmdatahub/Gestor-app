@@ -4,6 +4,7 @@ import { db } from '../db/connection.js'
 import { profiles, organizations, organizationMembers, users } from '../db/schema.js'
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { sendWelcomeEmail } from '../services/email.service.js'
 
 const router = Router()
@@ -35,6 +36,40 @@ function auditLog(actorId: string, actorEmail: string | undefined, action: strin
   console.info(`[ADMIN AUDIT] actor=${actorId} email=${actorEmail ?? 'unknown'} action=${action} target=${target} ts=${new Date().toISOString()}`)
 }
 
+/**
+ * Drizzle returns camelCase; the client contract expects snake_case.
+ * Strips camelCase aliases and returns a clean snake_case payload for organizations.
+ */
+function mapOrgOut(row: Record<string, any>) {
+  return {
+    id:           row.id,
+    name:         row.name,
+    slug:         row.slug ?? null,
+    description:  row.description ?? null,
+    owner_id:     row.ownerId    ?? row.owner_id    ?? null,
+    parent_id:    row.parentId   ?? row.parent_id   ?? null,
+    created_at:   row.createdAt  ?? row.created_at  ?? null,
+    updated_at:   row.updatedAt  ?? row.updated_at  ?? null,
+    deleted_at:   row.deletedAt  ?? row.deleted_at  ?? null,
+    ...(row.member_count !== undefined ? { member_count: row.member_count } : {}),
+  }
+}
+
+/** Strips camelCase aliases on a users row. */
+function mapUserOut(row: Record<string, any>) {
+  return {
+    id:         row.id,
+    email:      row.email,
+    name:       row.name ?? null,
+    role:       row.role ?? null,
+    avatar_url: row.avatarUrl    ?? row.avatar_url    ?? null,
+    is_active:  row.isActive     ?? row.is_active     ?? null,
+    created_at: row.createdAt    ?? row.created_at    ?? null,
+    updated_at: row.updatedAt    ?? row.updated_at    ?? null,
+    last_active_at: row.lastActiveAt ?? row.last_active_at ?? null,
+  }
+}
+
 // GET /api/v1/admin/me — devuelve el flag de super-admin del usuario actual
 router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -56,14 +91,16 @@ router.get('/organizations', authMiddleware, async (req: AuthRequest, res: Respo
         name: organizations.name,
         slug: organizations.slug,
         description: organizations.description,
-        parent_id: organizations.parentId,
-        created_at: organizations.createdAt,
-        deleted_at: organizations.deletedAt,
+        ownerId: organizations.ownerId,
+        parentId: organizations.parentId,
+        createdAt: organizations.createdAt,
+        updatedAt: organizations.updatedAt,
+        deletedAt: organizations.deletedAt,
         member_count: sql<number>`(SELECT COUNT(*)::int FROM ${organizationMembers} WHERE ${organizationMembers.orgId} = ${organizations.id})`,
       })
       .from(organizations)
       .where(isNull(organizations.deletedAt))
-    res.json({ data: rows })
+    res.json({ data: rows.map(mapOrgOut) })
   } catch (err) {
     console.error('[admin GET /organizations]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -80,13 +117,15 @@ router.get('/organizations/deleted', authMiddleware, async (req: AuthRequest, re
         name: organizations.name,
         slug: organizations.slug,
         description: organizations.description,
-        parent_id: organizations.parentId,
-        created_at: organizations.createdAt,
-        deleted_at: organizations.deletedAt,
+        ownerId: organizations.ownerId,
+        parentId: organizations.parentId,
+        createdAt: organizations.createdAt,
+        updatedAt: organizations.updatedAt,
+        deletedAt: organizations.deletedAt,
       })
       .from(organizations)
       .where(isNotNull(organizations.deletedAt))
-    res.json({ data: rows })
+    res.json({ data: rows.map(mapOrgOut) })
   } catch (err) {
     console.error('[admin GET /organizations/deleted]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -94,7 +133,7 @@ router.get('/organizations/deleted', authMiddleware, async (req: AuthRequest, re
 })
 
 // PATCH /api/v1/admin/organizations/:id
-router.patch('/organizations/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/organizations/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!(await requireSuperAdmin(req, res))) return
     const orgId = String(req.params.id)
@@ -111,13 +150,7 @@ router.patch('/organizations/:id', authMiddleware, async (req: AuthRequest, res:
       .returning()
     if (!updated) { res.status(404).json({ error: 'Organización no encontrada' }); return }
     auditLog(req.userId!, req.userEmail, 'UPDATE_ORGANIZATION', orgId)
-    res.json({ data: {
-      ...updated,
-      parent_id:   (updated as any).parentId   ?? (updated as any).parent_id   ?? null,
-      owner_id:    (updated as any).ownerId    ?? (updated as any).owner_id    ?? null,
-      created_at:  (updated as any).createdAt  ?? (updated as any).created_at,
-      deleted_at:  (updated as any).deletedAt  ?? (updated as any).deleted_at  ?? null,
-    } })
+    res.json({ data: mapOrgOut(updated) })
   } catch (err) {
     console.error('[admin PATCH /organizations/:id]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -125,7 +158,7 @@ router.patch('/organizations/:id', authMiddleware, async (req: AuthRequest, res:
 })
 
 // DELETE /api/v1/admin/organizations/:id — soft delete
-router.delete('/organizations/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/organizations/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!(await requireSuperAdmin(req, res))) return
     const orgId = String(req.params.id)
@@ -142,7 +175,7 @@ router.delete('/organizations/:id', authMiddleware, async (req: AuthRequest, res
 })
 
 // POST /api/v1/admin/organizations/:id/restore
-router.post('/organizations/:id/restore', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/organizations/:id/restore', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!(await requireSuperAdmin(req, res))) return
     const orgId = String(req.params.id)
@@ -159,7 +192,7 @@ router.post('/organizations/:id/restore', authMiddleware, async (req: AuthReques
 })
 
 // DELETE /api/v1/admin/organizations/:id/permanent — hard delete
-router.delete('/organizations/:id/permanent', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/organizations/:id/permanent', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!(await requireSuperAdmin(req, res))) return
     const orgId = String(req.params.id)
@@ -190,7 +223,7 @@ router.post('/organizations/purge', authMiddleware, async (req: AuthRequest, res
 })
 
 // PATCH /api/v1/admin/users/:id/suspend — suspend/unsuspend user
-router.patch('/users/:id/suspend', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/users/:id/suspend', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!(await requireSuperAdmin(req, res))) return
     const targetId = String(req.params.id)
@@ -211,7 +244,7 @@ router.patch('/users/:id/suspend', authMiddleware, async (req: AuthRequest, res:
 })
 
 // PATCH /api/v1/admin/users/:id/approve — approve pending user (set isActive = true)
-router.patch('/users/:id/approve', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/users/:id/approve', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!(await requireSuperAdmin(req, res))) return
     const targetId = String(req.params.id)
@@ -225,7 +258,7 @@ router.patch('/users/:id/approve', authMiddleware, async (req: AuthRequest, res:
     // Send welcome email to the newly approved user (non-blocking)
     sendWelcomeEmail(updated.email, updated.name || '')
       .catch(err => console.warn('[admin/approve] welcome email failed:', err))
-    res.json({ ok: true, user: { id: updated.id, email: updated.email } })
+    res.json({ ok: true, user: mapUserOut(updated) })
   } catch (err) {
     console.error('[admin PATCH /users/:id/approve]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -233,7 +266,7 @@ router.patch('/users/:id/approve', authMiddleware, async (req: AuthRequest, res:
 })
 
 // PATCH /api/v1/admin/users/:id/reject — reject pending user (set isActive = false)
-router.patch('/users/:id/reject', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/users/:id/reject', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!(await requireSuperAdmin(req, res))) return
     const targetId = String(req.params.id)
@@ -244,7 +277,7 @@ router.patch('/users/:id/reject', authMiddleware, async (req: AuthRequest, res: 
       .returning({ id: users.id, email: users.email })
     if (!updated) { res.status(404).json({ error: 'Usuario no encontrado' }); return }
     auditLog(req.userId!, req.userEmail, 'REJECT_USER', targetId)
-    res.json({ ok: true, user: updated })
+    res.json({ ok: true, user: mapUserOut(updated) })
   } catch (err) {
     console.error('[admin PATCH /users/:id/reject]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
@@ -252,7 +285,7 @@ router.patch('/users/:id/reject', authMiddleware, async (req: AuthRequest, res: 
 })
 
 // DELETE /api/v1/admin/users/:id — delete user (reject / hard delete)
-router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/users/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!(await requireSuperAdmin(req, res))) return
     const targetId = String(req.params.id)

@@ -4,6 +4,7 @@ import { db } from '../db/connection.js'
 import { apiTokens } from '../db/schema.js'
 import { and, eq, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import crypto from 'crypto'
 import { z } from 'zod'
 
@@ -71,7 +72,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: apiTokens.id }).from(apiTokens)
       .where(and(eq(apiTokens.id, req.params.id as string), eq(apiTokens.userId, req.userId!))).limit(1))[0]
@@ -84,7 +85,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const existing = (await db.select({ id: apiTokens.id }).from(apiTokens)
       .where(and(eq(apiTokens.id, req.params.id as string), eq(apiTokens.userId, req.userId!))).limit(1))[0]

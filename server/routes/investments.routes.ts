@@ -5,6 +5,7 @@ import { investments, investmentPriceHistory } from '../db/schema.js'
 import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -128,10 +129,10 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   res.json({ data: rows.map(mapOut), total: Number(total), limit, offset })
 })
 
-router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   const row = (await db.select().from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
   if (!row) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
   res.json({ data: mapOut(row) })
 })
@@ -145,6 +146,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (isNaN(qty) || qty <= 0) {
       res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
     }
+  }
+  const orgId = b.organization_id ?? b.organizationId ?? null
+  if (orgId) {
+    const ok = await assertOrgMember(req, res, String(orgId))
+    if (!ok) return
   }
   const actorEmail = req.userEmail ?? null
   const [row] = await db.insert(investments).values({
@@ -172,7 +178,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   res.status(201).json({ data: mapOut(row) })
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   // Include isNull(deletedAt) to prevent updating soft-deleted records
   const existing = (await db.select({ id: investments.id }).from(investments)
@@ -186,18 +192,23 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
       res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
     }
   }
+  const patched = mapIn(req.body)
+  if (patched.organizationId) {
+    const ok = await assertOrgMember(req, res, String(patched.organizationId))
+    if (!ok) return
+  }
   const actorEmail = req.userEmail ?? null
   const [updated] = await db.update(investments)
-    .set({ ...mapIn(req.body), updatedByEmail: actorEmail } as any)
+    .set({ ...patched, updatedByEmail: actorEmail } as any)
     .where(eq(investments.id, id))
     .returning()
   res.json({ data: mapOut(updated) })
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   const existing = (await db.select({ id: investments.id }).from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
   if (!existing) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
   const actorEmail = req.userEmail ?? null
   await Promise.all([
@@ -209,11 +220,11 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 
 // ── Price History ──────────────────────────────────────────────────────────
 
-router.get('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/price-history', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
-  // Verify the investment belongs to the requesting user
+  // Verify the investment belongs to the requesting user and isn't soft-deleted
   const inv = (await db.select({ id: investments.id }).from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
   if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
 
   const limit = Math.min(Number(req.query.limit) || 200, 1000)
@@ -235,11 +246,11 @@ router.get('/:id/price-history', authMiddleware, async (req: AuthRequest, res: R
   })), total: Number(total), limit, offset })
 })
 
-router.post('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:id/price-history', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
-  // Verify the investment belongs to the requesting user
+  // Verify the investment belongs to the requesting user and isn't soft-deleted
   const inv = (await db.select({ id: investments.id }).from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
   if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
 
   const PriceSchema = z.object({

@@ -5,6 +5,7 @@ import { accounts, movements } from '../db/schema.js'
 import { and, eq, isNull, asc, count, ilike, ne, inArray, sql } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 // Sums all confirmed-or-otherwise movements for the given account ids and
@@ -158,7 +159,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       const movementCount = counts.get(r.id) ?? 0
       return {
         ...r,
-        balance: (stored + delta).toFixed(2),
+        balance: Math.round((stored + delta) * 100) / 100,
         is_parent: isParent,
         pending_movements_count: isParent ? movementCount : 0,
       }
@@ -170,11 +171,11 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string
     const row = (await db.select().from(accounts)
-      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!)))
+      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!), isNull(accounts.deletedAt)))
       .limit(1))[0]
     if (!row) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
     const [deltas, counts, [{ children }]] = await Promise.all([
@@ -188,7 +189,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     const isParent = Number(children) > 0
     res.json({ data: mapOut({
       ...row,
-      balance: (stored + delta).toFixed(2),
+      balance: Math.round((stored + delta) * 100) / 100,
       is_parent: isParent,
       pending_movements_count: isParent ? (counts.get(id) ?? 0) : 0,
     }) })
@@ -247,7 +248,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string
     const existing = (await db.select({ id: accounts.id, name: accounts.name, organizationId: accounts.organizationId }).from(accounts)
@@ -280,7 +281,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   }
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string
     const existing = (await db.select({ id: accounts.id }).from(accounts)
