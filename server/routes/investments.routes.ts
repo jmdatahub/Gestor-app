@@ -5,6 +5,7 @@ import { investments, investmentPriceHistory, investmentMovements } from '../db/
 import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
+import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -128,7 +129,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   res.json({ data: rows.map(mapOut), total: Number(total), limit, offset })
 })
 
-router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   const row = (await db.select().from(investments)
     .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
@@ -138,6 +139,14 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const b = req.body
+  // If client provides organization_id, verify the user is a member of that org
+  // (otherwise an investment could be silently attributed to an org the user
+  // does not belong to).
+  const orgIdRaw = b.organization_id ?? b.organizationId ?? null
+  if (orgIdRaw) {
+    const ok = await assertOrgMember(req, res, String(orgIdRaw))
+    if (!ok) return
+  }
   // Validate quantity: must be a positive number (not 0, not negative)
   const rawQty = b.quantity
   if (rawQty !== undefined && rawQty !== null) {
@@ -172,7 +181,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   res.status(201).json({ data: mapOut(row) })
 })
 
-router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   // Include isNull(deletedAt) to prevent updating soft-deleted records
   const existing = (await db.select({ id: investments.id }).from(investments)
@@ -194,7 +203,7 @@ router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => 
   res.json({ data: mapOut(updated) })
 })
 
-router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   const existing = (await db.select({ id: investments.id }).from(investments)
     .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
@@ -229,7 +238,7 @@ function mapMovementOut(row: Record<string, any>) {
   }
 }
 
-router.get('/:id/movements', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/movements', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string
     const inv = (await db.select({ id: investments.id }).from(investments)
@@ -253,7 +262,7 @@ router.get('/:id/movements', authMiddleware, async (req: AuthRequest, res: Respo
   }
 })
 
-router.post('/:id/movements', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:id/movements', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string
 
@@ -398,7 +407,7 @@ router.post('/:id/movements', authMiddleware, async (req: AuthRequest, res: Resp
   }
 })
 
-router.delete('/:id/movements/:movementId', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id/movements/:movementId', validateUuid('id', 'movementId'), authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string
     const movementId = req.params.movementId as string
@@ -488,7 +497,7 @@ router.delete('/:id/movements/:movementId', authMiddleware, async (req: AuthRequ
 
 // ── Price History ──────────────────────────────────────────────────────────
 
-router.get('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/price-history', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   // Verify the investment belongs to the requesting user
   const inv = (await db.select({ id: investments.id }).from(investments)
@@ -514,7 +523,7 @@ router.get('/:id/price-history', authMiddleware, async (req: AuthRequest, res: R
   })), total: Number(total), limit, offset })
 })
 
-router.post('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:id/price-history', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   // Verify the investment belongs to the requesting user
   const inv = (await db.select({ id: investments.id }).from(investments)
