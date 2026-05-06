@@ -10,6 +10,11 @@ function useModalHistory(isOpen: boolean, onClose: () => void) {
   // Track whether the popstate handler itself closed the modal so we
   // don't call history.back() a second time in cleanup.
   const closedByPopState = useRef(false);
+  // Hold the latest onClose in a ref so the effect doesn't re-fire when the
+  // parent re-renders with a new closure — which would otherwise trigger a
+  // history.back() → popstate → unwanted close on every state change.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -22,7 +27,7 @@ function useModalHistory(isOpen: boolean, onClose: () => void) {
     const handlePopState = () => {
       // The user pressed back — close the modal (don't navigate)
       closedByPopState.current = true;
-      onClose();
+      onCloseRef.current();
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -34,7 +39,7 @@ function useModalHistory(isOpen: boolean, onClose: () => void) {
         window.history.back();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 }
 
 export interface UiModalProps {
@@ -68,6 +73,10 @@ export function UiModal({
   const containerRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
+  // Stable ref for onClose so the focus-trap effect doesn't re-fire on every
+  // parent re-render (which would steal focus back to the first input).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Browser back button closes modal (fix #11)
   useModalHistory(isOpen, onClose);
@@ -100,7 +109,7 @@ export function UiModal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -134,7 +143,7 @@ export function UiModal({
       // Restore focus to the trigger element when modal closes
       previousFocusRef.current?.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   // Prevent scrolling when open — iOS-safe scroll lock
   useEffect(() => {

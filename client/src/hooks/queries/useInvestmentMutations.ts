@@ -4,7 +4,9 @@ import {
   updateInvestment,
   deleteInvestment,
   updatePrice,
+  createInvestmentMovement,
   type CreateInvestmentInput,
+  type CreateMovementInput,
   type Investment,
 } from '../../services/investmentService'
 import { dashboardKeys } from './useDashboardAccounts'
@@ -76,5 +78,18 @@ export function useUpdateInvestmentPrice() {
     },
     // Price updates only affect the investment record, not movements or dashboard balances.
     onSettled: () => invalidateInvestmentOnly(queryClient),
+  })
+}
+
+export function useCreateInvestmentMovement() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: CreateMovementInput }) =>
+      createInvestmentMovement(id, input),
+    onError: (err) => {
+      console.error('[useCreateInvestmentMovement] mutation failed:', err)
+    },
+    // Movements may affect funding accounts (buy = expense, sell = income) so bust dashboard caches too.
+    onSettled: () => invalidateInvestmentDerived(queryClient),
   })
 }

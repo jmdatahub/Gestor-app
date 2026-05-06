@@ -84,18 +84,46 @@ export interface InvestmentPriceHistory {
   id: string; investment_id: string; price: number; date: string; created_at: string
 }
 
+export type InvestmentMovementType = 'buy' | 'sell'
+
+export interface InvestmentMovement {
+  id: string
+  investment_id: string
+  user_id: string
+  organization_id?: string | null
+  type: InvestmentMovementType
+  quantity: number
+  price: number
+  total_amount: number
+  margin_delta: number
+  spot_quantity_delta: number
+  date: string
+  notes?: string | null
+  created_at?: string
+  updated_at?: string
+  deleted_at?: string | null
+}
+
+export interface CreateMovementInput {
+  type: InvestmentMovementType
+  quantity: number
+  price: number
+  date?: string
+  notes?: string | null
+}
+
 // ── API calls ──────────────────────────────────────────────────────────────
 
 export async function fetchInvestments(_userId: string, organizationId?: string | null): Promise<Investment[]> {
   const params: Record<string, string> = {}
   if (organizationId) params.org_id = organizationId
-  const res = await api.get<{ data: Investment[] }>('/api/v1/investments', params)
-  return Array.isArray(res?.data) ? res.data : []
+  const { data } = await api.get<{ data: Investment[] }>('/api/v1/investments', params)
+  return data
 }
 
 export async function getInvestmentById(id: string): Promise<Investment | null> {
-  const res = await api.get<{ data: Investment }>(`/api/v1/investments/${id}`)
-  return res?.data ?? null
+  const { data } = await api.get<{ data: Investment }>(`/api/v1/investments/${id}`)
+  return data
 }
 
 export async function createInvestment(inv: CreateInvestmentInput): Promise<Investment> {
@@ -113,12 +141,49 @@ export async function deleteInvestment(id: string): Promise<void> {
 }
 
 export async function fetchPriceHistory(investmentId: string): Promise<InvestmentPriceHistory[]> {
-  const res = await api.get<{ data: InvestmentPriceHistory[] }>(`/api/v1/investments/${investmentId}/price-history`)
-  return Array.isArray(res?.data) ? res.data : []
+  const { data } = await api.get<{ data: InvestmentPriceHistory[] }>(`/api/v1/investments/${investmentId}/price-history`)
+  return data
 }
 
 export async function addPriceHistory(investmentId: string, entry: { price: number; date: string }): Promise<InvestmentPriceHistory> {
   const { data } = await api.post<{ data: InvestmentPriceHistory }>(`/api/v1/investments/${investmentId}/price-history`, entry)
+  return data
+}
+
+// ── Movements (buy/sell) ───────────────────────────────────────────────────
+
+export async function fetchInvestmentMovements(
+  investmentId: string,
+  params: { limit?: number; offset?: number } = {},
+): Promise<{ data: InvestmentMovement[]; total: number }> {
+  const q: Record<string, string> = {}
+  if (params.limit  != null) q.limit  = String(params.limit)
+  if (params.offset != null) q.offset = String(params.offset)
+  const res = await api.get<{ data: InvestmentMovement[]; total: number }>(
+    `/api/v1/investments/${investmentId}/movements`,
+    q,
+  )
+  return { data: res.data, total: res.total }
+}
+
+export async function createInvestmentMovement(
+  investmentId: string,
+  input: CreateMovementInput,
+): Promise<{ investment: Investment; movement: InvestmentMovement }> {
+  const { data } = await api.post<{ data: { investment: Investment; movement: InvestmentMovement } }>(
+    `/api/v1/investments/${investmentId}/movements`,
+    input,
+  )
+  return data
+}
+
+export async function deleteInvestmentMovement(
+  investmentId: string,
+  movementId: string,
+): Promise<{ investment: Investment; movement: InvestmentMovement }> {
+  const { data } = await api.delete<{ data: { investment: Investment; movement: InvestmentMovement } }>(
+    `/api/v1/investments/${investmentId}/movements/${movementId}`,
+  )
   return data
 }
 

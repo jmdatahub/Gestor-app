@@ -1,11 +1,10 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { db } from '../db/connection.js'
-import { investments, investmentPriceHistory } from '../db/schema.js'
+import { investments, investmentPriceHistory, investmentMovements } from '../db/schema.js'
 import { and, eq, isNull, desc, count } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { assertOrgMember } from '../middleware/orgMembership.js'
-import { validateUuid } from '../middleware/validateUuid.js'
 import { z } from 'zod'
 
 const router = Router()
@@ -129,10 +128,10 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   res.json({ data: rows.map(mapOut), total: Number(total), limit, offset })
 })
 
-router.get('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   const row = (await db.select().from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
   if (!row) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
   res.json({ data: mapOut(row) })
 })
@@ -146,11 +145,6 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (isNaN(qty) || qty <= 0) {
       res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
     }
-  }
-  const orgId = b.organization_id ?? b.organizationId ?? null
-  if (orgId) {
-    const ok = await assertOrgMember(req, res, String(orgId))
-    if (!ok) return
   }
   const actorEmail = req.userEmail ?? null
   const [row] = await db.insert(investments).values({
@@ -178,7 +172,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   res.status(201).json({ data: mapOut(row) })
 })
 
-router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
+router.patch('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   // Include isNull(deletedAt) to prevent updating soft-deleted records
   const existing = (await db.select({ id: investments.id }).from(investments)
@@ -192,23 +186,18 @@ router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest
       res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
     }
   }
-  const patched = mapIn(req.body)
-  if (patched.organizationId) {
-    const ok = await assertOrgMember(req, res, String(patched.organizationId))
-    if (!ok) return
-  }
   const actorEmail = req.userEmail ?? null
   const [updated] = await db.update(investments)
-    .set({ ...patched, updatedByEmail: actorEmail } as any)
+    .set({ ...mapIn(req.body), updatedByEmail: actorEmail } as any)
     .where(eq(investments.id, id))
     .returning()
   res.json({ data: mapOut(updated) })
 })
 
-router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
   const existing = (await db.select({ id: investments.id }).from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
   if (!existing) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
   const actorEmail = req.userEmail ?? null
   await Promise.all([
@@ -218,13 +207,292 @@ router.delete('/:id', validateUuid('id'), authMiddleware, async (req: AuthReques
   res.json({ ok: true })
 })
 
+// ── Movements (buy/sell) ───────────────────────────────────────────────────
+
+function mapMovementOut(row: Record<string, any>) {
+  return {
+    id:                  row.id,
+    investment_id:       row.investmentId       ?? row.investment_id,
+    user_id:             row.userId             ?? row.user_id,
+    organization_id:     row.organizationId     ?? row.organization_id     ?? null,
+    type:                row.type,
+    quantity:            row.quantity != null ? parseFloat(String(row.quantity)) : 0,
+    price:               row.price    != null ? parseFloat(String(row.price))    : 0,
+    total_amount:        row.totalAmount        != null ? parseFloat(String(row.totalAmount))        : 0,
+    margin_delta:        row.marginDelta        != null ? parseFloat(String(row.marginDelta))        : 0,
+    spot_quantity_delta: row.spotQuantityDelta  != null ? parseFloat(String(row.spotQuantityDelta))  : 0,
+    date:                row.date,
+    notes:               row.notes ?? null,
+    created_at:          row.createdAt          ?? row.created_at,
+    updated_at:          row.updatedAt          ?? row.updated_at,
+    deleted_at:          row.deletedAt          ?? row.deleted_at          ?? null,
+  }
+}
+
+router.get('/:id/movements', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string
+    const inv = (await db.select({ id: investments.id }).from(investments)
+      .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
+    if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
+
+    const limit = Math.min(Number(req.query.limit) || 100, 500)
+    const offset = Number(req.query.offset) || 0
+    const whereClause = and(eq(investmentMovements.investmentId, id), isNull(investmentMovements.deletedAt))
+    const [rows, [{ total }]] = await Promise.all([
+      db.select().from(investmentMovements)
+        .where(whereClause)
+        .orderBy(desc(investmentMovements.date))
+        .limit(limit).offset(offset),
+      db.select({ total: count() }).from(investmentMovements).where(whereClause),
+    ])
+    res.json({ data: rows.map(mapMovementOut), total: Number(total), limit, offset })
+  } catch (err) {
+    console.error('[investments/movements GET]', err)
+    res.status(500).json({ error: 'Error al obtener movimientos' })
+  }
+})
+
+router.post('/:id/movements', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string
+
+    const MovementSchema = z.object({
+      type:     z.enum(['buy', 'sell']),
+      quantity: z.string().or(z.number()).transform(v => parseFloat(String(v))),
+      price:    z.string().or(z.number()).transform(v => parseFloat(String(v))),
+      date:     z.string().optional(),
+      notes:    z.string().nullable().optional(),
+    }).strict()
+
+    let body: z.infer<typeof MovementSchema>
+    try {
+      body = MovementSchema.parse(req.body)
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ error: 'Datos inválidos', details: err.issues }); return
+      }
+      throw err
+    }
+
+    if (!Number.isFinite(body.quantity) || body.quantity <= 0) {
+      res.status(400).json({ error: 'quantity debe ser un número mayor que 0' }); return
+    }
+    if (!Number.isFinite(body.price) || body.price < 0) {
+      res.status(400).json({ error: 'price debe ser un número mayor o igual que 0' }); return
+    }
+
+    // Load the investment & ownership check
+    const inv = (await db.select().from(investments)
+      .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
+    if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
+
+    const oldQty       = inv.quantity      != null ? parseFloat(String(inv.quantity))      : 0
+    const oldPrice     = inv.purchasePrice != null ? parseFloat(String(inv.purchasePrice)) : 0
+    const curPrice     = inv.currentPrice  != null ? parseFloat(String(inv.currentPrice))  : 0
+    const oldMargin    = inv.marginAmount  != null ? parseFloat(String(inv.marginAmount))  : 0
+    const positionType = (inv.positionType ?? 'spot') as string
+    const isShort      = !!inv.isShort
+
+    const movQty   = body.quantity
+    const movPrice = body.price
+    const totalAmount = movQty * movPrice
+
+    let newQty       = oldQty
+    let newPurchase  = oldPrice
+    let newMargin    = oldMargin
+    let marginDelta: number = 0
+    let spotQtyDelta: number = 0
+    let newPositionStatus = inv.positionStatus ?? 'open'
+
+    if (body.type === 'buy') {
+      // Weighted-average purchase price
+      const denom = oldQty + movQty
+      newQty = denom
+      newPurchase = denom > 0 ? ((oldQty * oldPrice) + (movQty * movPrice)) / denom : movPrice
+      spotQtyDelta = movQty
+      if (positionType !== 'spot') {
+        // New margin contributed by the user
+        marginDelta = totalAmount
+        newMargin = oldMargin + marginDelta
+      }
+      // Reopen if previously closed
+      if (newPositionStatus === 'closed' && (newQty > 0 || newMargin > 0)) {
+        newPositionStatus = 'open'
+      }
+    } else {
+      // sell — proportional split (Option A) for leveraged positions
+      if (movQty > oldQty + 1e-9) {
+        res.status(400).json({ error: 'No se puede vender más cantidad que la posición actual' }); return
+      }
+
+      if (positionType === 'spot') {
+        newQty = oldQty - movQty
+        spotQtyDelta = -movQty
+      } else {
+        const spotValue = oldQty * curPrice
+        const denom = oldMargin + spotValue
+        const marginRatio = denom > 0 ? oldMargin / denom : 1
+        const soldAmount = totalAmount
+
+        marginDelta = -soldAmount * marginRatio
+        const spotAmountReduced = soldAmount * (1 - marginRatio)
+        spotQtyDelta = curPrice > 0 ? -spotAmountReduced / curPrice : 0
+
+        newMargin = oldMargin + marginDelta
+        newQty = oldQty + spotQtyDelta
+
+        // Numerical safety — clamp tiny negatives to 0
+        if (newMargin < 0 && newMargin > -1e-6) newMargin = 0
+        if (newQty < 0 && newQty > -1e-9) newQty = 0
+      }
+
+      if (newQty <= 0 && newMargin <= 0) {
+        newPositionStatus = 'closed'
+        newQty = Math.max(newQty, 0)
+        newMargin = Math.max(newMargin, 0)
+      }
+    }
+
+    const actorEmail = req.userEmail ?? null
+    const nowIso = new Date().toISOString()
+    const dateIso = body.date ?? nowIso
+
+    // Transaction: insert movement + update investment
+    const result = await db.transaction(async (tx) => {
+      const [updatedInv] = await tx.update(investments).set({
+        quantity:       String(newQty),
+        purchasePrice:  String(newPurchase),
+        marginAmount:   positionType !== 'spot' ? String(newMargin) : inv.marginAmount,
+        positionStatus: newPositionStatus,
+        updatedAt:      nowIso,
+        updatedByEmail: actorEmail,
+      } as any).where(eq(investments.id, id)).returning()
+
+      const [movement] = await tx.insert(investmentMovements).values({
+        investmentId:       id,
+        userId:             req.userId!,
+        organizationId:     inv.organizationId ?? null,
+        type:               body.type,
+        quantity:           String(movQty),
+        price:              String(movPrice),
+        totalAmount:        String(totalAmount),
+        marginDelta:        String(marginDelta),
+        spotQuantityDelta:  String(spotQtyDelta),
+        date:               dateIso,
+        notes:              body.notes ?? null,
+      } as any).returning()
+
+      return { updatedInv, movement }
+    })
+
+    res.status(201).json({
+      data: {
+        investment: mapOut(result.updatedInv),
+        movement:   mapMovementOut(result.movement),
+      }
+    })
+  } catch (err) {
+    console.error('[investments/movements POST]', err)
+    res.status(500).json({ error: 'Error al registrar movimiento' })
+  }
+})
+
+router.delete('/:id/movements/:movementId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string
+    const movementId = req.params.movementId as string
+
+    const inv = (await db.select().from(investments)
+      .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
+    if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
+
+    const movement = (await db.select().from(investmentMovements)
+      .where(and(
+        eq(investmentMovements.id, movementId),
+        eq(investmentMovements.investmentId, id),
+        isNull(investmentMovements.deletedAt),
+      )).limit(1))[0]
+    if (!movement) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
+
+    const oldQty     = inv.quantity     != null ? parseFloat(String(inv.quantity))     : 0
+    const oldPrice   = inv.purchasePrice!= null ? parseFloat(String(inv.purchasePrice)): 0
+    const oldMargin  = inv.marginAmount != null ? parseFloat(String(inv.marginAmount)) : 0
+
+    const movQty       = parseFloat(String(movement.quantity))
+    const movPrice     = parseFloat(String(movement.price))
+    const marginDelta  = movement.marginDelta != null ? parseFloat(String(movement.marginDelta)) : 0
+    const spotQtyDelta = movement.spotQuantityDelta != null ? parseFloat(String(movement.spotQuantityDelta)) : 0
+
+    let newQty: number
+    let newPurchase = oldPrice
+    let newMargin = oldMargin - marginDelta
+
+    if (movement.type === 'buy') {
+      // Reverse weighted-average: oldPrice was post-buy avg. Solve for pre-buy.
+      newQty = oldQty - movQty
+      if (newQty > 1e-9) {
+        const totalCost = oldQty * oldPrice
+        const movCost = movQty * movPrice
+        newPurchase = (totalCost - movCost) / newQty
+        if (!Number.isFinite(newPurchase) || newPurchase < 0) newPurchase = oldPrice
+      } else {
+        newQty = 0
+        newPurchase = 0
+      }
+    } else {
+      // sell — reverse the deltas (which were negative)
+      newQty = oldQty - spotQtyDelta
+    }
+
+    // Numerical safety
+    if (newQty < 0 && newQty > -1e-9) newQty = 0
+    if (newMargin < 0 && newMargin > -1e-6) newMargin = 0
+
+    const newPositionStatus =
+      (newQty > 0 || newMargin > 0) ? 'open' : (inv.positionStatus ?? 'open')
+
+    const positionType = (inv.positionType ?? 'spot') as string
+    const actorEmail = req.userEmail ?? null
+    const nowIso = new Date().toISOString()
+
+    const result = await db.transaction(async (tx) => {
+      const [updatedInv] = await tx.update(investments).set({
+        quantity:       String(newQty),
+        purchasePrice:  String(newPurchase),
+        marginAmount:   positionType !== 'spot' ? String(newMargin) : inv.marginAmount,
+        positionStatus: newPositionStatus,
+        updatedAt:      nowIso,
+        updatedByEmail: actorEmail,
+      } as any).where(eq(investments.id, id)).returning()
+
+      const [softDeleted] = await tx.update(investmentMovements)
+        .set({ deletedAt: nowIso, updatedAt: nowIso } as any)
+        .where(eq(investmentMovements.id, movementId))
+        .returning()
+
+      return { updatedInv, softDeleted }
+    })
+
+    res.json({
+      data: {
+        investment: mapOut(result.updatedInv),
+        movement:   mapMovementOut(result.softDeleted),
+      }
+    })
+  } catch (err) {
+    console.error('[investments/movements DELETE]', err)
+    res.status(500).json({ error: 'Error al eliminar movimiento' })
+  }
+})
+
 // ── Price History ──────────────────────────────────────────────────────────
 
-router.get('/:id/price-history', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
-  // Verify the investment belongs to the requesting user and isn't soft-deleted
+  // Verify the investment belongs to the requesting user
   const inv = (await db.select({ id: investments.id }).from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
   if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
 
   const limit = Math.min(Number(req.query.limit) || 200, 1000)
@@ -246,11 +514,11 @@ router.get('/:id/price-history', validateUuid('id'), authMiddleware, async (req:
   })), total: Number(total), limit, offset })
 })
 
-router.post('/:id/price-history', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/:id/price-history', authMiddleware, async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string
-  // Verify the investment belongs to the requesting user and isn't soft-deleted
+  // Verify the investment belongs to the requesting user
   const inv = (await db.select({ id: investments.id }).from(investments)
-    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!), isNull(investments.deletedAt))).limit(1))[0]
+    .where(and(eq(investments.id, id), eq(investments.userId, req.userId!))).limit(1))[0]
   if (!inv) { res.status(404).json({ error: 'Inversión no encontrada' }); return }
 
   const PriceSchema = z.object({
@@ -275,13 +543,7 @@ router.post('/:id/price-history', validateUuid('id'), authMiddleware, async (req
   await db.update(investments)
     .set({ currentPrice: body.price, updatedAt: new Date().toISOString() })
     .where(eq(investments.id, id))
-  res.status(201).json({ data: {
-    ...row,
-    investment_id: (row as any).investmentId ?? (row as any).investment_id,
-    user_id:       (row as any).userId       ?? (row as any).user_id,
-    created_at:    (row as any).createdAt    ?? (row as any).created_at,
-    price:         row.price != null ? parseFloat(String(row.price)) : null,
-  } })
+  res.status(201).json({ data: row })
 })
 
 // ── Server-side CoinGecko proxy with 60s cache ─────────────────────────────

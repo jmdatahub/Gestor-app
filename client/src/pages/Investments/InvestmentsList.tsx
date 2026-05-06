@@ -9,11 +9,12 @@ import {
 } from '../../services/investmentService'
 import {
   useCreateInvestment, useUpdateInvestment, useDeleteInvestment, useUpdateInvestmentPrice,
+  useCreateInvestmentMovement,
 } from '../../hooks/queries/useInvestmentMutations'
 import { getAccountsWithBalances, type AccountWithBalance } from '../../services/accountService'
 import {
   Plus, TrendingUp, TrendingDown, RefreshCw, Trash2, Eye, X, Pencil,
-  AlertTriangle, Zap, Activity, DollarSign, BarChart2, Shield,
+  AlertTriangle, Zap, Activity, DollarSign, BarChart2, Shield, ArrowLeftRight,
 } from 'lucide-react'
 import { useI18n } from '../../hooks/useI18n'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
@@ -183,10 +184,11 @@ export default function InvestmentsList() {
   const { user } = useAuth()
   const { currentWorkspace } = useWorkspace()
   const toast = useToast()
-  const createMut = useCreateInvestment()
-  const updateMut = useUpdateInvestment()
-  const deleteMut = useDeleteInvestment()
-  const priceMut  = useUpdateInvestmentPrice()
+  const createMut   = useCreateInvestment()
+  const updateMut   = useUpdateInvestment()
+  const deleteMut   = useDeleteInvestment()
+  const priceMut    = useUpdateInvestmentPrice()
+  const movementMut = useCreateInvestmentMovement()
 
   const [investments, setInvestments] = useState<Investment[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -196,11 +198,12 @@ export default function InvestmentsList() {
   const [updatingPrices, setUpdatingPrices] = useState(false)
   const [lastUpdate,     setLastUpdate]     = useState<Date | null>(null)
 
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showPriceModal,  setShowPriceModal]  = useState(false)
-  const [selectedInv,     setSelectedInv]     = useState<Investment | null>(null)
-  const [editingId,       setEditingId]       = useState<string | null>(null)
-  const [submitting,      setSubmitting]      = useState(false)
+  const [showCreateModal,   setShowCreateModal]   = useState(false)
+  const [showPriceModal,    setShowPriceModal]    = useState(false)
+  const [showMovementModal, setShowMovementModal] = useState(false)
+  const [selectedInv,       setSelectedInv]       = useState<Investment | null>(null)
+  const [editingId,         setEditingId]         = useState<string | null>(null)
+  const [submitting,        setSubmitting]        = useState(false)
 
   const [name,         setName]        = useState('')
   const [type,         setType]        = useState<string>('crypto')
@@ -219,6 +222,14 @@ export default function InvestmentsList() {
 
   const [newPrice,  setNewPrice]  = useState('')
   const [priceDate, setPriceDate] = useState(new Date().toISOString().split('T')[0])
+
+  // Movement form state
+  const [mvType,     setMvType]     = useState<'buy' | 'sell'>('buy')
+  const [mvQuantity, setMvQuantity] = useState('')
+  const [mvPrice,    setMvPrice]    = useState('')
+  const [mvTotal,    setMvTotal]    = useState('')
+  const [mvDate,     setMvDate]     = useState(new Date().toISOString().split('T')[0])
+  const [mvNotes,    setMvNotes]    = useState('')
 
   const fmt = useCallback((n: number, currency = 'EUR') =>
     new Intl.NumberFormat(language === 'es' ? 'es-ES' : 'en-US', { style: 'currency', currency })
@@ -370,6 +381,64 @@ export default function InvestmentsList() {
       toast.error(t('common.error') || 'Error', e?.message || 'No se pudo actualizar el precio')
     }
     finally { setSubmitting(false) }
+  }
+
+  const openMovementModal = (inv: Investment) => {
+    setSelectedInv(inv)
+    setMvType('buy')
+    setMvQuantity('')
+    setMvPrice(inv.current_price != null ? String(inv.current_price) : '')
+    setMvTotal('')
+    setMvDate(new Date().toISOString().split('T')[0])
+    setMvNotes('')
+    setShowMovementModal(true)
+  }
+
+  const closeMovementModal = () => {
+    setShowMovementModal(false)
+    setSelectedInv(null)
+    setMvType('buy')
+    setMvQuantity('')
+    setMvPrice('')
+    setMvTotal('')
+    setMvDate(new Date().toISOString().split('T')[0])
+    setMvNotes('')
+  }
+
+  const handleCreateMovement = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedInv || !user) return
+    const qty   = parseFloat(mvQuantity)
+    const price = parseFloat(mvPrice)
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error('Cantidad inválida', 'La cantidad debe ser mayor que 0')
+      return
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      toast.error('Precio inválido', 'El precio debe ser mayor o igual a 0')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await movementMut.mutateAsync({
+        id: selectedInv.id,
+        input: {
+          type: mvType,
+          quantity: qty,
+          price,
+          date: mvDate || undefined,
+          notes: mvNotes || undefined,
+        },
+      })
+      toast.success('Movimiento registrado', `${mvType === 'buy' ? 'Compra' : 'Venta'} de ${qty} ${(selectedInv.symbol ?? selectedInv.ticker ?? '').toUpperCase()} guardada`)
+      closeMovementModal()
+      loadData()
+    } catch (e: any) {
+      console.error(e)
+      toast.error(t('common.error') || 'Error', e?.message || 'No se pudo registrar el movimiento')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleDelete = async (inv: Investment) => {
@@ -769,6 +838,9 @@ export default function InvestmentsList() {
                         <Zap size={13} />
                       </button>
                     )}
+                    <button className="btn btn-icon btn-secondary" onClick={() => openMovementModal(inv)} title="Registrar movimiento" style={{ width: 30, height: 30 }}>
+                      <ArrowLeftRight size={13} />
+                    </button>
                     <button className="btn btn-icon btn-secondary" onClick={() => navigate(`/app/investments/${inv.id}`)} title="Ver detalle" style={{ width: 30, height: 30 }}>
                       <Eye size={13} />
                     </button>
@@ -934,6 +1006,227 @@ export default function InvestmentsList() {
             <button type="button" className="btn btn-secondary" onClick={() => setShowPriceModal(false)}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
               {submitting ? 'Guardando…' : 'Actualizar'}
+            </button>
+          </UiModalFooter>
+        </form>
+      </UiModal>
+
+      {/* ── Register movement modal ── */}
+      <UiModal isOpen={showMovementModal && !!selectedInv} onClose={closeMovementModal} width="460px">
+        <form onSubmit={handleCreateMovement}>
+          <UiModalHeader>
+            <div className="d-flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold">Registrar movimiento</h3>
+                {selectedInv && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                    {selectedInv.symbol && <strong>{selectedInv.symbol} · </strong>}
+                    {selectedInv.name}
+                    {selectedInv.current_price != null && (
+                      <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>
+                        Actual: {selectedInv.currency === 'USD' ? `$${selectedInv.current_price.toLocaleString('es-ES')}` : fmt(selectedInv.current_price)}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button type="button" onClick={closeMovementModal}><X size={20} /></button>
+            </div>
+          </UiModalHeader>
+          <UiModalBody>
+            {/* Tipo: segmented control */}
+            <div className="mb-3">
+              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tipo</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, padding: 4, borderRadius: 8, background: 'rgba(107,114,128,0.08)', border: '1px solid var(--border)' }}>
+                <button
+                  type="button"
+                  onClick={() => setMvType('buy')}
+                  className={mvType === 'buy' ? 'btn btn-primary' : 'btn btn-secondary'}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    border: 'none',
+                    background: mvType === 'buy' ? 'rgba(34,197,94,0.18)' : 'transparent',
+                    color: mvType === 'buy' ? 'var(--success)' : 'var(--text-muted)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <TrendingUp size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                  Compra
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMvType('sell')}
+                  className={mvType === 'sell' ? 'btn btn-primary' : 'btn btn-secondary'}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    border: 'none',
+                    background: mvType === 'sell' ? 'rgba(239,68,68,0.18)' : 'transparent',
+                    color: mvType === 'sell' ? 'var(--danger)' : 'var(--text-muted)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <TrendingDown size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                  Venta
+                </button>
+              </div>
+            </div>
+
+            <div className="d-flex gap-2 mb-3">
+              <div style={{ flex: 1 }}>
+                <UiNumber
+                  label={`Cantidad${selectedInv?.symbol ? ` (${selectedInv.symbol.toUpperCase()})` : ''}`}
+                  value={mvQuantity}
+                  onChange={(v) => {
+                    setMvQuantity(v)
+                    const q = parseFloat(v); const p = parseFloat(mvPrice)
+                    if (Number.isFinite(q) && Number.isFinite(p) && p > 0) setMvTotal((q * p).toFixed(2))
+                    else if (!v) setMvTotal('')
+                  }}
+                  step="any"
+                  min={0}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <UiNumber
+                  label={`Precio por unidad (${selectedInv?.currency === 'USD' ? 'USD $' : 'EUR €'})`}
+                  value={mvPrice}
+                  onChange={(v) => {
+                    setMvPrice(v)
+                    const q = parseFloat(mvQuantity); const p = parseFloat(v)
+                    if (Number.isFinite(q) && Number.isFinite(p) && p > 0) setMvTotal((q * p).toFixed(2))
+                  }}
+                  step="0.01"
+                  min={0}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="mb-3">
+              <UiNumber
+                label={`Total (${selectedInv?.currency === 'USD' ? 'USD $' : 'EUR €'})`}
+                value={mvTotal}
+                onChange={(v) => {
+                  setMvTotal(v)
+                  const t = parseFloat(v); const p = parseFloat(mvPrice)
+                  if (Number.isFinite(t) && Number.isFinite(p) && p > 0) setMvQuantity((t / p).toFixed(8))
+                  else if (!v) setMvQuantity('')
+                }}
+                step="0.01"
+                min={0}
+                placeholder="O introduce el total y se calcula la cantidad"
+              />
+            </div>
+
+            <div className="d-flex gap-2 mb-3">
+              <div style={{ flex: 1 }}>
+                <UiField label="Fecha">
+                  <UiDatePicker value={mvDate} onChange={d => setMvDate(d ? formatISODateString(d) : '')} required />
+                </UiField>
+              </div>
+            </div>
+
+            <div className="mb-3">
+              <UiInput
+                label="Notas (opcional)"
+                value={mvNotes}
+                onChange={e => setMvNotes(e.target.value)}
+                placeholder="Contexto adicional…"
+              />
+            </div>
+
+            {/* Total preview */}
+            {(() => {
+              const qty   = parseFloat(mvQuantity)
+              const price = parseFloat(mvPrice)
+              const total = (Number.isFinite(qty) && Number.isFinite(price)) ? qty * price : 0
+              const cur   = selectedInv?.currency ?? 'EUR'
+              const fmtCur = (n: number) => cur === 'USD'
+                ? `$${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : fmt(n)
+              return (
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  background: 'rgba(107,114,128,0.06)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Total {mvType === 'buy' ? 'compra' : 'venta'}
+                  </span>
+                  <span style={{
+                    fontSize: '1.1rem',
+                    fontWeight: 800,
+                    fontFamily: 'monospace',
+                    color: mvType === 'buy' ? 'var(--success)' : 'var(--danger)',
+                  }}>
+                    {mvType === 'buy' ? '−' : '+'}{fmtCur(total)}
+                  </span>
+                </div>
+              )
+            })()}
+
+            {/* Margin/spot split preview for sells on leveraged positions */}
+            {(() => {
+              if (!selectedInv) return null
+              if (mvType !== 'sell') return null
+              if (selectedInv.position_type === 'spot') return null
+              const qty   = parseFloat(mvQuantity)
+              const price = parseFloat(mvPrice)
+              if (!Number.isFinite(qty) || qty <= 0) return null
+              if (!Number.isFinite(price) || price < 0) return null
+              const margin = selectedInv.margin_amount != null ? Number(selectedInv.margin_amount) : 0
+              const cur    = selectedInv.current_price ?? price
+              const heldQty = selectedInv.quantity ?? 0
+              const spotValue = heldQty * cur
+              const denom = margin + spotValue
+              if (denom <= 0) return null
+              const marginRatio = margin / denom
+              const soldAmount = qty * price
+              const marginReduction = soldAmount * marginRatio
+              const spotReduction  = soldAmount * (1 - marginRatio)
+              const spotUnits      = cur > 0 ? spotReduction / cur : 0
+              const curLabel = selectedInv.currency ?? 'EUR'
+              const fmtCur = (n: number) => curLabel === 'USD'
+                ? `$${n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : fmt(n)
+              const sym = (selectedInv.symbol ?? selectedInv.ticker ?? '').toUpperCase() || 'uds'
+              return (
+                <div style={{
+                  marginTop: 10,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  background: 'rgba(245,158,11,0.08)',
+                  border: '1px solid rgba(245,158,11,0.25)',
+                  fontSize: '0.78rem',
+                  color: 'var(--text)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}>
+                  <div style={{ fontWeight: 700, color: '#f59e0b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Reparto estimado
+                  </div>
+                  <div>Se reducirá <strong>{fmtCur(marginReduction)}</strong> de margen y <strong>{spotUnits.toLocaleString('es-ES', { maximumFractionDigits: 8 })} {sym}</strong> de spot ({fmtCur(spotReduction)}).</div>
+                </div>
+              )
+            })()}
+          </UiModalBody>
+          <UiModalFooter>
+            <button type="button" className="btn btn-secondary" onClick={closeMovementModal}>Cancelar</button>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? 'Guardando…' : 'Registrar movimiento'}
             </button>
           </UiModalFooter>
         </form>

@@ -20,6 +20,7 @@ export const accounts = pgTable("accounts", {
 	currency: text().default('EUR'),
 	balance: numeric({ precision: 15, scale:  2 }).default('0'),
 	organizationId: uuid("organization_id"),
+	isPrimary: boolean("is_primary").default(false).notNull(),
 	deletedAt: timestamp("deleted_at", { withTimezone: true, mode: 'string' }),
 	createdByEmail: text("created_by_email"),
 	updatedByEmail: text("updated_by_email"),
@@ -417,6 +418,55 @@ export const investments = pgTable("investments", {
 	pgPolicy("Users can insert own investments (Hybrid)", { as: "permissive", for: "insert", to: ["public"] }),
 	pgPolicy("Users can update own investments (Hybrid)", { as: "permissive", for: "update", to: ["public"] }),
 	pgPolicy("Users can view own investments (Hybrid)", { as: "permissive", for: "select", to: ["public"] }),
+]);
+
+export const investmentMovements = pgTable("investment_movements", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	investmentId: uuid("investment_id").notNull(),
+	userId: uuid("user_id").notNull(),
+	organizationId: uuid("organization_id"),
+	type: text().notNull(),
+	quantity: numeric({ precision: 18, scale: 8 }).notNull(),
+	price: numeric({ precision: 15, scale: 2 }).notNull(),
+	totalAmount: numeric("total_amount", { precision: 15, scale: 2 }).notNull(),
+	marginDelta: numeric("margin_delta", { precision: 15, scale: 2 }).default('0'),
+	spotQuantityDelta: numeric("spot_quantity_delta", { precision: 18, scale: 8 }).default('0'),
+	date: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	notes: text(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
+	deletedAt: timestamp("deleted_at", { withTimezone: true, mode: 'string' }),
+}, (table) => [
+	index("idx_investment_movements_investment_id_date").using("btree", table.investmentId.asc().nullsLast().op("uuid_ops"), table.date.desc().nullsFirst().op("timestamptz_ops")),
+	index("idx_investment_movements_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_investment_movements_organization_id").using("btree", table.organizationId.asc().nullsLast().op("uuid_ops")),
+	index("idx_investment_movements_deleted_at").using("btree", table.deletedAt.asc().nullsLast().op("timestamptz_ops")).where(sql`(deleted_at IS NOT NULL)`),
+	foreignKey({
+			columns: [table.investmentId],
+			foreignColumns: [investments.id],
+			name: "investment_movements_investment_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [users.id],
+			name: "investment_movements_user_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.organizationId],
+			foreignColumns: [organizations.id],
+			name: "investment_movements_organization_id_fkey"
+		}).onDelete("cascade"),
+	pgPolicy("Users can delete investment movements (Hybrid)", { as: "permissive", for: "delete", to: ["public"], using: sql`(EXISTS ( SELECT 1
+   FROM investments
+  WHERE ((investments.id = investment_movements.investment_id) AND (((investments.organization_id IS NULL) AND (investments.user_id = auth.uid())) OR ((investments.organization_id IS NOT NULL) AND (EXISTS ( SELECT 1
+           FROM organization_members
+          WHERE ((organization_members.org_id = investments.organization_id) AND (organization_members.user_id = auth.uid())))))))))` }),
+	pgPolicy("Users can insert investment movements (Hybrid)", { as: "permissive", for: "insert", to: ["public"] }),
+	pgPolicy("Users can update investment movements (Hybrid)", { as: "permissive", for: "update", to: ["public"] }),
+	pgPolicy("Users can view investment movements (Hybrid)", { as: "permissive", for: "select", to: ["public"] }),
+	check("investment_movements_type_check", sql`type = ANY (ARRAY['buy'::text, 'sell'::text])`),
+	check("investment_movements_quantity_check", sql`quantity > (0)::numeric`),
+	check("investment_movements_price_check", sql`price >= (0)::numeric`),
 ]);
 
 export const alertRules = pgTable("alert_rules", {
@@ -826,24 +876,6 @@ export const organizationMembers = pgTable("organization_members", {
 	pgPolicy("Super admins can update all org members", { as: "permissive", for: "update", to: ["public"] }),
 	pgPolicy("Super admins can view all org members", { as: "permissive", for: "select", to: ["public"] }),
 	pgPolicy("Users can insert themselves as members", { as: "permissive", for: "insert", to: ["public"] }),
-]);
-
-export const memberCommissionRates = pgTable("member_commission_rates", {
-	id: uuid().defaultRandom().primaryKey().notNull(),
-	email: text().notNull(),
-	rate: numeric({ precision: 5, scale: 2 }).default('0').notNull(),
-	organizationId: uuid("organization_id"),
-	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
-	updatedByEmail: text("updated_by_email"),
-}, (table) => [
-	index("idx_member_commission_rates_organization_id").using("btree", table.organizationId.asc().nullsLast().op("uuid_ops")),
-	uniqueIndex("member_commission_rates_email_org_uidx").using("btree", sql`lower(${table.email})`, table.organizationId.asc().nullsLast().op("uuid_ops")),
-	foreignKey({
-			columns: [table.organizationId],
-			foreignColumns: [organizations.id],
-			name: "member_commission_rates_organization_id_fkey"
-		}).onDelete("cascade"),
-	check("member_commission_rates_rate_check", sql`rate >= (0)::numeric AND rate <= (100)::numeric`),
 ]);
 
 export const users = pgTable("users", {

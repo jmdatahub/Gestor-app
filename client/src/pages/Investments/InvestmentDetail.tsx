@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../context/AuthContext'
 import {
   getInvestmentById,
   getPriceHistory,
   updatePrice,
   investmentTypes,
+  fetchInvestmentMovements,
+  deleteInvestmentMovement,
   type Investment,
-  type PriceHistoryEntry
+  type PriceHistoryEntry,
+  type InvestmentMovement,
 } from '../../services/investmentService'
-import { ArrowLeft, TrendingUp, TrendingDown, Plus, RefreshCw } from 'lucide-react'
+import { ArrowLeft, TrendingUp, TrendingDown, Plus, RefreshCw, Trash2, Inbox } from 'lucide-react'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { formatISODateString } from '../../utils/date'
 import { UiNumber } from '../../components/ui/UiNumber'
@@ -17,26 +21,54 @@ import { useToast } from '../../components/Toast'
 import { useSettings } from '../../context/SettingsContext'
 import { formatEUR, formatDate as formatDateUtil } from '../../utils/format'
 
+const MOVEMENTS_PAGE_SIZE = 20
+
 export default function InvestmentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
   const toast = useToast()
   const { settings } = useSettings()
+  const queryClient = useQueryClient()
   const [investment, setInvestment] = useState<Investment | null>(null)
   const [history, setHistory] = useState<PriceHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
-  
+
   // Update price form
   const [showPriceForm, setShowPriceForm] = useState(false)
   const [newPrice, setNewPrice] = useState('')
   const [priceDate, setPriceDate] = useState(new Date().toISOString().split('T')[0])
   const [submitting, setSubmitting] = useState(false)
 
+  // Chart type preference (persisted)
+  const [chartType, setChartType] = useState<'bars' | 'line'>(() => {
+    if (typeof window === 'undefined') return 'bars'
+    return (window.localStorage.getItem('investment-chart-type') as 'bars' | 'line') || 'bars'
+  })
   useEffect(() => {
-    if (!id) return
-    loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (typeof window !== 'undefined') window.localStorage.setItem('investment-chart-type', chartType)
+  }, [chartType])
+
+  // Movements
+  const [movementsPage, setMovementsPage] = useState(1)
+  const [deletingMovementId, setDeletingMovementId] = useState<string | null>(null)
+  const investmentId = id ?? ''
+
+  const movementsQuery = useQuery<{ data: InvestmentMovement[]; total: number }>({
+    queryKey: ['investment-movements', investmentId, movementsPage],
+    queryFn: () => fetchInvestmentMovements(investmentId, {
+      limit: MOVEMENTS_PAGE_SIZE,
+      offset: (movementsPage - 1) * MOVEMENTS_PAGE_SIZE,
+    }),
+    enabled: !!investmentId,
+  })
+
+  const movements = movementsQuery.data?.data ?? []
+  const movementsTotal = movementsQuery.data?.total ?? 0
+  const hasMoreMovements = movementsPage * MOVEMENTS_PAGE_SIZE < movementsTotal
+
+  useEffect(() => {
+    if (id) loadData()
   }, [id])
 
   const loadData = async () => {
@@ -46,8 +78,8 @@ export default function InvestmentDetail() {
         getInvestmentById(id),
         getPriceHistory(id)
       ])
-      setInvestment(inv ?? null)
-      setHistory(Array.isArray(hist) ? hist : [])
+      setInvestment(inv)
+      setHistory(hist)
     } catch (error) {
       console.error('Error loading investment:', error)
     } finally {
@@ -81,6 +113,26 @@ export default function InvestmentDetail() {
 
 
 
+  const handleDeleteMovement = async (movement: InvestmentMovement) => {
+    if (!id) return
+    const ok = window.confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')
+    if (!ok) return
+    setDeletingMovementId(movement.id)
+    try {
+      await deleteInvestmentMovement(id, movement.id)
+      queryClient.invalidateQueries({ queryKey: ['investment-movements', id] })
+      queryClient.invalidateQueries({ queryKey: ['investments'] })
+      // Refresh the investment detail (positions update after movement deletion).
+      loadData()
+      toast.success('Movimiento eliminado', 'El movimiento se ha eliminado correctamente')
+    } catch (error: any) {
+      console.error('Error deleting movement:', error)
+      toast.error('Error al eliminar movimiento', error?.message || 'No se pudo eliminar el movimiento')
+    } finally {
+      setDeletingMovementId(null)
+    }
+  }
+
   const formatCurrency = (amount: number) => {
     return formatEUR(amount, settings)
   }
@@ -91,6 +143,34 @@ export default function InvestmentDetail() {
 
   const getTypeName = (typeVal: string) => {
     return investmentTypes.find(t => t.value === typeVal)?.label || typeVal
+  }
+
+  const assetType = investment?.type ?? investment?.asset_type ?? ''
+  const quantityDecimals = assetType === 'crypto' ? 8 : 2
+
+  const formatQuantity = (qty: number, decimals = quantityDecimals) => {
+    const locale = settings.language === 'es' ? 'es-ES' : 'en-US'
+    return qty.toLocaleString(locale, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: decimals,
+    })
+  }
+
+  const formatSignedCurrency = (amount: number) => {
+    if (!amount) return '-'
+    const formatted = formatCurrency(Math.abs(amount))
+    return amount > 0 ? `+${formatted}` : `-${formatted}`
+  }
+
+  const formatSignedQuantity = (qty: number) => {
+    if (!qty) return '-'
+    const formatted = formatQuantity(Math.abs(qty))
+    return qty > 0 ? `+${formatted}` : `-${formatted}`
+  }
+
+  const formatMovementDate = (date: string) => {
+    const locale = settings.language === 'es' ? 'es-ES' : 'en-US'
+    return new Date(date).toLocaleDateString(locale)
   }
 
   if (loading) {
@@ -230,39 +310,85 @@ export default function InvestmentDetail() {
 
       {/* Price Chart (Simple) */}
       <div className="card mb-6">
-        <h3 style={styles.sectionTitle}>Evolución del Precio</h3>
-        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <h3 style={styles.sectionTitle}>Evolución del Precio</h3>
+          {history.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 8, background: 'rgba(107,114,128,0.08)', border: '1px solid var(--border)' }}>
+              <button
+                type="button"
+                onClick={() => setChartType('bars')}
+                style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600, border: 'none', cursor: 'pointer', borderRadius: 6, background: chartType === 'bars' ? 'var(--primary)' : 'transparent', color: chartType === 'bars' ? '#fff' : 'var(--text-muted)' }}
+              >Barras</button>
+              <button
+                type="button"
+                onClick={() => setChartType('line')}
+                style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600, border: 'none', cursor: 'pointer', borderRadius: 6, background: chartType === 'line' ? 'var(--primary)' : 'transparent', color: chartType === 'line' ? '#fff' : 'var(--text-muted)' }}
+              >Líneas</button>
+            </div>
+          )}
+        </div>
+
         {history.length === 0 ? (
           <p className="text-gray-500 text-center" style={{ padding: '2rem' }}>
             No hay histórico de precios
           </p>
-        ) : (
+        ) : chartType === 'bars' ? (
           <div style={styles.chartContainer}>
             <div style={styles.chart}>
-              {history.map((entry, i) => {
-                const height = ((entry.price - minPrice) / priceRange) * 100
-                return (
-                  <div key={entry.id} style={styles.chartBar}>
-                    <div 
-                      style={{ 
-                        ...styles.bar, 
-                        height: `${Math.max(5, height)}%`,
-                        background: i === history.length - 1 ? 'var(--primary)' : 'var(--gray-300)'
-                      }}
-                      title={`${formatDate(entry.date)}: ${formatCurrency(entry.price)}`}
-                    />
-                    <span style={styles.chartLabel}>
-                      {new Date(entry.date).toLocaleDateString(settings.language === 'es' ? 'es-ES' : 'en-US', { day: '2-digit', month: 'short' })}
-                    </span>
-                  </div>
-                )
-              })}
+              {[...history]
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .map((entry, i, arr) => {
+                  const height = ((entry.price - minPrice) / priceRange) * 100
+                  return (
+                    <div key={entry.id} style={styles.chartBar}>
+                      <div
+                        style={{
+                          ...styles.bar,
+                          height: `${Math.max(5, height)}%`,
+                          background: i === arr.length - 1 ? 'var(--primary)' : 'var(--gray-300)'
+                        }}
+                        title={`${formatDate(entry.date)}: ${formatCurrency(entry.price)}`}
+                      />
+                      <span style={styles.chartLabel}>
+                        {new Date(entry.date).toLocaleDateString(settings.language === 'es' ? 'es-ES' : 'en-US', { day: '2-digit', month: 'short' })}
+                      </span>
+                    </div>
+                  )
+                })}
             </div>
             <div style={styles.chartAxis}>
               <span>{formatCurrency(maxPrice)}</span>
               <span>{formatCurrency(minPrice)}</span>
             </div>
           </div>
+        ) : (
+          (() => {
+            const sorted = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            const W = 800, H = 200, padX = 24, padY = 12
+            const innerW = W - padX * 2, innerH = H - padY * 2
+            const n = sorted.length
+            const xFor = (i: number) => n === 1 ? padX + innerW / 2 : padX + (i / (n - 1)) * innerW
+            const yFor = (p: number) => priceRange === 0 ? padY + innerH / 2 : padY + innerH - ((p - minPrice) / priceRange) * innerH
+            const points = sorted.map((e, i) => `${xFor(i)},${yFor(e.price)}`).join(' ')
+            const areaPath = `M ${xFor(0)},${padY + innerH} L ${sorted.map((e, i) => `${xFor(i)},${yFor(e.price)}`).join(' L ')} L ${xFor(n - 1)},${padY + innerH} Z`
+            return (
+              <div style={styles.chartContainer}>
+                <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: 1, width: '100%', height: '200px' }}>
+                  <path d={areaPath} fill="var(--primary)" fillOpacity={0.12} />
+                  <polyline points={points} fill="none" stroke="var(--primary)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+                  {sorted.map((e, i) => (
+                    <circle key={e.id} cx={xFor(i)} cy={yFor(e.price)} r={i === n - 1 ? 4 : 2.5} fill={i === n - 1 ? 'var(--primary)' : 'var(--gray-400)'}>
+                      <title>{`${formatDate(e.date)}: ${formatCurrency(e.price)}`}</title>
+                    </circle>
+                  ))}
+                </svg>
+                <div style={styles.chartAxis}>
+                  <span>{formatCurrency(maxPrice)}</span>
+                  <span>{formatCurrency(minPrice)}</span>
+                </div>
+              </div>
+            )
+          })()
         )}
       </div>
 
@@ -306,12 +432,138 @@ export default function InvestmentDetail() {
         )}
       </div>
 
-      {/* TODO: Integration with movements
-        In the future, this is where we could:
-        - Show movements linked to this investment (buy/sell operations)
-        - Create automatic movements when buying more units
-        - Track total capital invested from the savings account
-      */}
+      {/* Movements */}
+      <div className="card" style={{ marginTop: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h3 style={styles.sectionTitle}>Movimientos</h3>
+          {movementsTotal > 0 && (
+            <span style={{ fontSize: '0.875rem', color: 'var(--gray-500)' }}>
+              {movementsTotal} {movementsTotal === 1 ? 'movimiento' : 'movimientos'}
+            </span>
+          )}
+        </div>
+
+        {movementsQuery.isLoading ? (
+          <div className="flex items-center justify-center" style={{ padding: '2rem' }}>
+            <div className="animate-spin" style={{
+              width: '28px',
+              height: '28px',
+              border: '3px solid var(--gray-200)',
+              borderTopColor: 'var(--primary)',
+              borderRadius: '50%',
+            }}></div>
+          </div>
+        ) : movementsQuery.isError ? (
+          <p className="text-gray-500 text-center" style={{ padding: '1rem' }}>
+            Error al cargar los movimientos
+          </p>
+        ) : movements.length === 0 ? (
+          <div
+            className="text-gray-500 text-center"
+            style={{
+              padding: '2rem',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <Inbox size={32} style={{ opacity: 0.5 }} />
+            <span>Sin movimientos registrados</span>
+          </div>
+        ) : (
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th style={{ textAlign: 'right' }}>Cantidad</th>
+                    <th style={{ textAlign: 'right' }}>Precio</th>
+                    <th style={{ textAlign: 'right' }}>Total</th>
+                    <th style={{ textAlign: 'right' }}>Δ Margen</th>
+                    <th style={{ textAlign: 'right' }}>Δ Spot</th>
+                    <th style={{ textAlign: 'right' }}>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movements.map((mov) => (
+                    <tr key={mov.id}>
+                      <td>{formatMovementDate(mov.date)}</td>
+                      <td>
+                        <span className={`badge ${mov.type === 'buy' ? 'badge-success' : 'badge-danger'}`}>
+                          {mov.type === 'buy' ? 'Compra' : 'Venta'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{formatQuantity(Number(mov.quantity))}</td>
+                      <td style={{ textAlign: 'right' }}>{formatCurrency(Number(mov.price))}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 500 }}>{formatCurrency(Number(mov.total_amount))}</td>
+                      <td
+                        style={{
+                          textAlign: 'right',
+                          color: Number(mov.margin_delta) > 0
+                            ? 'var(--success)'
+                            : Number(mov.margin_delta) < 0
+                              ? 'var(--danger)'
+                              : 'var(--gray-500)',
+                        }}
+                      >
+                        {formatSignedCurrency(Number(mov.margin_delta))}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'right',
+                          color: Number(mov.spot_quantity_delta) > 0
+                            ? 'var(--success)'
+                            : Number(mov.spot_quantity_delta) < 0
+                              ? 'var(--danger)'
+                              : 'var(--gray-500)',
+                        }}
+                      >
+                        {formatSignedQuantity(Number(mov.spot_quantity_delta))}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          className="btn btn-icon btn-danger"
+                          onClick={() => handleDeleteMovement(mov)}
+                          disabled={deletingMovementId === mov.id}
+                          title="Eliminar movimiento"
+                          style={{ width: 30, height: 30 }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {(hasMoreMovements || movementsPage > 1) && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '1rem' }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setMovementsPage((p) => Math.max(1, p - 1))}
+                  disabled={movementsPage === 1 || movementsQuery.isFetching}
+                >
+                  Anterior
+                </button>
+                <span style={{ fontSize: '0.875rem', color: 'var(--gray-600)' }}>
+                  Página {movementsPage}
+                </span>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setMovementsPage((p) => p + 1)}
+                  disabled={!hasMoreMovements || movementsQuery.isFetching}
+                >
+                  {movementsQuery.isFetching ? 'Cargando...' : 'Ver más'}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
