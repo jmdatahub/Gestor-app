@@ -88,7 +88,9 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        // Gestor backend = 3002 (CRM ocupa 3001 por convención de equipo).
+        // Puede sobreescribirse con VITE_GESTOR_API_PORT si hace falta.
+        target: `http://localhost:${process.env.VITE_GESTOR_API_PORT || '3002'}`,
         changeOrigin: true,
       },
     },
