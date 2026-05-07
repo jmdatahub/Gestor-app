@@ -19,6 +19,7 @@ import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiTextarea } from '../../components/ui/UiTextarea'
 import { UiModal, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { Fab } from '../../components/layout/Fab'
 import { useToast } from '../../components/Toast'
 import { StatCard } from '../../components/shared/StatCard'
 import { EmptyState } from '../../components/shared/EmptyState'
@@ -216,7 +217,7 @@ export default function DebtsList() {
   return (
     <div className="page-container">
       {/* ── Modern Header with gradient icon ──────────────────────────────── */}
-      <div className="page-header" style={{ marginBottom: '2rem' }}>
+      <div className="page-header has-fab" style={{ marginBottom: '2rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', marginBottom: '0.5rem' }}>
             <div style={{
@@ -257,9 +258,13 @@ export default function DebtsList() {
         </button>
       </div>
 
+      {/* Mobile FAB */}
+      <Fab onClick={() => setShowModal(true)} ariaLabel={t('debts.new')} />
+
       {/* ── KPI cards ─────────────────────────────────────────────────────── */}
       {hasAnyDebt && (
         <div
+          className="stat-grid mb-4"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',

@@ -444,7 +444,7 @@ function NetWorthSection({ overview, locale }: { overview: any; locale: string }
   const fmt = (n: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 360px) 1fr', gap: 24, alignItems: 'center' }}>
+    <div className="net-worth-section">
       <DonutChart
         data={slices}
         centerLabel="Patrimonio"
@@ -452,7 +452,7 @@ function NetWorthSection({ overview, locale }: { overview: any; locale: string }
         height={260}
         locale={locale}
       />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className="net-worth-section__list">
         <CategoryBarList data={slices} max={8} locale={locale} />
       </div>
     </div>

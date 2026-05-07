@@ -40,6 +40,12 @@ scripts/diag2.mjs
 scripts/diag_data.mjs
 scripts/test_api.mjs
 
+# Mobile audit artifacts (Playwright captures + local-only token)
+scripts/.test-token.txt
+scripts/audit-screenshots/
+scripts/audit-before/
+scripts/audit-screenshots-pre-final/
+
 # Vite PWA dev artifacts
 **/dev-dist/
 

@@ -18,6 +18,7 @@ import { useI18n } from '../../hooks/useI18n'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { formatISODateString } from '../../utils/date'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { Fab } from '../../components/layout/Fab'
 import { UiField } from '../../components/ui/UiField'
 import { UiTextarea } from '../../components/ui/UiTextarea'
 import { useToast } from '../../components/Toast'
@@ -190,7 +191,7 @@ export default function SavingsList() {
   return (
     <div className="page-container">
       {/* Header */}
-      <div className="page-header">
+      <div className="page-header has-fab">
         <div>
           <h1 className="page-title">{t('savings.title')}</h1>
           <p className="page-subtitle">{t('savings.subtitle')}</p>
@@ -200,6 +201,9 @@ export default function SavingsList() {
           {t('savings.new')}
         </button>
       </div>
+
+      {/* Mobile FAB */}
+      <Fab onClick={() => setShowGoalModal(true)} ariaLabel={t('savings.new')} />
 
       {/* Goals List */}
       {goals.length === 0 ? (

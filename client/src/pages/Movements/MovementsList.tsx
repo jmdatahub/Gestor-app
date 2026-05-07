@@ -65,6 +65,7 @@ import { ExcelColumn } from '../../utils/excelExport'
 
 import { useI18n } from '../../hooks/useI18n'
 
+import { Fab } from '../../components/layout/Fab'
 import { UiSelect } from '../../components/ui/UiSelect'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { UiField } from '../../components/ui/UiField'
@@ -665,7 +666,7 @@ export default function MovementsList() {
   return (
     <div className="page-container">
       {/* Header */}
-      <div className="page-header">
+      <div className="page-header has-fab">
         <div>
           <h1 className="page-title">{t('movements.title')}</h1>
           <p className="page-subtitle">{t('movements.subtitle')}</p>
@@ -676,8 +677,11 @@ export default function MovementsList() {
         </button>
       </div>
 
+      {/* Mobile FAB */}
+      <Fab onClick={() => setShowModal(true)} ariaLabel={t('movements.new')} />
+
       {/* Filter Toolbar */}
-      <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
+      <div className="filter-toolbar flex flex-wrap items-center gap-4 mb-6 p-4 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
          {/* Premium Search Input */}
          <div style={{ 
            position: 'relative', 

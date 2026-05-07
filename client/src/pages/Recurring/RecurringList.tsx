@@ -22,6 +22,7 @@ import { UiField } from '../../components/ui/UiField'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { Fab } from '../../components/layout/Fab'
 import { SkeletonList } from '../../components/Skeleton'
 import { CategoryPicker } from '../../components/domain/CategoryPicker'
 import { useToast } from '../../components/Toast'
@@ -237,7 +238,7 @@ export default function RecurringList() {
   return (
     <div className="page-container">
       {/* Header */}
-      <div className="page-header">
+      <div className="page-header has-fab">
         <div>
           <h1 className="page-title">{t('recurring.title')}</h1>
           <p className="page-subtitle">{t('recurring.subtitle')}</p>
@@ -247,6 +248,9 @@ export default function RecurringList() {
           {t('recurring.new')}
         </button>
       </div>
+
+      {/* Mobile FAB */}
+      <Fab onClick={() => setShowModal(true)} ariaLabel={t('recurring.new')} />
 
       {/* Rules List */}
       {rules.length === 0 ? (
@@ -261,7 +265,7 @@ export default function RecurringList() {
         <UiCard>
           <UiCardBody noPadding style={{ overflow: 'hidden' }}>
             <div className="table-container">
-            <table className="table w-full">
+            <table className="table responsive-table w-full">
               <thead>
                 <tr>
                   <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left' }}>{t('recurring.description')}</th>
@@ -277,29 +281,29 @@ export default function RecurringList() {
               <tbody>
                 {rules.map((rule) => (
                   <tr key={rule.id} style={{ opacity: !rule.is_active ? 0.5 : 1 }}>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="Descripción" style={{ padding: '0.75rem 1.5rem' }}>
                       <div style={{ fontWeight: 500 }}>{rule.description || t('common.noDescription')}</div>
                       {rule.category && (
                         <div className="text-xs text-muted mt-1">{typeof rule.category === 'object' ? rule.category.name : rule.category}</div>
                       )}
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="Tipo" style={{ padding: '0.75rem 1.5rem' }}>
                       <span className={`badge ${rule.kind === 'income' ? 'badge-success' : 'badge-danger'}`}>
                         {rule.kind === 'income' ? t('movements.type.income') : t('movements.type.expense')}
                       </span>
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>{rule.account?.name || '-'}</td>
-                    <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 600, color: rule.kind === 'income' ? 'var(--success)' : 'var(--danger)' }}>
+                    <td data-label="Cuenta" style={{ padding: '0.75rem 1.5rem' }}>{rule.account?.name || '-'}</td>
+                    <td data-label="Importe" style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 600, color: rule.kind === 'income' ? 'var(--success)' : 'var(--danger)' }}>
                       {rule.kind === 'income' ? '+' : '-'}{formatCurrency(rule.amount)}
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}>{getFrequencyLabel(rule.frequency)}</td>
-                    <td style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}>{formatDate(rule.next_occurrence)}</td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="Frecuencia" style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}>{getFrequencyLabel(rule.frequency)}</td>
+                    <td data-label="Próxima" style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}>{formatDate(rule.next_occurrence)}</td>
+                    <td data-label="Estado" style={{ padding: '0.75rem 1.5rem' }}>
                       <span className={`badge ${rule.is_active ? 'badge-success' : 'badge-gray'}`}>
                         {rule.is_active ? t('recurring.active') : t('recurring.inactive')}
                       </span>
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="" style={{ padding: '0.75rem 1.5rem' }}>
                       <button
                         className={`btn btn-icon ${rule.is_active ? 'btn-ghost' : 'btn-success'}`}
                         onClick={() => handleToggle(rule)}

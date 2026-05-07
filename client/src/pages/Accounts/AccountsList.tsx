@@ -28,6 +28,7 @@ import { UiDatePicker } from '../../components/ui/UiDatePicker'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
 import { Plus, Edit2, Power, PowerOff, ArrowRightLeft, CreditCard, Wallet, PiggyBank, TrendingUp, AlertTriangle } from 'lucide-react'
 import { Breadcrumbs } from '../../components/Breadcrumbs'
+import { Fab } from '../../components/layout/Fab'
 import { SkeletonList } from '../../components/Skeleton'
 import { StatCard } from '../../components/shared/StatCard'
 import { EmptyState } from '../../components/shared/EmptyState'
@@ -275,7 +276,7 @@ export default function AccountsList() {
   return (
     <div className="page-container">
       {/* Header */}
-      <div className="page-header">
+      <div className="page-header has-fab">
         <div>
           <Breadcrumbs items={[
             { label: t('accounts.title'), icon: <CreditCard size={16} /> }
@@ -283,7 +284,7 @@ export default function AccountsList() {
           <h1 className="page-title" style={{ marginTop: '0.5rem' }}>{t('accounts.title')}</h1>
           <p className="page-subtitle">{t('accounts.subtitle')}</p>
         </div>
-        <div className="d-flex gap-2">
+        <div className="d-flex gap-2 page-header-actions">
           <button className="btn btn-secondary" onClick={() => { resetTransferForm(); setShowTransferModal(true); }}>
             <ArrowRightLeft size={20} />
             {t('accounts.transfer')}
@@ -294,6 +295,9 @@ export default function AccountsList() {
           </button>
         </div>
       </div>
+
+      {/* Mobile FAB */}
+      <Fab onClick={() => { resetForm(); setShowCreateModal(true); }} ariaLabel={t('accounts.new')} />
 
       <div className="stat-grid mb-4">
         <StatCard
@@ -341,7 +345,7 @@ export default function AccountsList() {
         <UiCard>
           <UiCardBody noPadding style={{ overflow: 'hidden' }}>
             <div className="table-container">
-            <table className="table w-full">
+            <table className="table responsive-table w-full">
               <thead>
                 <tr>
                   <th style={{ padding: '0.75rem 1.5rem', textAlign: 'left' }}>{t('accounts.name')}</th>
@@ -353,13 +357,13 @@ export default function AccountsList() {
               </thead>
               <tbody>
                 {flatAccounts.map((acc) => (
-                  <tr 
-                    key={acc.id} 
+                  <tr
+                    key={acc.id}
                     style={{ opacity: !acc.is_active ? 0.5 : 1 }}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
                     onClick={() => acc.type === 'broker' ? navigate('/app/investments') : navigate(`/app/accounts/${acc.id}`)}
                   >
-                    <td style={{ padding: '0.75rem 1.5rem', fontWeight: 600 }}>
+                    <td data-label="Cuenta" style={{ padding: '0.75rem 1.5rem', fontWeight: 600 }}>
                       <div style={{ marginLeft: `${acc.level * 1.5}rem` }} className="d-flex items-center gap-2">
                         {acc.level > 0 && (
                           <div style={{ width: 8, height: 8, borderLeft: '1px solid var(--gray-400)', borderBottom: '1px solid var(--gray-400)', marginBottom: 4 }} />
@@ -378,18 +382,18 @@ export default function AccountsList() {
                         )}
                       </div>
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="Tipo" style={{ padding: '0.75rem 1.5rem' }}>
                       <span className="badge badge-gray">{getAccountTypeLabel(acc.type)}</span>
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 600, color: Number(acc.balance) >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
+                    <td data-label="Saldo" style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 600, color: Number(acc.balance) >= 0 ? 'var(--text-primary)' : 'var(--danger)' }}>
                       {formatCurrency(acc.balance)}
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="Estado" style={{ padding: '0.75rem 1.5rem' }}>
                       <span className={`badge ${acc.is_active ? 'badge-success' : 'badge-gray'}`}>
                         {acc.is_active ? t('accounts.active') : t('accounts.inactive')}
                       </span>
                     </td>
-                    <td style={{ padding: '0.75rem 1.5rem' }}>
+                    <td data-label="" style={{ padding: '0.75rem 1.5rem' }}>
                       <div className="d-flex gap-1 justify-end">
                         <button
                           className="btn btn-icon btn-ghost"

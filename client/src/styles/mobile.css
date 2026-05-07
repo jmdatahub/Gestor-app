@@ -1,19 +1,24 @@
 /* ==============================================
-   MOBILE UX FIXES
-   All issues fixed:
-   1. Touch targets >= 44x44px
-   2. No horizontal scroll (overflow-x control)
-   3. iOS input zoom prevention (font-size >= 16px)
-   4. iOS modal scroll lock (overscroll-behavior)
-   5. Responsive table -> card layout on mobile
-   6. Date picker usable on mobile (sheet)
+   MOBILE UX — Consolidated mobile-first responsive layer
+   Audited with Playwright + 60 real screenshots × 5 viewports.
+   Breakpoints: 320 / 360 / 480 / 640 / 768 / 1024.
    ============================================== */
 
 /* -----------------------------------------------
-   1. TOUCH TARGETS — minimum 44×44 px
+   0. CSS VARS — safe-area + sizes
    ----------------------------------------------- */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --mobile-header-h: 56px;
+  --mobile-bottom-nav-h: 64px;
+}
 
-/* Nav items: ensure min height 44px on mobile */
+/* -----------------------------------------------
+   1. TOUCH TARGETS — minimum 44×44 (Android & iOS)
+   ----------------------------------------------- */
 @media (max-width: 768px) {
   .nav-item {
     min-height: 44px !important;
@@ -21,40 +26,30 @@
     align-items: center !important;
   }
 
-  /* Icon-only buttons */
-  .btn-icon,
   .icon-button,
   .mobile-menu-btn,
   .ui-modal-close-btn {
     min-width: 44px !important;
     min-height: 44px !important;
+  }
+
+  .mobile-menu-btn,
+  .ui-modal-close-btn {
     width: 44px !important;
     height: 44px !important;
   }
 
-  /* Table action buttons */
   .btn.btn-icon {
-    min-width: 44px !important;
-    min-height: 44px !important;
-    width: 44px !important;
-    height: 44px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    width: auto !important;
+    height: auto !important;
   }
 
-  /* Select/date trigger */
-  .select-trigger {
-    min-height: 44px !important;
-  }
+  .select-trigger { min-height: 44px !important; }
+  .btn { min-height: 44px !important; }
+  .btn-sm { min-height: 36px !important; }
 
-  /* Generic btn sizes */
-  .btn {
-    min-height: 44px !important;
-  }
-
-  .btn-sm {
-    min-height: 36px !important; /* sm exempted — still big enough when used inside cards */
-  }
-
-  /* Switch/toggle hit area */
   .ui-switch-wrapper {
     min-height: 44px;
     display: flex;
@@ -63,153 +58,133 @@
 }
 
 /* -----------------------------------------------
-   2. PREVENT HORIZONTAL SCROLL
+   2. NO HORIZONTAL SCROLL anywhere
    ----------------------------------------------- */
-html,
-body {
+html, body {
   overflow-x: hidden;
   max-width: 100vw;
 }
 
-.app-container {
+.app-container,
+.app-main,
+.page-container,
+.app-content {
   overflow-x: hidden;
+  max-width: 100%;
 }
 
-/* The main scroll container must not overflow horizontally */
-.app-main {
-  overflow-x: hidden;
-}
-
-/* Page wrapper */
-.page-container {
-  overflow-x: hidden;
-}
-
-/* Filter toolbar wraps on small screens */
-@media (max-width: 640px) {
-  .filter-toolbar {
-    flex-direction: column !important;
-    align-items: stretch !important;
-  }
+.overflow-x-auto,
+.table-container {
+  -webkit-overflow-scrolling: touch;
 }
 
 /* -----------------------------------------------
-   3. iOS INPUT ZOOM PREVENTION
-   font-size must be >= 16px on all inputs/selects
+   3. iOS — 16px font on inputs to disable auto-zoom
    ----------------------------------------------- */
 @supports (-webkit-touch-callout: none) {
-  input,
-  input[type='text'],
-  input[type='email'],
-  input[type='number'],
-  input[type='password'],
-  input[type='search'],
-  input[type='tel'],
-  input[type='url'],
-  input[type='date'],
-  select,
-  textarea {
+  input, select, textarea,
+  input[type='text'], input[type='email'], input[type='number'],
+  input[type='password'], input[type='search'], input[type='tel'],
+  input[type='url'], input[type='date'] {
     font-size: 16px !important;
   }
 }
 
-/* Also cover ui-control, ui-input, select-trigger on all mobile */
 @media (max-width: 768px) {
-  .ui-input,
-  .ui-textarea,
-  .ui-control,
-  .input,
-  .select,
-  .select-trigger,
-  input,
-  select,
-  textarea {
+  .ui-input, .ui-textarea, .ui-control,
+  .input, .select, .select-trigger,
+  input, select, textarea {
     font-size: 16px !important;
   }
 }
 
 /* -----------------------------------------------
-   4. IOS MODAL SCROLL LOCK
-   body overflow:hidden alone isn't enough on iOS —
-   use position:fixed with saved scroll position
-   (handled via JS in UiModal, CSS assists here)
+   4. iOS scroll lock when modal open
    ----------------------------------------------- */
 body.modal-open {
   position: fixed;
   width: 100%;
-  overflow-y: scroll; /* keep scrollbar space */
+  overflow-y: scroll;
   overscroll-behavior: none;
 }
 
-.ui-modal-overlay {
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
+.ui-modal-overlay,
 .ui-modal-body {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
 
 /* -----------------------------------------------
-   5. RESPONSIVE TABLES → CARD LAYOUT ON MOBILE
+   5. TABLES → BANK-STATEMENT cards on mobile
+   Generic .responsive-table; falls back .table.responsive-table
    ----------------------------------------------- */
 @media (max-width: 768px) {
-  /* Hide the standard table header row */
-  .responsive-table thead {
-    display: none;
-  }
+  .responsive-table thead,
+  .table.responsive-table thead { display: none; }
 
-  /* Each row becomes a block "card" */
-  .responsive-table tbody tr {
+  .responsive-table tbody tr,
+  .table.responsive-table tbody tr {
     display: block;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    margin-bottom: 0.75rem;
-    padding: 0.75rem;
+    margin-bottom: 0.625rem;
+    padding: 0.625rem 0.75rem;
     background: var(--bg-card);
     box-shadow: var(--shadow-xs);
   }
 
-  .responsive-table tbody tr:last-child {
-    border-bottom: 1px solid var(--border-color);
+  .responsive-table tbody tr:last-child,
+  .table.responsive-table tbody tr:last-child {
+    margin-bottom: 0;
   }
 
-  /* Each cell becomes a flex row with label */
-  .responsive-table tbody td {
+  .responsive-table tbody td,
+  .table.responsive-table tbody td {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     padding: 0.375rem 0 !important;
     border-bottom: 1px solid var(--border-subtle);
     font-size: 0.875rem;
+    text-align: right !important;
+    word-break: break-word;
   }
 
-  .responsive-table tbody td:last-child {
+  .responsive-table tbody td:last-child,
+  .table.responsive-table tbody td:last-child {
     border-bottom: none;
+    padding-bottom: 0 !important;
   }
 
-  /* Data-label shows the column header */
-  .responsive-table tbody td::before {
+  .responsive-table tbody td::before,
+  .table.responsive-table tbody td::before {
     content: attr(data-label);
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    min-width: 80px;
+    min-width: 78px;
     margin-right: 0.75rem;
     flex-shrink: 0;
+    text-align: left;
+    padding-top: 2px;
   }
 
-  /* MovementsList table — wrap in horizontal scroll container if not using card layout */
-  .overflow-x-auto {
-    -webkit-overflow-scrolling: touch;
+  .responsive-table tbody td[data-label='']::before,
+  .table.responsive-table tbody td[data-label='']::before { content: none; }
+
+  .responsive-table tbody td[data-label=''],
+  .table.responsive-table tbody td[data-label=''] {
+    justify-content: center;
+    padding-top: 0.5rem !important;
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--border-subtle);
   }
 }
 
 /* -----------------------------------------------
-   6. DATE PICKER MOBILE SHEET
+   6. DATE PICKER — bottom sheet on mobile
    ----------------------------------------------- */
 .dp-mobile-sheet {
   position: fixed !important;
@@ -219,6 +194,7 @@ body.modal-open {
   top: auto !important;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
   padding: 1rem !important;
+  padding-bottom: calc(1rem + var(--safe-bottom)) !important;
   z-index: 9999 !important;
   background: var(--bg-card) !important;
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18) !important;
@@ -243,57 +219,883 @@ body.modal-open {
 }
 
 /* -----------------------------------------------
-   7. MOBILE HEADER / OVERLAY improvements
+   7. MOBILE LAYOUT — fix critical bug:
+   index.css declares .app-sidebar { display:flex } AFTER
+   layout.css's @media display:none. Force hide here +
+   stack container vertically so mobile-header sits on top.
    ----------------------------------------------- */
 @media (max-width: 768px) {
-  /* Ensure mobile sidebar is above everything */
-  .mobile-sidebar {
-    z-index: 300 !important;
+  .app-container {
+    flex-direction: column !important;
+    height: 100vh;
+    width: 100vw;
   }
 
-  /* Overlay behind mobile sidebar */
+  .app-header,
+  .header-brand {
+    display: none !important;
+  }
+
+  .app-sidebar {
+    display: none !important;
+  }
+
+  .mobile-header {
+    display: flex !important;
+    width: 100% !important;
+    flex-shrink: 0 !important;
+    height: calc(var(--mobile-header-h) + var(--safe-top)) !important;
+    padding-top: var(--safe-top) !important;
+    position: sticky !important;
+    top: 0;
+    z-index: 60;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  }
+
+  .app-main {
+    width: 100% !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    padding-bottom: calc(var(--mobile-bottom-nav-h) + var(--safe-bottom));
+  }
+
+  .mobile-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .mobile-header-actions .icon-button,
+  .mobile-header-actions .mobile-menu-btn {
+    color: var(--text-inverse);
+    background: transparent;
+    border: none;
+    width: 40px;
+    height: 40px;
+  }
+
+  .mobile-header-actions .icon-button:hover,
+  .mobile-header-actions .mobile-menu-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .mobile-sidebar {
+    z-index: 300 !important;
+    padding-top: calc(0.5rem + var(--safe-top)) !important;
+    padding-bottom: calc(0.5rem + var(--safe-bottom)) !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    bottom: calc(var(--mobile-bottom-nav-h) + var(--safe-bottom)) !important;
+  }
+
   .mobile-sidebar-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.5);
     z-index: 299;
     animation: fadeIn 0.15s ease;
   }
 
-  /* Stat grid: 2 columns on mobile, 1 on very small */
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
+  .mobile-sidebar .nav-item {
+    padding: 0.875rem 1rem !important;
+    font-size: 0.95rem !important;
   }
 
-  @media (max-width: 420px) {
-    .stat-grid {
-      grid-template-columns: 1fr !important;
-    }
+  .p-6 { padding: 1rem !important; }
+  .p-12 { padding: 1.5rem !important; }
+}
+
+/* -----------------------------------------------
+   8. PAGE HEADER — stack on mobile, FAB takes over
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+    margin-bottom: 1rem !important;
   }
 
-  /* Page padding reduction on mobile */
-  .p-6 {
+  .page-header > * { width: 100%; }
+
+  .page-header .btn,
+  .page-header > button {
+    width: 100% !important;
+    justify-content: center;
+  }
+
+  .page-title { font-size: 1.375rem !important; }
+  .page-subtitle { font-size: 0.875rem !important; }
+}
+
+/* When FAB is present, hide redundant page-header primary action on mobile */
+@media (max-width: 768px) {
+  .page-header.has-fab .btn-primary,
+  .page-header.has-fab .page-header-actions .btn-primary {
+    display: none !important;
+  }
+}
+
+/* -----------------------------------------------
+   9. FILTER TOOLBARS — column layout on mobile
+   ----------------------------------------------- */
+@media (max-width: 768px) {
+  .filter-toolbar,
+  .filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.625rem !important;
+    padding: 0.75rem !important;
+  }
+
+  .filter-toolbar > *,
+  .filter-bar > * {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    max-width: none !important;
+  }
+
+  .filter-toolbar > div[style*='width: 1px'],
+  .filter-toolbar > .filter-divider,
+  .filter-bar > div[style*='width: 1px'],
+  .filter-bar > .filter-divider {
+    display: none !important;
+  }
+
+  .filter-toolbar .w-32,
+  .filter-toolbar .w-40,
+  .filter-toolbar .w-48,
+  .filter-bar .w-32,
+  .filter-bar .w-40,
+  .filter-bar .w-48 {
+    width: 100% !important;
+  }
+}
+
+/* -----------------------------------------------
+   10. UI MODAL — bottom-sheet pattern on phones
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .ui-modal-overlay {
+    padding: 0 !important;
+    align-items: flex-end !important;
+  }
+
+  .ui-modal-container,
+  .ui-modal-container.max-w-sm,
+  .ui-modal-container.max-w-md,
+  .ui-modal-container.max-w-lg,
+  .ui-modal-container.max-w-xl,
+  .ui-modal-container.max-w-2xl,
+  .ui-modal-container.max-w-3xl,
+  .ui-modal-container.max-w-4xl {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+    max-height: 92vh !important;
+    margin: 0 !important;
+    animation: modalSlideUpMobile 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  @keyframes modalSlideUpMobile {
+    from { transform: translateY(100%); opacity: 0.7; }
+    to   { transform: translateY(0);    opacity: 1;   }
+  }
+
+  .ui-modal-header {
+    padding: 0.875rem 1rem !important;
+    position: sticky;
+    top: 0;
+    background: var(--bg-card);
+    z-index: 2;
+  }
+
+  .ui-modal-body {
     padding: 1rem !important;
   }
 
-  /* Filter toolbar horizontal scroll on mobile (fallback) */
-  .filter-bar-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.5rem;
+  .ui-modal-footer {
+    padding: 0.875rem 1rem !important;
+    padding-bottom: calc(0.875rem + var(--safe-bottom)) !important;
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+  }
+
+  .ui-modal-footer .btn,
+  .ui-modal-footer button {
+    flex: 1 1 0 !important;
+    min-width: 120px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .ui-modal-header { padding: 0.75rem 0.875rem !important; }
+  .ui-modal-body   { padding: 0.875rem !important; }
+  .ui-modal-footer { padding: 0.75rem 0.875rem !important; }
+}
+
+/* -----------------------------------------------
+   11. FORMS — single column on mobile
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .form-grid,
+  .form-row,
+  .grid.grid-cols-2,
+  .grid.grid-cols-3,
+  .grid.grid-cols-4 {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Catch inline-styled fixed grids */
+  [style*="grid-template-columns: repeat(3, 1fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ui-field { width: 100% !important; }
+
+  .ui-input, .ui-textarea, .ui-control,
+  .select-trigger,
+  input:not([type='checkbox']):not([type='radio']),
+  textarea, select {
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  .form-actions,
+  .modal-actions {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    width: 100%;
+  }
+
+  .form-actions > .btn,
+  .modal-actions > .btn {
+    width: 100% !important;
   }
 }
 
 /* -----------------------------------------------
-   8. MODAL — browser back closes modal
-   Handled via useModalHistory hook (JS).
-   CSS: ensure modal stacks above bottom nav
+   12. DASHBOARD GRID — single col on mobile
    ----------------------------------------------- */
-.ui-modal-overlay {
-  z-index: 5000;
+@media (max-width: 768px) {
+  .dash-grid {
+    gap: 0.75rem !important;
+  }
+
+  .dash-grid .col-12,
+  .dash-grid .col-8,
+  .dash-grid .col-7,
+  .dash-grid .col-6,
+  .dash-grid .col-5,
+  .dash-grid .col-4,
+  .dash-grid .col-3 {
+    grid-column: span 12 !important;
+  }
 }
 
 /* -----------------------------------------------
-   9. LOGOUT — no additional CSS needed;
-      handled in AuthContext signOut logic.
+   13. SETTINGS DRAWER — full-screen on phones
    ----------------------------------------------- */
+@media (max-width: 640px) {
+  .settings-drawer {
+    top: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+  }
+}
+
+/* -----------------------------------------------
+   14. CHARTS — cap on mobile
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .recharts-wrapper,
+  .recharts-responsive-container {
+    max-width: 100% !important;
+  }
+}
+
+/* -----------------------------------------------
+   15. TYPOGRAPHY — cap on mobile (Tailwind utilities)
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .text-6xl { font-size: 2.25rem !important; }
+  .text-5xl { font-size: 2rem !important; }
+  .text-4xl { font-size: 1.75rem !important; }
+  .text-3xl { font-size: 1.5rem !important; }
+
+  .gap-12 { gap: 1rem !important; }
+  .mt-12 { margin-top: 1.5rem !important; }
+  .pt-8 { padding-top: 1rem !important; }
+  .p-8 { padding: 1rem !important; }
+}
+
+@media (max-width: 480px) {
+  .stat-value, .kpi-value {
+    font-size: 1.25rem !important;
+    line-height: 1.2 !important;
+    word-break: break-word;
+  }
+  .page-title { font-size: 1.25rem !important; }
+  .text-6xl { font-size: 1.875rem !important; }
+}
+
+/* -----------------------------------------------
+   16. STAT GRID — 2 cols on phones, 1 col on ≤360
+   ----------------------------------------------- */
+@media (max-width: 768px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+  .stat-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .stat-grid,
+  .stat-grid--4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* -----------------------------------------------
+   17. STAT CARD — compact, equal-height, icon overlay
+   Detected with Playwright: padding 20px + min-height 128px wasted
+   space; labels wrapped because icon shared the row.
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .stat-card {
+    padding: 12px 12px 12px 14px !important;
+    min-height: 0 !important;
+    gap: 6px !important;
+    position: relative;
+  }
+
+  .stat-card__head {
+    gap: 6px !important;
+    padding-right: 30px !important;
+    align-items: flex-start !important;
+  }
+
+  .stat-card__label {
+    font-size: 10.5px !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0.03em !important;
+    white-space: normal !important;
+  }
+
+  .stat-card__icon {
+    position: absolute !important;
+    top: 12px !important;
+    right: 10px !important;
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 8px !important;
+  }
+
+  .stat-card__icon svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+
+  .stat-card__value {
+    font-size: 1.4rem !important;
+    line-height: 1.15 !important;
+    letter-spacing: -0.02em !important;
+  }
+
+  .stat-card__meta {
+    font-size: 11px !important;
+    flex-wrap: wrap;
+    margin-top: auto;
+  }
+
+  .stat-card__sparkline {
+    height: 22px !important;
+  }
+}
+
+/* -----------------------------------------------
+   18. UTIL: nowrap → wrap on very small phones
+   ----------------------------------------------- */
+@media (max-width: 480px) {
+  .whitespace-nowrap { white-space: normal !important; }
+}
+
+/* -----------------------------------------------
+   19. PILL / BADGE — compact on phones
+   ----------------------------------------------- */
+@media (max-width: 480px) {
+  .pill, .badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+  }
+}
+
+/* -----------------------------------------------
+   20. SECTION CARDS — reduce padding on mobile
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .section-card { padding: 1rem !important; }
+  .card-body { padding: 1rem !important; }
+  .card-header,
+  .card-footer { padding: 0.875rem 1rem !important; }
+}
+
+/* -----------------------------------------------
+   21. EMPTY STATE — reduce padding on mobile
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .empty-state,
+  .section-card.flex.flex-col.items-center.justify-center {
+    padding: 2rem 1rem !important;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* =====================================================
+   PHASE 2 — Mobile-native UX: BottomNav + FAB + Sheets
+   ===================================================== */
+
+/* -----------------------------------------------
+   22. BOTTOM NAV — primary nav on mobile
+   ----------------------------------------------- */
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(var(--mobile-bottom-nav-h) + var(--safe-bottom));
+    padding-bottom: var(--safe-bottom);
+    background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+    z-index: 250;
+    align-items: stretch;
+    justify-content: space-around;
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+
+  .bottom-nav-item {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 2px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    background: transparent;
+    border: none;
+    font: inherit;
+    font-size: 0.65rem;
+    font-weight: 500;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s ease;
+    min-height: 44px;
+  }
+
+  .bottom-nav-item.is-active {
+    color: var(--primary);
+  }
+
+  .bottom-nav-item.is-active .bottom-nav-icon-wrap::before {
+    content: '';
+    position: absolute;
+    inset: -4px -10px;
+    background: var(--primary-soft);
+    border-radius: 999px;
+    z-index: -1;
+  }
+
+  .bottom-nav-icon-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  .bottom-nav-label {
+    line-height: 1;
+    text-align: center;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bottom-nav-badge {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 9999px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--bg-card);
+    line-height: 1;
+  }
+}
+
+/* -----------------------------------------------
+   23. FAB — primary action floating button
+   ----------------------------------------------- */
+.app-fab {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .app-fab,
+  .app-fab--mobile-only {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: 16px;
+    bottom: calc(var(--mobile-bottom-nav-h) + var(--safe-bottom) + 16px);
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    box-shadow: 0 8px 24px rgba(79, 70, 229, 0.35), 0 2px 6px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    z-index: 240;
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app-fab:hover { transform: scale(1.05); }
+  .app-fab:active { transform: scale(0.95); }
+}
+
+@media (min-width: 769px) {
+  .app-fab--mobile-only {
+    display: none !important;
+  }
+}
+
+/* -----------------------------------------------
+   24. UI MODAL HANDLE — drag-to-close cue
+   ----------------------------------------------- */
+.ui-modal-handle { display: none; }
+
+@media (max-width: 640px) {
+  .ui-modal-handle {
+    display: block;
+    width: 100%;
+    height: 24px;
+    position: relative;
+    cursor: grab;
+    touch-action: pan-y;
+    flex-shrink: 0;
+  }
+
+  .ui-modal-handle::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-strong);
+    opacity: 0.7;
+  }
+
+  .ui-modal-handle:active { cursor: grabbing; }
+  .ui-modal-handle:active::before { background: var(--text-muted); }
+}
+
+/* -----------------------------------------------
+   25. MOBILE FILTER CHIPS
+   ----------------------------------------------- */
+.mobile-filter-chips { display: none; }
+
+@media (max-width: 768px) {
+  .mobile-filter-chips {
+    display: block;
+    margin: -0.25rem -1rem 0.75rem;
+    padding: 0.25rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--bg-body);
+  }
+
+  .mobile-filter-chips-scroll {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    padding: 0.375rem 1rem;
+    scrollbar-width: none;
+  }
+
+  .mobile-filter-chips-scroll::-webkit-scrollbar { display: none; }
+
+  .mobile-filter-chip {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    scroll-snap-align: start;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+
+  .mobile-filter-chip.is-active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+}
+
+/* -----------------------------------------------
+   26. NET WORTH SECTION — Dashboard layout
+   ----------------------------------------------- */
+.net-worth-section {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) 1fr;
+  gap: 24px;
+  align-items: center;
+}
+
+.net-worth-section__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .net-worth-section {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* -----------------------------------------------
+   27. BAR GROUP — responsive 2-row layout
+   ----------------------------------------------- */
+@media (max-width: 768px) {
+  .bar-group {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-rows: auto auto;
+    gap: 4px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .bar-group__label {
+    grid-row: 1;
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .bar-group__value {
+    grid-row: 1;
+    grid-column: 2;
+    font-size: 12px;
+  }
+
+  .bar-group__track {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    height: 8px;
+  }
+}
+
+/* -----------------------------------------------
+   28. HUB TABS (Movimientos / Patrimonio / Análisis)
+   ----------------------------------------------- */
+.hub-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 24px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  -ms-overflow-style: none;
+}
+
+.hub-tabs::-webkit-scrollbar { display: none; }
+
+.hub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+}
+
+.hub-tab.is-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .hub-tabs {
+    margin-bottom: 16px;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    padding-left: 0.5rem;
+    padding-right: 1rem;
+  }
+  .hub-tab {
+    padding: 10px 12px;
+    font-size: 13px;
+    gap: 6px;
+  }
+}
+
+/* -----------------------------------------------
+   29. INVESTMENTS — portfolio + cards grid
+   ----------------------------------------------- */
+.portfolio-allocation {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 24px;
+}
+
+.investment-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .portfolio-allocation {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+  .portfolio-allocation > div:first-child {
+    margin: 0 auto;
+  }
+  .investment-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* -----------------------------------------------
+   30. DESIGN-FAB — hide on mobile (debug tool)
+   Detected via Playwright: it overlapped FAB + bottom-nav.
+   ----------------------------------------------- */
+@media (max-width: 768px) {
+  .design-fab,
+  .design-fab-popover {
+    display: none !important;
+  }
+}
+
+/* -----------------------------------------------
+   31. TOAST CONTAINER — bottom on mobile
+   ----------------------------------------------- */
+@media (max-width: 768px) {
+  .app-toast-container {
+    top: auto !important;
+    right: 0 !important;
+    left: 0 !important;
+    bottom: calc(var(--mobile-bottom-nav-h) + var(--safe-bottom) + 12px) !important;
+    padding: 0 12px;
+    align-items: stretch !important;
+  }
+  .app-toast {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+}
+
+/* -----------------------------------------------
+   32. ACTIVE-STATE haptic-like feedback
+   ----------------------------------------------- */
+@media (max-width: 768px) {
+  .btn:not(:disabled):active,
+  .nav-item:active,
+  .icon-button:active,
+  .ui-modal-close-btn:active,
+  .bottom-nav-item:active {
+    transform: scale(0.97);
+    transition: transform 0.05s ease;
+  }
+}
+
+/* -----------------------------------------------
+   33. PWA standalone tweaks
+   ----------------------------------------------- */
+@media all and (display-mode: standalone) {
+  .mobile-header {
+    padding-top: calc(var(--safe-top) + 4px) !important;
+  }
+}
+
+/* -----------------------------------------------
+   34. PAGE container tighter top spacing on small phones
+   ----------------------------------------------- */
+@media (max-width: 640px) {
+  .app-main > .p-6:first-of-type,
+  .app-main > div.p-6 {
+    padding-top: 0.875rem !important;
+  }
+
+  .page-container {
+    padding-bottom: 24px !important;
+  }
+}

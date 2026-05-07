@@ -175,7 +175,7 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[], onDismiss: (id
 
   return (
     <>
-      <div style={{
+      <div className="app-toast-container" style={{
         position: 'fixed',
         top: 20,
         right: 20,
@@ -276,7 +276,8 @@ function ToastItem({ toast, onDismiss, index }: { toast: Toast, onDismiss: (id: 
   }
 
   return (
-    <div 
+    <div
+      className="app-toast"
       style={{
         display: 'flex',
         alignItems: 'flex-start',

@@ -51,6 +51,7 @@ import { Breadcrumbs } from '../../components/Breadcrumbs'
 import { SkeletonList } from '../../components/Skeleton'
 import { UiCard } from '../../components/ui/UiCard'
 import { AlertRuleWizard } from '../../components/domain/AlertRuleWizard'
+import { Fab } from '../../components/layout/Fab'
 import { useToast } from '../../components/Toast'
 
 type FilterType = 'all' | 'unread' | 'info' | 'warning' | 'danger'
@@ -244,7 +245,7 @@ export default function AlertsList() {
   return (
     <div className="page-container">
       {/* Header */}
-      <div className="page-header">
+      <div className="page-header has-fab">
         <div>
           <Breadcrumbs items={[{ label: 'Alertas', icon: <Bell size={16} /> }]} />
           <h1 className="page-title mt-2">Alertas</h1>
@@ -276,6 +277,9 @@ export default function AlertsList() {
           </button>
         </div>
       </div>
+
+      {/* Mobile FAB */}
+      <Fab onClick={() => setShowRuleWizard(true)} ariaLabel="Nueva regla" />
 
       {/* Stats bar */}
       {stats.total > 0 && (

@@ -24,6 +24,7 @@ import { UiField } from '../../components/ui/UiField'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiModal, UiModalHeader, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { Fab } from '../../components/layout/Fab'
 import { useToast } from '../../components/Toast'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -509,7 +510,7 @@ export default function InvestmentsList() {
     <div className="page-container">
 
       {/* ── Header ── */}
-      <div className="page-header">
+      <div className="page-header has-fab">
         <div>
           <h1 className="page-title">{t('investments.title')}</h1>
           <p className="page-subtitle" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -539,6 +540,9 @@ export default function InvestmentsList() {
           </button>
         </div>
       </div>
+
+      {/* Mobile FAB */}
+      <Fab onClick={() => { resetForm(); setShowCreateModal(true) }} ariaLabel="Nueva inversión" />
 
       {/* ── KPI strip ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '1.5rem' }}>
@@ -580,15 +584,12 @@ export default function InvestmentsList() {
 
       {/* ── Portfolio allocation ── */}
       {investments.length > 0 && (
-        <div style={{
+        <div className="portfolio-allocation" style={{
           borderRadius: 12,
           border: '1px solid var(--border)',
           background: 'var(--card-bg)',
           padding: '16px 20px',
           marginBottom: '1.5rem',
-          display: 'grid',
-          gridTemplateColumns: '160px 1fr',
-          gap: '24px',
           alignItems: 'center',
         }}>
           {/* Donut */}
@@ -674,7 +675,7 @@ export default function InvestmentsList() {
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+        <div className="investment-cards-grid">
           {investments.map(inv => {
             const sym     = (inv.symbol ?? inv.ticker ?? '').toUpperCase()
             const live    = liveRates[sym]
