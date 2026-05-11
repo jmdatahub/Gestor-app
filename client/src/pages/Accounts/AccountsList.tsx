@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import {
@@ -23,7 +22,8 @@ import { UiCard, UiCardBody } from '../../components/ui/UiCard'
 import { UiField } from '../../components/ui/UiField'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiSwitch } from '../../components/ui/UiSwitch'
-import { TaxReserveDetailModal } from './TaxReserveDetailModal'
+import { AccountDetailModal } from './AccountDetailModal'
+import { useDeleteAccount } from '../../hooks/queries/useAccountMutations'
 import { Receipt } from 'lucide-react'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiTextarea } from '../../components/ui/UiTextarea'
@@ -39,7 +39,6 @@ import { formatISODateString } from '../../utils/date'
 import { useToast } from '../../components/Toast'
 
 export default function AccountsList() {
-  const navigate = useNavigate()
   const { t, language } = useI18n()
   const { settings } = useSettings()
   const { user } = useAuth()
@@ -47,6 +46,7 @@ export default function AccountsList() {
   const toast = useToast()
   const createAccountMutation = useCreateAccount()
   const updateAccountMutation = useUpdateAccount()
+  const deleteAccountMutation = useDeleteAccount()
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([])
   const [flatAccounts, setFlatAccounts] = useState<AccountNode[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,7 +60,7 @@ export default function AccountsList() {
   const [type, setType] = useState<CreateAccountInput['type']>('general')
   const [description, setDescription] = useState('')
   const [isTaxReserve, setIsTaxReserve] = useState(false)
-  const [taxReserveAccount, setTaxReserveAccount] = useState<AccountWithBalance | null>(null)
+  const [viewingAccount, setViewingAccount] = useState<AccountWithBalance | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
@@ -370,11 +370,7 @@ export default function AccountsList() {
                     key={acc.id}
                     style={{ opacity: !acc.is_active ? 0.5 : 1 }}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
-                    onClick={() => {
-                      if (acc.is_tax_reserve) { setTaxReserveAccount(acc); return }
-                      if (acc.type === 'broker') { navigate('/app/investments'); return }
-                      navigate(`/app/accounts/${acc.id}`)
-                    }}
+                    onClick={() => setViewingAccount(acc)}
                   >
                     <td data-label="Cuenta" style={{ padding: '0.75rem 1.5rem', fontWeight: 600 }}>
                       <div style={{ marginLeft: `${acc.level * 1.5}rem` }} className="d-flex items-center gap-2">
@@ -718,16 +714,28 @@ export default function AccountsList() {
         </form>
       </UiModal>
 
-      {/* Tax reserve breakdown — pie chart de movimientos en la cuenta de reserva */}
-      {taxReserveAccount && (
-        <TaxReserveDetailModal
-          account={taxReserveAccount}
-          isOpen={!!taxReserveAccount}
-          onClose={() => setTaxReserveAccount(null)}
-          onEditAccount={() => {
-            const a = taxReserveAccount
-            setTaxReserveAccount(null)
+      {/* Detalle visual de cuenta — stats + chart + movimientos */}
+      {viewingAccount && (
+        <AccountDetailModal
+          account={viewingAccount}
+          organizationId={currentWorkspace?.id || null}
+          isOpen={!!viewingAccount}
+          onClose={() => setViewingAccount(null)}
+          onEdit={() => {
+            const a = viewingAccount
+            setViewingAccount(null)
             openEditModal(a)
+          }}
+          onDelete={async () => {
+            await deleteAccountMutation.mutateAsync(viewingAccount.id)
+            loadData()
+            toast.success('Cuenta eliminada', `"${viewingAccount.name}" se ha eliminado`)
+          }}
+          onToggleActive={async () => {
+            const wasActive = viewingAccount.is_active
+            await toggleAccountActive(viewingAccount.id, !wasActive)
+            setViewingAccount({ ...viewingAccount, is_active: !wasActive })
+            loadData()
           }}
         />
       )}

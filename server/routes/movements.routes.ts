@@ -171,6 +171,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (req.query.endDate) conditions.push(lte(movements.date, String(req.query.endDate)))
     if (req.query.kind) conditions.push(eq(movements.kind, String(req.query.kind) as 'income' | 'expense' | 'transfer'))
     if (req.query.status) conditions.push(eq(movements.status, String(req.query.status) as 'confirmed' | 'pending'))
+    const accountIdParam = req.query.account_id ?? req.query.accountId
+    if (accountIdParam) conditions.push(eq(movements.accountId, String(accountIdParam)))
 
     const [rows, [{ total }]] = await Promise.all([
       db.select({
