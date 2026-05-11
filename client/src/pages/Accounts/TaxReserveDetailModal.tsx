@@ -12,6 +12,8 @@ const PALETTE = [
 
 interface SliceItem extends TaxReserveBreakdownItem {
   color: string
+  // Recharts 3.x exige string-indexable items en <Pie data={...}>
+  [key: string]: any
 }
 
 interface Props {
@@ -75,7 +77,7 @@ export function TaxReserveDetailModal({ account, isOpen, onClose, onEditAccount 
   }, [data])
 
   const totalReserved = data?.total_reserved ?? 0
-  const balance = data?.account_balance ?? Number(account.balance) || 0
+  const balance = data?.account_balance ?? (Number(account.balance) || 0)
   const delta = data?.delta ?? balance - totalReserved
   const deltaAbs = Math.abs(delta)
   const isExcess = delta > 0.01
