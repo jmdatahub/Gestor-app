@@ -9,6 +9,7 @@ import { UiSelect } from '../../components/ui/UiSelect'
 import { UiField } from '../../components/ui/UiField'
 import { UiInput } from '../../components/ui/UiInput'
 import { UiModal, UiModalBody, UiModalFooter } from '../../components/ui/UiModal'
+import { Fab } from '../../components/layout/Fab'
 import { Panel } from '../../components/shared/Panel'
 import { EmptyState } from '../../components/shared/EmptyState'
 import { StatCard } from '../../components/shared/StatCard'
@@ -181,7 +182,7 @@ export default function CategoriesList() {
 
   return (
     <div className="page-container fade-in">
-      <div className="page-header">
+      <div className="page-header has-fab">
         <div>
           <h1 className="page-title">Categorías</h1>
           <p className="page-subtitle">Organiza tus movimientos por categorías con colores</p>
@@ -191,6 +192,9 @@ export default function CategoriesList() {
           <span style={{ marginLeft: 6 }}>Nueva categoría</span>
         </button>
       </div>
+
+      {/* Mobile FAB */}
+      <Fab onClick={handleOpenCreate} ariaLabel="Nueva categoría" />
 
       {!loading && categories.length > 0 && (
         <div className="stat-grid mb-4">

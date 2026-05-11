@@ -399,7 +399,7 @@ export default function SavingsDetail() {
             No hay aportaciones registradas
           </p>
         ) : (
-          <table className="table">
+          <table className="table responsive-table">
             <thead>
               <tr>
                 <th>Fecha</th>
@@ -410,11 +410,11 @@ export default function SavingsDetail() {
             <tbody>
               {contributions.map((contrib) => (
                 <tr key={contrib.id}>
-                  <td>{formatDate(contrib.date)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
+                  <td data-label="Fecha">{formatDate(contrib.date)}</td>
+                  <td data-label="Cantidad" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
                     +{formatCurrency(contrib.amount)}
                   </td>
-                  <td className="text-gray-500">{contrib.note || '-'}</td>
+                  <td data-label="Nota" className="text-gray-500">{contrib.note || '-'}</td>
                 </tr>
               ))}
             </tbody>

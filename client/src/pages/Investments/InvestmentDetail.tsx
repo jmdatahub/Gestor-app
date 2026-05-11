@@ -407,7 +407,7 @@ export default function InvestmentDetail() {
             No hay entradas en el histórico
           </p>
         ) : (
-          <table className="table">
+          <table className="table responsive-table">
             <thead>
               <tr>
                 <th>Fecha</th>
@@ -418,11 +418,11 @@ export default function InvestmentDetail() {
             <tbody>
               {[...history].reverse().map((entry) => (
                 <tr key={entry.id}>
-                  <td>{formatDate(entry.date)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 500 }}>
+                  <td data-label="Fecha">{formatDate(entry.date)}</td>
+                  <td data-label="Precio" style={{ textAlign: 'right', fontWeight: 500 }}>
                     {formatCurrency(entry.price)}
                   </td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td data-label="Valor total" style={{ textAlign: 'right' }}>
                     {formatCurrency((investment.quantity ?? 0) * entry.price)}
                   </td>
                 </tr>
@@ -474,7 +474,7 @@ export default function InvestmentDetail() {
         ) : (
           <>
             <div style={{ overflowX: 'auto' }}>
-              <table className="table">
+              <table className="table responsive-table">
                 <thead>
                   <tr>
                     <th>Fecha</th>
@@ -490,16 +490,17 @@ export default function InvestmentDetail() {
                 <tbody>
                   {movements.map((mov) => (
                     <tr key={mov.id}>
-                      <td>{formatMovementDate(mov.date)}</td>
-                      <td>
+                      <td data-label="Fecha">{formatMovementDate(mov.date)}</td>
+                      <td data-label="Tipo">
                         <span className={`badge ${mov.type === 'buy' ? 'badge-success' : 'badge-danger'}`}>
                           {mov.type === 'buy' ? 'Compra' : 'Venta'}
                         </span>
                       </td>
-                      <td style={{ textAlign: 'right' }}>{formatQuantity(Number(mov.quantity))}</td>
-                      <td style={{ textAlign: 'right' }}>{formatCurrency(Number(mov.price))}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 500 }}>{formatCurrency(Number(mov.total_amount))}</td>
+                      <td data-label="Cantidad" style={{ textAlign: 'right' }}>{formatQuantity(Number(mov.quantity))}</td>
+                      <td data-label="Precio" style={{ textAlign: 'right' }}>{formatCurrency(Number(mov.price))}</td>
+                      <td data-label="Total" style={{ textAlign: 'right', fontWeight: 500 }}>{formatCurrency(Number(mov.total_amount))}</td>
                       <td
+                        data-label="Δ Margen"
                         style={{
                           textAlign: 'right',
                           color: Number(mov.margin_delta) > 0
@@ -512,6 +513,7 @@ export default function InvestmentDetail() {
                         {formatSignedCurrency(Number(mov.margin_delta))}
                       </td>
                       <td
+                        data-label="Δ Spot"
                         style={{
                           textAlign: 'right',
                           color: Number(mov.spot_quantity_delta) > 0
@@ -523,7 +525,7 @@ export default function InvestmentDetail() {
                       >
                         {formatSignedQuantity(Number(mov.spot_quantity_delta))}
                       </td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td data-label="" style={{ textAlign: 'right' }}>
                         <button
                           className="btn btn-icon btn-danger"
                           onClick={() => handleDeleteMovement(mov)}

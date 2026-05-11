@@ -216,7 +216,7 @@ export default function OrganizationDetail() {
                   </button>
                </div>
                
-               <table className="table w-full">
+               <table className="table responsive-table w-full">
                   <thead>
                      <tr>
                         <th>Miembro</th>
@@ -233,13 +233,13 @@ export default function OrganizationDetail() {
                        const isEmoji = avatarType.startsWith('emoji:')
                        const avatarEmoji = isEmoji ? avatarType.split(':')[1] : null
                        const avatarBg = avatarType.startsWith('bg:') ? avatarType.split(':')[1] : '#6366f1'
-                       
+
                        return (
                         <tr key={m.user_id}>
-                           <td>
+                           <td data-label="Miembro">
                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                               <div style={{ 
-                                 width: 36, height: 36, borderRadius: 8, 
+                               <div style={{
+                                 width: 36, height: 36, borderRadius: 8,
                                  background: isEmoji ? '#1e293b' : avatarBg,
                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                                  fontSize: isEmoji ? 18 : 14, fontWeight: 700, color: 'white',
@@ -253,9 +253,9 @@ export default function OrganizationDetail() {
                                </div>
                              </div>
                            </td>
-                           <td><span className="badge badge-gray">{m.role}</span></td>
-                           <td className="text-right">
-                              <button 
+                           <td data-label="Rol"><span className="badge badge-gray">{m.role}</span></td>
+                           <td data-label="" className="text-right">
+                              <button
                                 className="btn btn-icon btn-ghost text-red-500"
                                 onClick={() => handleRemoveMember(m.user_id)}
                                 title="Eliminar miembro"

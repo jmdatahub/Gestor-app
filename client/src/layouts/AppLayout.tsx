@@ -12,6 +12,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { HeaderWorkspaceSelector } from '../components/layout/HeaderWorkspaceSelector'
 import { storage } from '../lib/storage'
 import { OfflineBanner } from '../components/OfflineBanner'
+import { BottomNav } from '../components/layout/BottomNav'
 
 import {
   LayoutDashboard,
@@ -339,21 +340,49 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      {/* Mobile Header */}
+      {/* Mobile Header — slim, shows workspace + status icons */}
       <div className="mobile-header">
         <div className="mobile-brand">
-          <div className="header-logo-badge">MP</div>
-          <span className="mobile-logo">Mi Panel</span>
+          {currentWorkspace ? (
+            <>
+              <div className="header-logo-badge" style={{ width: 28, height: 28, fontSize: '0.7rem' }}>
+                {(currentWorkspace.name || 'MP').slice(0, 2).toUpperCase()}
+              </div>
+              <span className="mobile-logo" title={currentWorkspace.name}>{currentWorkspace.name}</span>
+            </>
+          ) : (
+            <>
+              <div className="header-logo-badge" style={{ width: 28, height: 28, fontSize: '0.7rem' }}>MP</div>
+              <span className="mobile-logo">Mi Panel</span>
+            </>
+          )}
         </div>
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="mobile-menu-btn"
-          aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
-          aria-expanded={mobileMenuOpen}
-          aria-controls="mobile-nav"
-        >
-          {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="mobile-header-actions">
+          {!isOnline && (
+            <span className="badge badge-warning flex items-center" title="Modo sin conexión" style={{ padding: '4px 8px' }}>
+              <WifiOff size={14} />
+            </span>
+          )}
+          {isOnline && pendingChanges > 0 && (
+            <button
+              onClick={() => syncNow()}
+              className="icon-button"
+              disabled={isSyncing}
+              title={`Sincronizar (${pendingChanges} pendientes)`}
+              aria-label={`Sincronizar ${pendingChanges} cambios pendientes`}
+            >
+              <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+            </button>
+          )}
+          <button
+            className="icon-button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label={t('settings.title')}
+            title={t('settings.title')}
+          >
+            <Settings size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu */}
@@ -379,7 +408,47 @@ export default function AppLayout() {
               <X size={24} />
             </button>
           </div>
-          
+
+          {/* Workspace selector for mobile */}
+          {currentWorkspace && workspaces.length > 0 && (
+            <div style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              color: 'var(--text-inverse)',
+            }}>
+              <div style={{ fontSize: 11, opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                Espacio de trabajo
+              </div>
+              <select
+                value={currentWorkspace.id}
+                onChange={async (e) => {
+                  const newWsId = e.target.value
+                  if (newWsId !== currentWorkspace.id) {
+                    await handleWorkspaceSwitch()
+                    await switchWorkspace(newWsId)
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: 'var(--text-inverse)',
+                  fontSize: 14,
+                  fontWeight: 500,
+                }}
+                aria-label="Cambiar espacio de trabajo"
+              >
+                {workspaces.map((ws) => (
+                  <option key={ws.org_id} value={ws.org_id} style={{ background: 'var(--bg-sidebar)' }}>
+                    {ws.organization?.name ?? '—'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <nav className="nav-section">
             {primaryNavItems.map((item) => (
               <NavLink
@@ -480,6 +549,14 @@ export default function AppLayout() {
           </ErrorBoundary>
         </div>
       </main>
+
+      {/* Bottom navigation — mobile only (CSS hides on >= 769) */}
+      <BottomNav
+        onMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
+        isMenuOpen={mobileMenuOpen}
+        pendingInvitations={pendingInvitations}
+        pendingDebts={pendingDebts}
+      />
 
     </div>
   )
