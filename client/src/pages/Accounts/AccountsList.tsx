@@ -714,31 +714,36 @@ export default function AccountsList() {
         </form>
       </UiModal>
 
-      {/* Detalle visual de cuenta — stats + chart + movimientos */}
-      {viewingAccount && (
-        <AccountDetailModal
-          account={viewingAccount}
-          organizationId={currentWorkspace?.id || null}
-          isOpen={!!viewingAccount}
-          onClose={() => setViewingAccount(null)}
-          onEdit={() => {
-            const a = viewingAccount
-            setViewingAccount(null)
-            openEditModal(a)
-          }}
-          onDelete={async () => {
-            await deleteAccountMutation.mutateAsync(viewingAccount.id)
-            loadData()
-            toast.success('Cuenta eliminada', `"${viewingAccount.name}" se ha eliminado`)
-          }}
-          onToggleActive={async () => {
-            const wasActive = viewingAccount.is_active
-            await toggleAccountActive(viewingAccount.id, !wasActive)
-            setViewingAccount({ ...viewingAccount, is_active: !wasActive })
-            loadData()
-          }}
-        />
-      )}
+      {/* Detalle visual de cuenta — stats + chart + movimientos.
+          Siempre montado para evitar el bug de Strict Mode con useModalHistory
+          de UiModal (cleanup del primer mount hace history.back() y dispara un
+          popstate que cierra el modal recién abierto). isOpen controla la
+          visibilidad real. */}
+      <AccountDetailModal
+        account={viewingAccount || ({} as AccountWithBalance)}
+        organizationId={currentWorkspace?.id || null}
+        isOpen={!!viewingAccount}
+        onClose={() => setViewingAccount(null)}
+        onEdit={() => {
+          if (!viewingAccount) return
+          const a = viewingAccount
+          setViewingAccount(null)
+          openEditModal(a)
+        }}
+        onDelete={async () => {
+          if (!viewingAccount) return
+          await deleteAccountMutation.mutateAsync(viewingAccount.id)
+          loadData()
+          toast.success('Cuenta eliminada', `"${viewingAccount.name}" se ha eliminado`)
+        }}
+        onToggleActive={async () => {
+          if (!viewingAccount) return
+          const wasActive = viewingAccount.is_active
+          await toggleAccountActive(viewingAccount.id, !wasActive)
+          setViewingAccount({ ...viewingAccount, is_active: !wasActive })
+          loadData()
+        }}
+      />
     </div>
   )
 }
