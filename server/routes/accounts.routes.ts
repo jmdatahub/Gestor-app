@@ -56,6 +56,7 @@ function mapOut(row: Record<string, any>) {
     user_id:           row.userId          ?? row.user_id,
     organization_id:   row.organizationId  ?? row.organization_id  ?? null,
     is_active:         row.isActive        ?? row.is_active        ?? true,
+    is_tax_reserve:    row.isTaxReserve    ?? row.is_tax_reserve   ?? false,
     parent_account_id: row.parentAccountId ?? row.parent_account_id ?? null,
     created_at:        row.createdAt       ?? row.created_at,
     updated_at:        row.updatedAt       ?? row.updated_at,
@@ -77,6 +78,8 @@ function mapInPartial(body: Record<string, any>): Record<string, any> {
   if (body.balance     !== undefined) out.balance         = body.balance
   const isActive = body.is_active ?? body.isActive
   if (isActive !== undefined) out.isActive = isActive
+  const isTaxReserve = body.is_tax_reserve ?? body.isTaxReserve
+  if (isTaxReserve !== undefined) out.isTaxReserve = Boolean(isTaxReserve)
   const parentId = body.parent_account_id ?? body.parentAccountId
   if (parentId !== undefined) out.parentAccountId = parentId ?? null
   const orgId = body.organization_id ?? body.organizationId
@@ -99,6 +102,8 @@ const AccountCreateSchema = z.object({
   balance:           z.string().or(z.number()).transform(String).optional(),
   is_active:         z.boolean().optional(),
   isActive:          z.boolean().optional(),
+  is_tax_reserve:    z.boolean().optional(),
+  isTaxReserve:      z.boolean().optional(),
   parent_account_id: z.string().uuid().optional().nullable(),
   parentAccountId:   z.string().uuid().optional().nullable(),
   organization_id:   z.string().uuid().optional().nullable(),
@@ -127,6 +132,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       userId:          accounts.userId,
       organizationId:  accounts.organizationId,
       isActive:        accounts.isActive,
+      isTaxReserve:    accounts.isTaxReserve,
       parentAccountId: accounts.parentAccountId,
       createdAt:       accounts.createdAt,
       updatedAt:       accounts.updatedAt,
@@ -236,6 +242,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       balance:         b.balance         ?? '0',
       userId:          req.userId!,
       isActive:        b.is_active       ?? b.isActive       ?? true,
+      isTaxReserve:    b.is_tax_reserve  ?? b.isTaxReserve   ?? false,
       parentAccountId: b.parent_account_id ?? b.parentAccountId ?? null,
       organizationId:  b.organization_id ?? b.organizationId  ?? null,
       createdByEmail:  actorEmail,
@@ -277,6 +284,71 @@ router.patch('/:id', validateUuid('id'), authMiddleware, async (req: AuthRequest
     res.json({ data: mapOut(updated) })
   } catch (err) {
     console.error('[accounts PATCH /:id]', err)
+    res.status(500).json({ error: 'Error interno del servidor' })
+  }
+})
+
+// Desglose de movimientos que han alimentado la cuenta de reserva de impuestos.
+// A diferencia del CRM (que conoce proyectos y reparte IRPF teórico por cobro),
+// Gestor-app no tiene contexto de proyecto, así que cada movimiento de ingreso
+// que ha entrado a esta cuenta es su propia porción del pie.
+router.get('/:id/tax-breakdown', validateUuid('id'), authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string
+    const row = (await db.select({
+      id: accounts.id, name: accounts.name, balance: accounts.balance,
+      isTaxReserve: accounts.isTaxReserve, userId: accounts.userId,
+    }).from(accounts)
+      .where(and(eq(accounts.id, id), eq(accounts.userId, req.userId!), isNull(accounts.deletedAt)))
+      .limit(1))[0]
+    if (!row) { res.status(404).json({ error: 'Cuenta no encontrada' }); return }
+    if (!row.isTaxReserve) {
+      res.status(400).json({ error: 'La cuenta no está marcada como reserva de impuestos' }); return
+    }
+
+    const movs = await db.select({
+      id: movements.id,
+      date: movements.date,
+      amount: movements.amount,
+      description: movements.description,
+      kind: movements.kind,
+    }).from(movements)
+      .where(and(
+        eq(movements.accountId, id),
+        eq(movements.kind, 'income'),
+        isNull(movements.deletedAt),
+      ))
+      .orderBy(sql`${movements.date} DESC, ${movements.createdAt} DESC`)
+
+    const items = movs.map(m => ({
+      transaction_id: m.id,
+      date: m.date,
+      amount: Number(m.amount) || 0,
+      description: m.description ?? null,
+      irpf_contribution: Number(m.amount) || 0,
+      pct: 0, // se rellena abajo
+      project: null as null | { id: string; display_id: string; name: string },
+    }))
+    const total_reserved = Math.round(items.reduce((s, i) => s + i.irpf_contribution, 0) * 100) / 100
+    for (const it of items) {
+      it.pct = total_reserved > 0 ? Math.round((it.irpf_contribution / total_reserved) * 1000) / 10 : 0
+    }
+    const account_balance = Number(row.balance) || 0
+
+    // Suma los deltas de movimientos para que el balance refleje los ingresos
+    // ya aplicados (mismo cómputo que GET /accounts hace en computeMovementDeltas).
+    const deltas = await computeMovementDeltas([id])
+    const realBalance = Math.round((account_balance + (deltas.get(id) ?? 0)) * 100) / 100
+
+    res.json({
+      account: { id: row.id, name: row.name, balance: realBalance },
+      total_reserved,
+      account_balance: realBalance,
+      delta: Math.round((realBalance - total_reserved) * 100) / 100,
+      items,
+    })
+  } catch (err) {
+    console.error('[accounts GET /:id/tax-breakdown]', err)
     res.status(500).json({ error: 'Error interno del servidor' })
   }
 })

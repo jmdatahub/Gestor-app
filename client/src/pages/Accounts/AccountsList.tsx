@@ -22,6 +22,9 @@ import { UiSelect } from '../../components/ui/UiSelect'
 import { UiCard, UiCardBody } from '../../components/ui/UiCard'
 import { UiField } from '../../components/ui/UiField'
 import { UiInput } from '../../components/ui/UiInput'
+import { UiSwitch } from '../../components/ui/UiSwitch'
+import { TaxReserveDetailModal } from './TaxReserveDetailModal'
+import { Receipt } from 'lucide-react'
 import { UiNumber } from '../../components/ui/UiNumber'
 import { UiTextarea } from '../../components/ui/UiTextarea'
 import { UiDatePicker } from '../../components/ui/UiDatePicker'
@@ -52,10 +55,12 @@ export default function AccountsList() {
   const [selectedAccount, setSelectedAccount] = useState<AccountWithBalance | null>(null)
   
   // Form state
-  const [parentId, setParentId] = useState<string>('') 
+  const [parentId, setParentId] = useState<string>('')
   const [name, setName] = useState('')
   const [type, setType] = useState<CreateAccountInput['type']>('general')
   const [description, setDescription] = useState('')
+  const [isTaxReserve, setIsTaxReserve] = useState(false)
+  const [taxReserveAccount, setTaxReserveAccount] = useState<AccountWithBalance | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
@@ -108,7 +113,8 @@ export default function AccountsList() {
         name,
         type,
         description: description || null,
-        parent_account_id: parentId || null
+        parent_account_id: parentId || null,
+        is_tax_reserve: isTaxReserve,
       })
       setShowCreateModal(false)
       resetForm()
@@ -141,7 +147,8 @@ export default function AccountsList() {
         updates: {
           name,
           type,
-          parent_account_id: parentId || null
+          parent_account_id: parentId || null,
+          is_tax_reserve: isTaxReserve,
         }
       })
       setShowEditModal(false)
@@ -172,6 +179,7 @@ export default function AccountsList() {
     setType(acc.type)
     setDescription(acc.description || '')  // Añadido
     setParentId(acc.parent_account_id || '')
+    setIsTaxReserve(Boolean(acc.is_tax_reserve))
     setErrorMsg(null)
     setShowEditModal(true)
   }
@@ -181,6 +189,7 @@ export default function AccountsList() {
     setType('general')
     setDescription('')  // Añadido
     setParentId('')
+    setIsTaxReserve(false)
     setErrorMsg(null)
   }
   
@@ -361,7 +370,11 @@ export default function AccountsList() {
                     key={acc.id}
                     style={{ opacity: !acc.is_active ? 0.5 : 1 }}
                     className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
-                    onClick={() => acc.type === 'broker' ? navigate('/app/investments') : navigate(`/app/accounts/${acc.id}`)}
+                    onClick={() => {
+                      if (acc.is_tax_reserve) { setTaxReserveAccount(acc); return }
+                      if (acc.type === 'broker') { navigate('/app/investments'); return }
+                      navigate(`/app/accounts/${acc.id}`)
+                    }}
                   >
                     <td data-label="Cuenta" style={{ padding: '0.75rem 1.5rem', fontWeight: 600 }}>
                       <div style={{ marginLeft: `${acc.level * 1.5}rem` }} className="d-flex items-center gap-2">
@@ -371,6 +384,15 @@ export default function AccountsList() {
                         <span className="hover:text-primary hover:underline">
                           {acc.name}
                         </span>
+                        {acc.is_tax_reserve && (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
+                            style={{ backgroundColor: 'rgba(99,102,241,0.15)', color: '#4f46e5', gap: 4 }}
+                            title="Cuenta de reserva de impuestos · clic para ver desglose"
+                          >
+                            <Receipt size={10} /> Reserva
+                          </span>
+                        )}
                         {acc.is_parent && (acc.pending_movements_count ?? 0) > 0 && (
                           <span
                             className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
@@ -487,6 +509,11 @@ export default function AccountsList() {
                 rows={3}
               />
             </div>
+            <div className="form-group">
+              <UiField label="Cuenta de reserva de impuestos" hint="Al hacer clic en la cuenta se abrirá el desglose por movimiento (pie chart) en lugar del detalle estándar.">
+                <UiSwitch checked={isTaxReserve} onChange={setIsTaxReserve} label={isTaxReserve ? 'Activada' : 'Desactivada'} />
+              </UiField>
+            </div>
           </UiModalBody>
           <UiModalFooter>
              <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
@@ -569,6 +596,11 @@ export default function AccountsList() {
                 placeholder="Añade un comentario sobre esta cuenta..."
                 rows={3}
               />
+            </div>
+            <div className="form-group">
+              <UiField label="Cuenta de reserva de impuestos" hint="Al hacer clic en la cuenta se abrirá el desglose por movimiento (pie chart) en lugar del detalle estándar.">
+                <UiSwitch checked={isTaxReserve} onChange={setIsTaxReserve} label={isTaxReserve ? 'Activada' : 'Desactivada'} />
+              </UiField>
             </div>
           </UiModalBody>
           <UiModalFooter>
@@ -685,6 +717,20 @@ export default function AccountsList() {
           </UiModalFooter>
         </form>
       </UiModal>
+
+      {/* Tax reserve breakdown — pie chart de movimientos en la cuenta de reserva */}
+      {taxReserveAccount && (
+        <TaxReserveDetailModal
+          account={taxReserveAccount}
+          isOpen={!!taxReserveAccount}
+          onClose={() => setTaxReserveAccount(null)}
+          onEditAccount={() => {
+            const a = taxReserveAccount
+            setTaxReserveAccount(null)
+            openEditModal(a)
+          }}
+        />
+      )}
     </div>
   )
 }

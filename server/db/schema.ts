@@ -21,6 +21,7 @@ export const accounts = pgTable("accounts", {
 	balance: numeric({ precision: 15, scale:  2 }).default('0'),
 	organizationId: uuid("organization_id"),
 	isPrimary: boolean("is_primary").default(false).notNull(),
+	isTaxReserve: boolean("is_tax_reserve").default(false).notNull(),
 	deletedAt: timestamp("deleted_at", { withTimezone: true, mode: 'string' }),
 	createdByEmail: text("created_by_email"),
 	updatedByEmail: text("updated_by_email"),

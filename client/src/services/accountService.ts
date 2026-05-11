@@ -4,7 +4,8 @@ import { invalidateAccounts } from './catalogCache'
 export interface Account {
   id: string; user_id: string; organization_id?: string | null; name: string
   type: 'general' | 'savings' | 'cash' | 'bank' | 'broker' | 'other'
-  description?: string | null; is_active: boolean; parent_account_id?: string | null
+  description?: string | null; is_active: boolean; is_tax_reserve?: boolean
+  parent_account_id?: string | null
   created_at: string; updated_at: string | null; color?: string | null; icon?: string | null
   currency?: string | null; balance?: number | null
   is_parent?: boolean; pending_movements_count?: number
@@ -13,7 +14,29 @@ export interface AccountWithBalance extends Account { balance: number }
 export interface AccountNode extends AccountWithBalance { children: AccountNode[]; level: number }
 export interface CreateAccountInput {
   user_id: string; organization_id?: string | null; name: string; type: Account['type']
-  description?: string | null; parent_account_id?: string | null
+  description?: string | null; parent_account_id?: string | null; is_tax_reserve?: boolean
+}
+
+export interface TaxReserveBreakdownItem {
+  transaction_id: string
+  date: string
+  amount: number
+  description: string | null
+  irpf_contribution: number
+  pct: number
+  project: { id: string; display_id: string; name: string } | null
+}
+
+export interface TaxReserveBreakdown {
+  account: { id: string; name: string; balance: number }
+  total_reserved: number
+  account_balance: number
+  delta: number
+  items: TaxReserveBreakdownItem[]
+}
+
+export async function fetchTaxBreakdown(accountId: string): Promise<TaxReserveBreakdown> {
+  return api.get<TaxReserveBreakdown>(`/api/v1/accounts/${accountId}/tax-breakdown`)
 }
 
 export const accountTypes = [
