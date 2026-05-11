@@ -728,7 +728,12 @@ export default function AccountsList() {
           if (!viewingAccount) return
           const a = viewingAccount
           setViewingAccount(null)
-          openEditModal(a)
+          // Diferimos la apertura del editor un tick para que el popstate
+          // generado por la limpieza de useModalHistory del detalle se
+          // resuelva ANTES de que el modal de edición instale su propio
+          // listener (de lo contrario el edit captura ese popstate y se
+          // cierra solo).
+          setTimeout(() => openEditModal(a), 50)
         }}
         onDelete={async () => {
           if (!viewingAccount) return
