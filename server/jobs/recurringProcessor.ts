@@ -1,4 +1,4 @@
-import { db } from '../db/connection.js'
+import { db, withDbRetry } from '../db/connection.js'
 import { recurringRules, movements } from '../db/schema.js'
 import { and, eq, isNull, lte } from 'drizzle-orm'
 
@@ -27,16 +27,20 @@ export async function processRecurringRules(): Promise<void> {
   const todayStr = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
 
   // Fetch all active, non-deleted rules whose next_occurrence is due
-  const dueRules = await db
-    .select()
-    .from(recurringRules)
-    .where(
-      and(
-        eq(recurringRules.isActive, true),
-        isNull(recurringRules.deletedAt),
-        lte(recurringRules.nextOccurrence, todayStr)
-      )
-    )
+  const dueRules = await withDbRetry(
+    () =>
+      db
+        .select()
+        .from(recurringRules)
+        .where(
+          and(
+            eq(recurringRules.isActive, true),
+            isNull(recurringRules.deletedAt),
+            lte(recurringRules.nextOccurrence, todayStr),
+          ),
+        ),
+    { label: 'recurring:fetchDue' },
+  )
 
   if (dueRules.length === 0) return
 
@@ -49,10 +53,14 @@ export async function processRecurringRules(): Promise<void> {
         console.warn(`[recurringProcessor] Skipping rule ${rule.id}: no accountId`)
         // Still advance next_occurrence so it doesn't trigger every run
         const next = advanceDate(rule.nextOccurrence ?? todayStr, rule.frequency)
-        await db
-          .update(recurringRules)
-          .set({ nextOccurrence: next })
-          .where(eq(recurringRules.id, rule.id))
+        await withDbRetry(
+          () =>
+            db
+              .update(recurringRules)
+              .set({ nextOccurrence: next })
+              .where(eq(recurringRules.id, rule.id)),
+          { label: 'recurring:advanceSkipped' },
+        )
         continue
       }
 
@@ -64,28 +72,36 @@ export async function processRecurringRules(): Promise<void> {
       // marker so it never lands as NULL.
       const ruleActorEmail = rule.createdByEmail ?? 'system@recurring'
 
-      await db.insert(movements).values({
-        userId: rule.userId,
-        date: occurrenceDate,
-        kind: rule.direction as 'income' | 'expense' | 'transfer',
-        amount: rule.amount,
-        description: rule.description ?? undefined,
-        categoryId: rule.categoryId ?? undefined,
-        accountId: rule.accountId,
-        status: 'pending',
-        recurringRuleId: rule.id,
-        organizationId: rule.organizationId ?? undefined,
-        createdByEmail: ruleActorEmail,
-        updatedByEmail: ruleActorEmail,
-      })
+      await withDbRetry(
+        () =>
+          db.insert(movements).values({
+            userId: rule.userId,
+            date: occurrenceDate,
+            kind: rule.direction as 'income' | 'expense' | 'transfer',
+            amount: rule.amount,
+            description: rule.description ?? undefined,
+            categoryId: rule.categoryId ?? undefined,
+            accountId: rule.accountId,
+            status: 'pending',
+            recurringRuleId: rule.id,
+            organizationId: rule.organizationId ?? undefined,
+            createdByEmail: ruleActorEmail,
+            updatedByEmail: ruleActorEmail,
+          }),
+        { label: 'recurring:insertMovement' },
+      )
 
       // Advance next_occurrence by one frequency step
       const nextOccurrence = advanceDate(occurrenceDate, rule.frequency)
 
-      await db
-        .update(recurringRules)
-        .set({ nextOccurrence })
-        .where(eq(recurringRules.id, rule.id))
+      await withDbRetry(
+        () =>
+          db
+            .update(recurringRules)
+            .set({ nextOccurrence })
+            .where(eq(recurringRules.id, rule.id)),
+        { label: 'recurring:advance' },
+      )
 
       console.log(
         `[recurringProcessor] Rule ${rule.id} (${rule.direction} ${rule.amount}): ` +

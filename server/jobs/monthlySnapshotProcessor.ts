@@ -13,7 +13,7 @@
  *   total_cash             — sum of all non-deleted account balances for the user
  *   total_investments_value — sum of (quantity × current_price) for open investments
  */
-import { db } from '../db/connection.js'
+import { db, withDbRetry } from '../db/connection.js'
 import { monthlySnapshots, movements, accounts, investments } from '../db/schema.js'
 import { and, eq, gte, lte, isNull, sql } from 'drizzle-orm'
 import { logger } from '../lib/logger.js'
@@ -38,16 +38,20 @@ export async function createMonthlySnapshot(year: number, month: number): Promis
   const monthKey = startStr
 
   // --- 1. Find all distinct user IDs that had movements in this period ---
-  const userRows = await db
-    .selectDistinct({ userId: movements.userId })
-    .from(movements)
-    .where(
-      and(
-        gte(movements.date, startStr),
-        lte(movements.date, endStr),
-        isNull(movements.deletedAt),
-      )
-    )
+  const userRows = await withDbRetry(
+    () =>
+      db
+        .selectDistinct({ userId: movements.userId })
+        .from(movements)
+        .where(
+          and(
+            gte(movements.date, startStr),
+            lte(movements.date, endStr),
+            isNull(movements.deletedAt),
+          ),
+        ),
+    { label: 'monthlySnapshot:listUsers' },
+  )
 
   if (userRows.length === 0) {
     logger.info('[monthlySnapshot] No movement activity found', { year, month })
@@ -59,96 +63,103 @@ export async function createMonthlySnapshot(year: number, month: number): Promis
 
   for (const { userId } of userRows) {
     try {
-      // --- 2. Aggregate income & expense for the month ---
-      const movRows = await db
-        .select({ kind: movements.kind, amount: movements.amount })
-        .from(movements)
-        .where(
-          and(
-            eq(movements.userId, userId),
-            gte(movements.date, startStr),
-            lte(movements.date, endStr),
-            isNull(movements.deletedAt),
-            isNull(movements.organizationId), // personal only
+      // The whole per-user block is idempotent for the same (user, month)
+      // because step 5 upserts. Safe to wrap in withDbRetry — a transient
+      // blip mid-block just replays from the top with the same final result.
+      const result = await withDbRetry(async () => {
+        // --- 2. Aggregate income & expense for the month ---
+        const movRows = await db
+          .select({ kind: movements.kind, amount: movements.amount })
+          .from(movements)
+          .where(
+            and(
+              eq(movements.userId, userId),
+              gte(movements.date, startStr),
+              lte(movements.date, endStr),
+              isNull(movements.deletedAt),
+              isNull(movements.organizationId), // personal only
+            ),
           )
+
+        let totalIncome = 0
+        let totalExpense = 0
+        for (const row of movRows) {
+          const amt = Number(row.amount) || 0
+          if (row.kind === 'income')  totalIncome  += amt
+          if (row.kind === 'expense') totalExpense += amt
+        }
+        const balance = totalIncome - totalExpense
+
+        // --- 3. Total cash: sum of all active personal account balances ---
+        const acctRows = await db
+          .select({ balance: accounts.balance })
+          .from(accounts)
+          .where(
+            and(
+              eq(accounts.userId, userId),
+              eq(accounts.isActive, true),
+              isNull(accounts.organizationId),
+              isNull(accounts.deletedAt),
+            ),
+          )
+        const totalCash = acctRows.reduce((s, r) => s + (Number(r.balance) || 0), 0)
+
+        // --- 4. Total investments value: quantity × current_price ---
+        const invRows = await db
+          .select({ quantity: investments.quantity, currentPrice: investments.currentPrice })
+          .from(investments)
+          .where(
+            and(
+              eq(investments.userId, userId),
+              isNull(investments.organizationId),
+              isNull(investments.deletedAt),
+            ),
+          )
+        const totalInvestmentsValue = invRows.reduce(
+          (s, r) => s + (Number(r.quantity) || 0) * (Number(r.currentPrice) || 0),
+          0,
         )
 
-      let totalIncome = 0
-      let totalExpense = 0
-      for (const row of movRows) {
-        const amt = Number(row.amount) || 0
-        if (row.kind === 'income')  totalIncome  += amt
-        if (row.kind === 'expense') totalExpense += amt
-      }
-      const balance = totalIncome - totalExpense
-
-      // --- 3. Total cash: sum of all active personal account balances ---
-      const acctRows = await db
-        .select({ balance: accounts.balance })
-        .from(accounts)
-        .where(
-          and(
-            eq(accounts.userId, userId),
-            eq(accounts.isActive, true),
-            isNull(accounts.organizationId),
-            isNull(accounts.deletedAt),
+        // --- 5. Upsert the snapshot row ---
+        const existing = await db
+          .select({ id: monthlySnapshots.id })
+          .from(monthlySnapshots)
+          .where(
+            and(
+              eq(monthlySnapshots.userId, userId),
+              eq(monthlySnapshots.month, monthKey),
+            ),
           )
-        )
-      const totalCash = acctRows.reduce((s, r) => s + (Number(r.balance) || 0), 0)
+          .limit(1)
 
-      // --- 4. Total investments value: quantity × current_price ---
-      const invRows = await db
-        .select({ quantity: investments.quantity, currentPrice: investments.currentPrice })
-        .from(investments)
-        .where(
-          and(
-            eq(investments.userId, userId),
-            isNull(investments.organizationId),
-            isNull(investments.deletedAt),
-          )
-        )
-      const totalInvestmentsValue = invRows.reduce(
-        (s, r) => s + (Number(r.quantity) || 0) * (Number(r.currentPrice) || 0),
-        0,
-      )
-
-      // --- 5. Upsert the snapshot row ---
-      // Check whether a row already exists for this user+month
-      const existing = await db
-        .select({ id: monthlySnapshots.id })
-        .from(monthlySnapshots)
-        .where(
-          and(
-            eq(monthlySnapshots.userId, userId),
-            eq(monthlySnapshots.month, monthKey),
-          )
-        )
-        .limit(1)
-
-      if (existing.length > 0) {
-        await db
-          .update(monthlySnapshots)
-          .set({
-            totalIncome:          String(totalIncome.toFixed(2)),
-            totalExpense:         String(totalExpense.toFixed(2)),
-            balance:              String(balance.toFixed(2)),
-            totalCash:            String(totalCash.toFixed(2)),
+        if (existing.length > 0) {
+          await db
+            .update(monthlySnapshots)
+            .set({
+              totalIncome:           String(totalIncome.toFixed(2)),
+              totalExpense:          String(totalExpense.toFixed(2)),
+              balance:               String(balance.toFixed(2)),
+              totalCash:             String(totalCash.toFixed(2)),
+              totalInvestmentsValue: String(totalInvestmentsValue.toFixed(2)),
+            })
+            .where(eq(monthlySnapshots.id, existing[0].id))
+          return 'updated' as const
+        } else {
+          await db.insert(monthlySnapshots).values({
+            userId,
+            month:                 monthKey,
+            totalIncome:           String(totalIncome.toFixed(2)),
+            totalExpense:          String(totalExpense.toFixed(2)),
+            balance:                String(balance.toFixed(2)),
+            totalCash:             String(totalCash.toFixed(2)),
             totalInvestmentsValue: String(totalInvestmentsValue.toFixed(2)),
           })
-          .where(eq(monthlySnapshots.id, existing[0].id))
-        updated++
-      } else {
-        await db.insert(monthlySnapshots).values({
-          userId,
-          month:                monthKey,
-          totalIncome:          String(totalIncome.toFixed(2)),
-          totalExpense:         String(totalExpense.toFixed(2)),
-          balance:              String(balance.toFixed(2)),
-          totalCash:            String(totalCash.toFixed(2)),
-          totalInvestmentsValue: String(totalInvestmentsValue.toFixed(2)),
-        })
-        created++
-      }
+          return 'created' as const
+        }
+      }, { label: `monthlySnapshot:user:${userId}` })
+
+      if (result === 'updated') updated++
+      else created++
     } catch (err) {
       logger.error('[monthlySnapshot] Failed for user', {
         userId,

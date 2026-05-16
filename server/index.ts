@@ -135,24 +135,37 @@ app.get(['/api/health', '/api/v1/health'], async (_req, res) => {
   let dbLatencyMs: number | null = null
   let activeRecurringRules: number | null = null
   let pendingMovements: number | null = null
+
+  // Cap the whole DB section at 5 s. statement_timeout in connection.ts only
+  // helps once the query is *running*; if the TCP socket is wedged we need a
+  // race against a wall-clock timer here so the health endpoint always answers.
+  const HEALTH_DB_TIMEOUT_MS = 5_000
+  const withTimeout = <T>(p: Promise<T>): Promise<T> =>
+    Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`db check timed out after ${HEALTH_DB_TIMEOUT_MS}ms`)), HEALTH_DB_TIMEOUT_MS),
+      ),
+    ])
+
   try {
     const { db } = await import('./db/connection.js')
     const { sql, eq, and, isNull, count } = await import('drizzle-orm')
     const { recurringRules, movements } = await import('./db/schema.js')
     const t0 = Date.now()
-    await db.execute(sql`SELECT 1`)
+    await withTimeout(db.execute(sql`SELECT 1`))
     dbLatencyMs = Date.now() - t0
     dbStatus = 'ok'
 
-    // Quick stats — run in parallel, non-fatal
-    const [recurringResult, pendingResult] = await Promise.all([
+    // Quick stats — run in parallel, non-fatal, also bounded by the timeout.
+    const [recurringResult, pendingResult] = await withTimeout(Promise.all([
       db.select({ total: count() })
         .from(recurringRules)
         .where(and(eq(recurringRules.isActive, true), isNull(recurringRules.deletedAt))),
       db.select({ total: count() })
         .from(movements)
         .where(and(eq(movements.status, 'pending'), isNull(movements.deletedAt))),
-    ])
+    ]))
     activeRecurringRules = Number(recurringResult[0]?.total ?? 0)
     pendingMovements = Number(pendingResult[0]?.total ?? 0)
   } catch {

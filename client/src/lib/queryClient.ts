@@ -24,6 +24,26 @@ import { QueryClient } from '@tanstack/react-query'
 // where data changes rarely.
 // ---------------------------------------------------------------------------
 
+// Errors thrown by apiClient carry a numeric `status` field. 5xx (and the
+// "no status" case — pure network failure) are worth retrying; client errors
+// (4xx) are not — they're our bug or the user's, retrying won't help.
+function shouldRetry(failureCount: number, error: unknown): boolean {
+  const status = (error as { status?: number })?.status
+  if (status === 401) return false               // auth — handled by redirect
+  if (status === 403 || status === 404) return false
+  if (status === 422 || status === 400) return false
+  // 503 (service unavailable / DB blip) gets up to 2 retries; other errors 1.
+  const max = status === 503 || status === undefined ? 2 : 1
+  return failureCount < max
+}
+
+// Exponential backoff with jitter: 400 ms, 800 ms, 1.6 s. Caps at 5 s.
+function retryDelay(attempt: number): number {
+  const base = 400 * 2 ** attempt
+  const jitter = Math.random() * 200
+  return Math.min(base + jitter, 5000)
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -31,21 +51,20 @@ export const queryClient = new QueryClient({
       staleTime: 1000 * 60 * 2,
       // Keep inactive cache for 15 minutes so navigating back is instant.
       gcTime: 1000 * 60 * 15,
-      retry: (failureCount, error) => {
-        // Never retry on 401 — the token is invalid, redirect happens via apiClient.
-        const status = (error as { status?: number })?.status
-        if (status === 401) return false
-        // One retry for transient network errors.
-        return failureCount < 1
-      },
+      retry: shouldRetry,
+      retryDelay,
       refetchOnWindowFocus: false,
     },
     mutations: {
+      // Mutations are not idempotent in general — retry only on 503/network
+      // errors (where the request likely never reached the server) and at
+      // most once, to avoid double-submits on flaky connections.
       retry: (failureCount, error) => {
         const status = (error as { status?: number })?.status
-        if (status === 401) return false
-        return failureCount < 1
+        if (status === 503 || status === undefined) return failureCount < 1
+        return false
       },
+      retryDelay,
     },
   },
 })
