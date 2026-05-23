@@ -139,14 +139,20 @@ app.get(['/api/health', '/api/v1/health'], async (_req, res) => {
   // Cap the whole DB section at 5 s. statement_timeout in connection.ts only
   // helps once the query is *running*; if the TCP socket is wedged we need a
   // race against a wall-clock timer here so the health endpoint always answers.
+  // We clear the timer on either outcome so frequent health-checks don't leak
+  // setTimeout handles in the event loop (would delay shutdown + waste memory).
   const HEALTH_DB_TIMEOUT_MS = 5_000
   const withTimeout = <T>(p: Promise<T>): Promise<T> =>
-    Promise.race([
-      p,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(`db check timed out after ${HEALTH_DB_TIMEOUT_MS}ms`)), HEALTH_DB_TIMEOUT_MS),
-      ),
-    ])
+    new Promise<T>((resolve, reject) => {
+      const handle = setTimeout(
+        () => reject(new Error(`db check timed out after ${HEALTH_DB_TIMEOUT_MS}ms`)),
+        HEALTH_DB_TIMEOUT_MS,
+      )
+      p.then(
+        value => { clearTimeout(handle); resolve(value) },
+        err   => { clearTimeout(handle); reject(err) },
+      )
+    })
 
   try {
     const { db } = await import('./db/connection.js')

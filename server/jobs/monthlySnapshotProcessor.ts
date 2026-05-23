@@ -15,7 +15,7 @@
  */
 import { db, withDbRetry } from '../db/connection.js'
 import { monthlySnapshots, movements, accounts, investments } from '../db/schema.js'
-import { and, eq, gte, lte, isNull, sql } from 'drizzle-orm'
+import { and, eq, gte, lte, isNull } from 'drizzle-orm'
 import { logger } from '../lib/logger.js'
 
 function toIso(d: Date): string {

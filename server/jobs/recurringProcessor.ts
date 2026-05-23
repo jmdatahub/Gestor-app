@@ -66,30 +66,57 @@ export async function processRecurringRules(): Promise<void> {
 
       const occurrenceDate = rule.nextOccurrence ?? todayStr
 
-      // Insert a pending movement generated from this rule.
-      // Propagate audit ownership from the rule's creator so the movement
-      // is traceable back to a human; fall back to a clearly synthetic
-      // marker so it never lands as NULL.
+      // Idempotency guard — withDbRetry may reissue an insert after a
+      // "connection terminated unexpectedly" where the first attempt actually
+      // persisted. There is no unique constraint on (recurring_rule_id, date)
+      // so we explicitly check first and skip the insert if a row exists.
+      // Wrapped in withDbRetry: the lookup itself is read-only and safe to
+      // repeat any number of times.
       const ruleActorEmail = rule.createdByEmail ?? 'system@recurring'
 
-      await withDbRetry(
-        () =>
-          db.insert(movements).values({
-            userId: rule.userId,
-            date: occurrenceDate,
-            kind: rule.direction as 'income' | 'expense' | 'transfer',
-            amount: rule.amount,
-            description: rule.description ?? undefined,
-            categoryId: rule.categoryId ?? undefined,
-            accountId: rule.accountId,
-            status: 'pending',
-            recurringRuleId: rule.id,
-            organizationId: rule.organizationId ?? undefined,
-            createdByEmail: ruleActorEmail,
-            updatedByEmail: ruleActorEmail,
-          }),
-        { label: 'recurring:insertMovement' },
+      const alreadyExists = await withDbRetry(
+        async () => {
+          const existing = await db
+            .select({ id: movements.id })
+            .from(movements)
+            .where(
+              and(
+                eq(movements.recurringRuleId, rule.id),
+                eq(movements.date, occurrenceDate),
+                isNull(movements.deletedAt),
+              ),
+            )
+            .limit(1)
+          return existing.length > 0
+        },
+        { label: 'recurring:checkExists' },
       )
+
+      if (!alreadyExists) {
+        await withDbRetry(
+          () =>
+            db.insert(movements).values({
+              userId: rule.userId,
+              date: occurrenceDate,
+              kind: rule.direction as 'income' | 'expense' | 'transfer',
+              amount: rule.amount,
+              description: rule.description ?? undefined,
+              categoryId: rule.categoryId ?? undefined,
+              accountId: rule.accountId,
+              status: 'pending',
+              recurringRuleId: rule.id,
+              organizationId: rule.organizationId ?? undefined,
+              createdByEmail: ruleActorEmail,
+              updatedByEmail: ruleActorEmail,
+            }),
+          { label: 'recurring:insertMovement' },
+        )
+      } else {
+        console.log(
+          `[recurringProcessor] Rule ${rule.id}: movement for ${occurrenceDate} ` +
+            `already exists — skipping insert (idempotent retry)`,
+        )
+      }
 
       // Advance next_occurrence by one frequency step
       const nextOccurrence = advanceDate(occurrenceDate, rule.frequency)
