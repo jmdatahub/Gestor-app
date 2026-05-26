@@ -48,8 +48,11 @@ export async function processRecurringRules(): Promise<void> {
 
   for (const rule of dueRules) {
     try {
-      // accountId is required on movements — skip rules without one
-      if (!rule.accountId) {
+      // accountId is required on movements — skip rules without one. Extracted
+      // into a local so TypeScript narrows the type (the check `!rule.accountId`
+      // doesn't propagate to property accesses in deeper scopes).
+      const ruleAccountId = rule.accountId
+      if (!ruleAccountId) {
         console.warn(`[recurringProcessor] Skipping rule ${rule.id}: no accountId`)
         // Still advance next_occurrence so it doesn't trigger every run
         const next = advanceDate(rule.nextOccurrence ?? todayStr, rule.frequency)
@@ -102,7 +105,7 @@ export async function processRecurringRules(): Promise<void> {
               amount: rule.amount,
               description: rule.description ?? undefined,
               categoryId: rule.categoryId ?? undefined,
-              accountId: rule.accountId,
+              accountId: ruleAccountId,
               status: 'pending',
               recurringRuleId: rule.id,
               organizationId: rule.organizationId ?? undefined,
