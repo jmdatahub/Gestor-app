@@ -1,6 +1,8 @@
-# Migración Vercel → VPS — Inventario de gaps (2026-04-30)
+# Migración Vercel → VPS — Inventario de gaps
 
-> Auditoría completa de qué se ha migrado, qué sigue dependiendo de Vercel y qué hay que portar antes de dar de baja `app-clean-five.vercel.app` y `gestor-app-ashy.vercel.app`.
+> Auditoría inicial: 2026-04-30. Última actualización: **2026-05-26** (cutover del bot Telegram completado, decisión de mantener Vercel apagado pero no borrado hasta ~9-jun-2026 como red de seguridad).
+>
+> Estado real a 26-may-2026: el bot Telegram apunta al VPS (`finanzas.soulia.info`) y el CRM lee Finanzas vía Postgres directo. Vercel sigue vivo pero no recibe tráfico productivo.
 
 ## 🟢 Ya migrado y funcionando
 
@@ -41,13 +43,19 @@
 
 **Cuando esté**: cambiar `FINANCE_API_URL` del CRM (Dokploy) a `https://finanzas.soulia.info/api/crm-sync` y `FINANCE_API_KEY` al mismo `CRM_SYNC_SECRET`.
 
-### 2. Webhook de Telegram ✅ PORTADO
+### 2. Webhook de Telegram ✅ PORTADO + ✅ CUTOVER COMPLETADO (26-may-2026)
 
 | Endpoint | Destino |
 |---|---|
 | `POST /api/v1/telegram-webhook` | `server/routes/telegram.routes.ts` |
 
-**Acciones pendientes**: actualizar webhook URL en BotFather a `https://finanzas.soulia.info/api/v1/telegram-webhook`. Variables requeridas: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`.
+**✅ Webhook re-registrado el 26-may-2026** apuntando a `https://finanzas.soulia.info/api/v1/telegram-webhook` con `TELEGRAM_WEBHOOK_SECRET` correcto. Variables `TELEGRAM_BOT_TOKEN` y `TELEGRAM_WEBHOOK_SECRET` ya en Dokploy.
+
+**Hardening añadido tras incidente del 22-may (bot caído 5 días sin alerta)**:
+- `server/lib/telegram-webhook-state.ts` — `ensureWebhookRegistered()` se llama en boot del Express; si el webhook está vacío o desalineado lo re-registra automáticamente.
+- `/api/health` reporta `bot.status` con cache 60 s; HTTP 503 si !== `ok`/`disabled`.
+- `server/lib/integrations.ts` — manifest declarativo + boot banner + `requireIntegration()` helper.
+- Watchdog independiente en CRM-app (`server/services/gestorBotWatchdog.service.ts`) cada 10 min via `sendOpsAlert`.
 
 ### 3. Notificaciones internas ✅ PORTADO
 
@@ -82,12 +90,14 @@
 3. ✅ **Portado**: notify (alertas) → `server/routes/notify.routes.ts`
 4. ✅ **Portado**: notify-new-user + register → `POST /api/auth/register`
 5. ✅ **Portado**: reject/approve user → `server/routes/admin.routes.ts`
-6. **Pendiente**: actualizar webhook URL en BotFather → `https://finanzas.soulia.info/api/v1/telegram-webhook`
+6. ✅ **HECHO 26-may-2026**: webhook Telegram apuntado a `https://finanzas.soulia.info/api/v1/telegram-webhook` + hardening (auto-restore en boot + watchdog en CRM).
 7. **Pendiente**: integrar API pública con tokens.
 8. **Pendiente**: validar Sentry y crons.
-9. **Pendiente**: cutover CRM (`FINANCE_API_URL` → finanzas.soulia.info).
-10. **Tras 1-2 semanas estables**: borrar proyectos Vercel.
+9. ✅ **HECHO**: el CRM ya lee Finanzas via Postgres directo (`FINANZAS_DB_URL`). Las env vars `FINANCE_API_URL` / `FINANCE_API_KEY` siguen en Dokploy del CRM pero son huérfanas legacy (limpieza programada para 9-jun).
+10. **Programado para 9-jun-2026** (2 semanas estables): borrar proyectos Vercel + limpiar env vars huérfanas + código `client/api/` huérfano.
 
-## ❌ NO borrar Vercel todavía
+## ❌ NO borrar Vercel todavía (hasta ~9-jun-2026)
 
-`app-clean-five.vercel.app` sigue siendo la fuente de los `/api/crm-sync/*` que el CRM usa. Hasta que esos endpoints estén en el VPS, `app-clean-five` debe seguir vivo (el frontend en `gestor-app-ashy` ya no se usa porque los usuarios entran a `finanzas.soulia.info`, pero las funciones serverless del repo siguen sirviendo al CRM).
+Aunque `app-clean-five.vercel.app` ya no recibe tráfico productivo (el CRM lee Finanzas via Postgres directo desde la migración del 27-abr y el bot Telegram apunta al VPS desde el 26-may), se mantienen vivos los proyectos Vercel `app-clean` y `gestor-app-ashy` como red de seguridad para rollback rápido durante las 2 semanas siguientes al cutover. A partir del 9-jun-2026, si la migración VPS sigue estable, ejecutar el punto 10 del plan (borrar proyectos + limpiar env vars huérfanas del CRM).
+
+Nota técnica: el handler webhook serverless de Vercel está actualmente **roto** (HTTP 500 FUNCTION_INVOCATION_FAILED, probablemente Supabase env vars vacías/rotadas). Si se quisiera rollback al webhook Vercel habría que arreglar primero esas env vars.

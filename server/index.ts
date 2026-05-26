@@ -17,6 +17,8 @@ import {
 import { requestLogger } from './middleware/requestLogger.js'
 import { optionalAuth } from './middleware/auth.js'
 import { logger } from './lib/logger.js'
+import { getIntegrationsStatus, logIntegrationsBanner } from './lib/integrations.js'
+import { ensureWebhookRegistered, getBotHealthCached } from './lib/telegram-webhook-state.js'
 import { checkDatabaseConnection } from './db/connection.js'
 import authRoutes from './routes/auth.routes.js'
 import movementsRoutes from './routes/movements.routes.js'
@@ -181,7 +183,17 @@ app.get(['/api/health', '/api/v1/health'], async (_req, res) => {
   // Read app version from package.json (process.env.npm_package_version is set by npm/node)
   const appVersion = process.env.npm_package_version ?? '1.0.0'
 
-  const healthy = dbStatus === 'ok'
+  // Integraciones: presencia de env vars + estado runtime del bot (webhook
+  // alineado con PUBLIC_URL, sin pending acumulado, sin last_error reciente).
+  // El bot se considera degradado si su estado != 'ok' y != 'disabled'.
+  const integrations = getIntegrationsStatus()
+  const botHealth = await getBotHealthCached().catch(() => null)
+  const degraded: string[] = [...integrations.disabled]
+  if (botHealth && botHealth.status !== 'ok' && botHealth.status !== 'disabled') {
+    degraded.push(`telegram_webhook:${botHealth.status}`)
+  }
+
+  const healthy = dbStatus === 'ok' && degraded.length === 0
   res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'degraded',
     timestamp: new Date().toISOString(),
@@ -203,6 +215,24 @@ app.get(['/api/health', '/api/v1/health'], async (_req, res) => {
       activeRecurringRules,
       pendingMovements,
     },
+    integrations: {
+      ok: integrations.ok,
+      disabled: integrations.disabled,
+    },
+    bot: botHealth
+      ? {
+          status: botHealth.status,
+          url: botHealth.info?.url ?? null,
+          expectedUrl: botHealth.expectedUrl,
+          pending_update_count: botHealth.info?.pending_update_count ?? null,
+          last_error_date: botHealth.info?.last_error_date
+            ? new Date(botHealth.info.last_error_date * 1000).toISOString()
+            : null,
+          last_error_message: botHealth.info?.last_error_message ?? null,
+          reason: botHealth.reason ?? null,
+        }
+      : { status: 'unknown', reason: 'no se pudo evaluar el estado del bot' },
+    degraded,
   })
 })
 
@@ -261,6 +291,11 @@ app.use(errorHandler)
 // All critical checks run before we bind the TCP port so that a failed startup
 // never results in a half-ready server accepting requests it cannot serve.
 async function startServer(): Promise<void> {
+  // 0. Integrations banner — primer mensaje del log, así un operador ve de un
+  //    vistazo qué env vars críticas están presentes/ausentes (postmortem
+  //    docs/postmortem-2026-05-18-finanzas-502.md del CRM aplica aquí también).
+  logIntegrationsBanner()
+
   // 1. Validate & ping the database (retries 3×, 1-2 s apart).
   logger.info('[startup] Checking database connection…')
   try {
@@ -312,6 +347,15 @@ async function bindServer(): Promise<void> {
       // ─── Register Telegram bot commands ───────────────────────────────────
       setMyCommands().catch(err =>
         logger.error('[telegram] setMyCommands failed', { message: (err as Error).message })
+      )
+
+      // ─── Ensure Telegram webhook is registered & aligned ──────────────────
+      // Idempotente: solo re-registra si el webhook está vacío o apunta a una
+      // URL distinta de PUBLIC_URL. Cierra el agujero del incidente del 22-may
+      // (un deleteWebhook silencioso dejó al bot huérfano durante 5 días).
+      // Solo corre en producción (ver `ensureWebhookRegistered`).
+      ensureWebhookRegistered().catch(err =>
+        logger.error('[telegram-webhook] ensureWebhookRegistered failed', { message: (err as Error).message })
       )
 
       // ─── Recurring rules processor ────────────────────────────────────────
